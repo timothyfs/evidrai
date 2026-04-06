@@ -252,68 +252,8 @@ def stable_request_key(*parts: Any) -> str:
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
-def ensure_list(value: Any) -> List[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(v).strip() for v in value if str(v).strip()]
-    if isinstance(value, str):
-        cleaned = value.strip()
-        if not cleaned:
-            return []
-        if cleaned.lower() in {
-            "none",
-            "none identified",
-            "none identified.",
-            "none noted",
-            "none noted.",
-            "no conflicts",
-            "no conflicts.",
-            "no conflict",
-            "n/a",
-            "na",
-            "unknown",
-        }:
-            return []
-        return [cleaned]
-    return [str(value).strip()] if str(value).strip() else []
-
-
-def normalize_verified_assessment_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    payload = dict(payload or {})
-
-    reasoning_summary = payload.get("reasoning_summary")
-    if not isinstance(reasoning_summary, dict):
-        reasoning_summary = {}
-    for key in ("supported_points", "contradicted_points", "uncertain_points"):
-        reasoning_summary[key] = ensure_list(reasoning_summary.get(key))
-    payload["reasoning_summary"] = reasoning_summary
-
-    evidence = payload.get("evidence_assessment")
-    if not isinstance(evidence, dict):
-        evidence = {}
-    for key in (
-        "primary_sources_used",
-        "secondary_sources_used",
-        "source_conflicts",
-        "evidence_gaps",
-        "rumor_drivers",
-        "actual_evidence",
-    ):
-        evidence[key] = ensure_list(evidence.get(key))
-    payload["evidence_assessment"] = evidence
-
-    for key in ("misinformation_patterns", "why_this_claim_spreads"):
-        payload[key] = ensure_list(payload.get(key))
-
-    return payload
-
-
 def validate_model(payload: Dict[str, Any], model_cls: Type[BaseModel]) -> Dict[str, Any]:
-    normalized_payload = payload
-    if model_cls is VerifiedAssessmentModel:
-        normalized_payload = normalize_verified_assessment_payload(payload)
-    model = model_cls.model_validate(normalized_payload)
+    model = model_cls.model_validate(payload)
     return model.model_dump()
 
 # -----------------------------
@@ -690,20 +630,23 @@ def run_claim_pipeline(user_input: str, llm: OpenAICompatibleClient, search: Tav
     reasoning["evidence_assessment"]["rumor_drivers"] = reasoning["evidence_assessment"].get("rumor_drivers") or split_view["rumor_drivers"]
 
     if not reasoning.get("consensus_strength"):
-        rule_stats = rule_view["stats"]
-        support_count = rule_stats["supportive_evidence"]
-        contradict_count = rule_stats["contradictory_evidence"]
-        primary_support = rule_stats["primary_supportive"]
+        stats = rule_view["stats"]
+        support_count = stats["supportive_evidence"]
+        contradict_count = stats["contradictory_evidence"]
+        primary_support = stats["primary_supportive"]
+        context_count = stats["rumor_or_context"]
         if support_count >= 3 and contradict_count == 0 and primary_support >= 1:
             reasoning["consensus_strength"] = "Strong agreement"
         elif support_count >= 2 and contradict_count <= 1:
             reasoning["consensus_strength"] = "Moderate agreement"
-        elif support_count == 0 and rule_stats["allegation_or_context_support"] > 0 and rule_stats["rumor_or_context"] >= max(2, contradict_count + 1):
+        elif support_count == 0 and contradict_count >= 1 and context_count > 0:
             reasoning["consensus_strength"] = "Context-heavy / unsubstantiated"
         elif support_count and contradict_count:
             reasoning["consensus_strength"] = "Mixed evidence"
         elif support_count:
             reasoning["consensus_strength"] = "Weak agreement"
+        elif context_count > 0:
+            reasoning["consensus_strength"] = "Context-heavy / unsubstantiated"
         else:
             reasoning["consensus_strength"] = "No clear consensus"
 
@@ -790,7 +733,6 @@ def render_assessment_metrics(result: Dict[str, Any]) -> None:
     high_quality = sum(1 for s in sources if map_source_quality_label(s.get("weighted_score")) == "High")
     contradictions = sum(1 for s in sources if normalize_claim_support(s.get("claim_support")) == "Contradicts")
     elapsed = result.get("elapsed_seconds")
-    stats = compute_evidence_stats(sources)
 
     st.markdown("### Assessment quality")
     c1, c2, c3, c4 = st.columns(4)
@@ -798,12 +740,6 @@ def render_assessment_metrics(result: Dict[str, Any]) -> None:
     c2.metric("Primary sources", primary)
     c3.metric("High-quality sources", high_quality)
     c4.metric("Contradiction signals", contradictions)
-
-    c5, c6, c7, c8 = st.columns(4)
-    c5.metric("Direct support", stats["supportive_evidence"])
-    c6.metric("Allegation/context", stats["allegation_or_context_support"])
-    c7.metric("Denial/rebuttal", stats["denial_or_rebuttal"])
-    c8.metric("Narrative clusters", stats["unique_clusters"])
     if elapsed is not None:
         st.caption(f"Completed in {elapsed:.1f}s")
 
@@ -904,20 +840,6 @@ VERDICT_ORDER = {
     "Not supported by credible evidence": 0,
 }
 
-
-CONCRETE_FACTUAL_TYPES = {
-    "factual",
-    "event",
-    "financial",
-    "legal",
-    "statistical",
-    "historical",
-    "health",
-    "science",
-    "policy",
-    "other",
-}
-
 SOFT_CLAIM_FLAGS = {
     "opinion",
     "prediction",
@@ -950,17 +872,8 @@ def is_soft_or_hard_to_verify_claim(subclaims: List[SubClaim]) -> bool:
     flags = collect_risk_flags(subclaims)
     if flags & SOFT_CLAIM_FLAGS:
         return True
-    soft_types = {"opinion", "prediction", "rhetorical"}
+    soft_types = {"opinion", "prediction", "rhetorical", "other"}
     return all((sub.claim_type or "other").lower() in soft_types for sub in (subclaims or []))
-
-
-def is_concrete_factual_claim(subclaims: List[SubClaim]) -> bool:
-    if not subclaims:
-        return True
-    flags = collect_risk_flags(subclaims)
-    if flags & SOFT_CLAIM_FLAGS:
-        return False
-    return any((sub.claim_type or "other").lower() in CONCRETE_FACTUAL_TYPES for sub in (subclaims or []))
 
 
 def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -969,14 +882,10 @@ def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
         "contradictory_evidence": 0,
         "mixed_sources": 0,
         "rumor_or_context": 0,
-        "allegation_or_context_support": 0,
-        "denial_or_rebuttal": 0,
         "primary_supportive": 0,
         "primary_contradictory": 0,
         "supportive_reporting": 0,
         "contradictory_reporting": 0,
-        "high_quality_supportive": 0,
-        "high_quality_contradictory": 0,
         "unique_clusters": set(),
     }
     for s in sources or []:
@@ -986,9 +895,7 @@ def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
         if cluster:
             stats["unique_clusters"].add(cluster)
 
-        source_type = (s.get("source_type") or "").lower()
-        is_primaryish = source_type in {"primary", "official", "government", "court", "parliament", "document", "record"}
-        is_high_quality = is_primaryish or source_type == "secondary" or float(s.get("weighted_score") or 0) >= 4.25
+        is_primaryish = (s.get("source_type") or "").lower() in {"primary", "official", "government", "court", "parliament", "document", "record"}
 
         if category in {"direct_evidence", "credible_reporting", "expert_analysis"}:
             if support == "supports":
@@ -997,30 +904,20 @@ def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
                     stats["supportive_reporting"] += 1
                 if is_primaryish or category == "direct_evidence":
                     stats["primary_supportive"] += 1
-                if is_high_quality:
-                    stats["high_quality_supportive"] += 1
             elif support == "contradicts":
                 stats["contradictory_evidence"] += 1
                 if category == "credible_reporting":
                     stats["contradictory_reporting"] += 1
                 if is_primaryish or category == "direct_evidence":
                     stats["primary_contradictory"] += 1
-                if is_high_quality:
-                    stats["high_quality_contradictory"] += 1
             else:
                 stats["mixed_sources"] += 1
         elif category == "credible_contradiction":
             stats["contradictory_evidence"] += 1
             if is_primaryish:
                 stats["primary_contradictory"] += 1
-            if is_high_quality:
-                stats["high_quality_contradictory"] += 1
         elif category in {"reported_allegation", "contextual_signal", "denial_or_rebuttal", "rumor_amplification", "irrelevant"}:
             stats["rumor_or_context"] += 1
-            if support == "supports":
-                stats["allegation_or_context_support"] += 1
-            if category == "denial_or_rebuttal":
-                stats["denial_or_rebuttal"] += 1
             if support == "mixed":
                 stats["mixed_sources"] += 1
 
@@ -1037,56 +934,33 @@ def rule_based_verdict_from_evidence(
     stats = compute_evidence_stats(sources)
     flags = collect_risk_flags(subclaims)
     soft_claim = is_soft_or_hard_to_verify_claim(subclaims)
-    concrete_claim = is_concrete_factual_claim(subclaims)
     serious_allegation = any((sub.claim_type or "").lower() in SERIOUS_ALLEGATION_TYPES for sub in (subclaims or []))
 
     supportive = stats["supportive_evidence"]
     contradictory = stats["contradictory_evidence"]
     primary_supportive = stats["primary_supportive"]
     primary_contradictory = stats["primary_contradictory"]
-    high_quality_supportive = stats["high_quality_supportive"]
-    high_quality_contradictory = stats["high_quality_contradictory"]
     rumorish = stats["rumor_or_context"]
-    contextual_support = stats["allegation_or_context_support"]
-    rebuttalish = stats["denial_or_rebuttal"]
     mixed_sources = stats["mixed_sources"]
-
-    has_no_real_support = supportive == 0 and primary_supportive == 0 and high_quality_supportive == 0
-    mostly_contextual_packet = rumorish >= max(2, supportive + contradictory)
-    context_heavy_unsubstantiated = (
-        concrete_claim
-        and not soft_claim
-        and has_no_real_support
-        and contextual_support > 0
-        and (contradictory >= 1 or rebuttalish >= 1 or mostly_contextual_packet)
-    )
 
     verdict = "Unverified"
     confidence = "Low"
     rationale = "Evidence is limited or mixed."
 
-    if context_heavy_unsubstantiated:
-        verdict = "Not supported by credible evidence"
-        confidence = "Medium"
-        rationale = "The reviewed material contains allegations, adjacency, denials, or contextual association, but no direct credible evidence substantiates the claim as stated."
-    elif has_no_real_support and contextual_support > 0:
-        verdict = "Not supported by credible evidence" if serious_allegation and not soft_claim else "Unverified"
-        confidence = "Medium" if serious_allegation else "Low"
-        rationale = "The reviewed material is largely contextual, allegation-based, or associative. No direct credible evidence in the reviewed set substantiates the claim as stated."
-    elif supportive >= 2 and contradictory == 0 and primary_supportive >= 1:
+    if supportive >= 2 and contradictory == 0 and primary_supportive >= 1:
         verdict = "Supported"
         confidence = "High" if supportive >= 3 else "Medium"
         rationale = "The reviewed evidence includes direct or high-quality support without material contradiction."
-    elif supportive >= 2 and contradictory <= 1 and high_quality_supportive >= 1:
+    elif supportive >= 2 and contradictory <= 1:
         verdict = "Likely supported"
         confidence = "Medium"
         rationale = "The balance of credible evidence leans supportive, but it is not fully closed."
     elif contradictory >= 2 and supportive == 0:
         verdict = "Not supported by credible evidence"
-        confidence = "High" if primary_contradictory >= 1 or high_quality_contradictory >= 1 else "Medium"
+        confidence = "High" if primary_contradictory >= 1 else "Medium"
         rationale = "Credible contradiction outweighs the available support."
     elif contradictory >= 1 and supportive >= 1:
-        if supportive >= contradictory and high_quality_supportive >= 1:
+        if supportive >= contradictory:
             verdict = "Misleading framing"
             confidence = "Medium"
             rationale = "There appears to be a kernel of truth, but the claim overreaches or omits important counter-evidence."
@@ -1094,14 +968,14 @@ def rule_based_verdict_from_evidence(
             verdict = "Weakly supported / likely incorrect"
             confidence = "Medium"
             rationale = "Some support exists, but stronger evidence points the other way."
-    elif pendulum_band == "Strongly evidenced" and high_quality_supportive >= 1:
+    elif pendulum_band == "Strongly evidenced":
         verdict = "Supported"
         confidence = "Medium"
-        rationale = "The evidence pattern is strongly supportive and includes at least some high-quality support."
-    elif pendulum_band == "Mostly supported" and high_quality_supportive >= 1 and not has_no_real_support:
+        rationale = "The evidence pattern is strongly supportive, even if not all sources are fully primary."
+    elif pendulum_band == "Mostly supported":
         verdict = "Likely supported"
         confidence = "Medium"
-        rationale = "The evidence pattern leans supportive, though some uncertainty remains."
+        rationale = "The evidence pattern is supportive overall, with some remaining uncertainty."
     elif pendulum_band == "Contradicted by evidence":
         verdict = "Not supported by credible evidence"
         confidence = "Medium"
@@ -1110,10 +984,10 @@ def rule_based_verdict_from_evidence(
         verdict = "Weakly supported / likely incorrect"
         confidence = "Low"
         rationale = "The available support is weak and does not carry the claim cleanly."
-    elif mostly_contextual_packet and has_no_real_support:
-        verdict = "Not supported by credible evidence" if concrete_claim and not soft_claim else ("Not supported by credible evidence" if serious_allegation and not soft_claim else "Unverified")
-        confidence = "Medium" if concrete_claim and not soft_claim else "Low"
-        rationale = "The packet is dominated by allegation, context, adjacency, or rumor signals rather than substantive evidence."
+    elif rumorish >= max(2, supportive + contradictory) and supportive == 0 and contradictory == 0:
+        verdict = "Not supported by credible evidence" if serious_allegation and not soft_claim else "Unverified"
+        confidence = "Low"
+        rationale = "The packet is dominated by allegation, context, or rumor signals rather than substantive evidence."
     elif mixed_sources > 0:
         verdict = "Misleading framing"
         confidence = "Low"
@@ -1129,10 +1003,9 @@ def rule_based_verdict_from_evidence(
         confidence = "Low"
         rationale = "This claim depends on motive attribution, which usually cannot be verified cleanly from public evidence alone."
 
-    if serious_allegation and has_no_real_support and verdict == "Unverified" and rumorish >= 1:
+    if serious_allegation and supportive == 0 and primary_supportive == 0 and verdict == "Unverified" and rumorish >= 1:
         verdict = "Not supported by credible evidence"
-        confidence = "Medium"
-        rationale = "This is a serious allegation, but the reviewed set does not contain credible substantiating evidence."
+        rationale = "This is a serious allegation, but the packet does not contain credible substantiating evidence."
 
     return {
         "verdict": verdict,
@@ -1140,7 +1013,6 @@ def rule_based_verdict_from_evidence(
         "rationale": rationale,
         "stats": stats,
         "soft_claim": soft_claim,
-        "concrete_claim": concrete_claim,
         "serious_allegation": serious_allegation,
         "risk_flags": sorted(flags),
     }
@@ -1170,21 +1042,11 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
             reasoning["verified_verdict"] = "Unverified"
             reasoning["verified_confidence"] = "Low"
 
-    # Context, allegations, donor adjacency, and repeated commentary should not be presented as substantive support.
-    stats = rule_view["stats"]
-    if stats["supportive_evidence"] == 0 and stats["allegation_or_context_support"] > 0:
-        reasoning["verified_verdict"] = rule_view["verdict"]
-        reasoning["verified_confidence"] = rule_view["confidence"]
-
     evidence_assessment = reasoning.setdefault("evidence_assessment", {})
     stats = rule_view["stats"]
-    evidence_assessment["evidence_gaps"] = ensure_list(evidence_assessment.get("evidence_gaps"))
+    evidence_assessment.setdefault("evidence_gaps", [])
     if stats["supportive_evidence"] == 0:
         evidence_assessment["evidence_gaps"].append("No direct or clearly supportive evidentiary source was identified in the reviewed packet.")
-    if stats["allegation_or_context_support"] > 0 and stats["supportive_evidence"] == 0:
-        evidence_assessment["evidence_gaps"].append("Several sources provide allegation, adjacency, or contextual association rather than direct substantiation of the claim as stated.")
-    if rule_view.get("concrete_claim") and stats["supportive_evidence"] == 0 and stats["allegation_or_context_support"] > 0:
-        evidence_assessment["evidence_gaps"].append("Related but narrower themes may be present in the packet, but they do not on their own substantiate the broader claim as phrased.")
     if rule_view["soft_claim"]:
         evidence_assessment["evidence_gaps"].append("Part of the claim is interpretive, rhetorical, predictive, or otherwise difficult to verify directly.")
 
@@ -1250,8 +1112,8 @@ def evidence_pendulum(sources: List[Dict[str, Any]], claim_type: str = "other") 
         "expert_analysis": 1.0,
         "reported_allegation": 0.5,
         "contextual_signal": 0.25,
-        "denial_or_rebuttal": 0.25,
-        "credible_contradiction": 3.0,
+        "denial_or_rebuttal": -0.5,
+        "credible_contradiction": -3.0,
         "rumor_amplification": 0.0,
         "irrelevant": 0.0,
     }
@@ -1267,34 +1129,21 @@ def evidence_pendulum(sources: List[Dict[str, Any]], claim_type: str = "other") 
         items = sorted(items, key=lambda x: source_bucket_multiplier(x.get("source_type",""), x.get("domain","")), reverse=True)
         for idx, s in enumerate(items):
             cat = normalize_evidence_category(s.get("evidence_category", "irrelevant"))
-            support = (s.get("claim_support") or "").strip().lower()
             mult = source_bucket_multiplier(s.get("source_type",""), s.get("domain",""))
-            base = weights.get(cat, 0.0)
-            direction = 0.0
-            if cat == "credible_contradiction":
-                direction = -1.0
-            elif support == "supports":
-                direction = 1.0
-            elif support == "contradicts":
-                direction = -1.0
-            elif cat in {"reported_allegation", "contextual_signal", "denial_or_rebuttal", "rumor_amplification"}:
-                direction = 0.0
-            contribution = base * mult * (decay[idx] if idx < len(decay) else 0.1) * direction
+            contribution = weights.get(cat, 0.0) * mult * (decay[idx] if idx < len(decay) else 0.1)
             score += contribution
-            if cat in {"direct_evidence", "credible_reporting", "expert_analysis"} and support == "supports":
+            if cat in {"direct_evidence","credible_reporting","expert_analysis"} and contribution > 0:
                 support_count += 1
-            if cat in {"credible_contradiction"} or (cat in {"direct_evidence", "credible_reporting", "expert_analysis"} and support == "contradicts"):
+            if cat == "credible_contradiction":
                 contradiction_count += 1
-            if cat in {"reported_allegation", "contextual_signal", "rumor_amplification", "denial_or_rebuttal"}:
+            if cat in {"reported_allegation","contextual_signal","rumor_amplification","denial_or_rebuttal"}:
                 rumor_count += 1
 
     adjusted = score
     if (claim_type or "").lower() in SERIOUS_ALLEGATION_TYPES and adjusted > 0:
         adjusted -= 3.0
 
-    if support_count == 0 and contradiction_count == 0 and rumor_count > 0:
-        band = "Unsubstantiated rumor"
-    elif contradiction_count >= 2 and adjusted <= -6:
+    if contradiction_count >= 2 and adjusted <= -10:
         band = "Contradicted by evidence"
     elif adjusted >= 8:
         band = "Strongly evidenced"
@@ -1307,9 +1156,6 @@ def evidence_pendulum(sources: List[Dict[str, Any]], claim_type: str = "other") 
     else:
         band = "Unsubstantiated rumor"
 
-    if support_count == 0 and contradiction_count >= 1 and rumor_count >= 1:
-        band = "Context-heavy / unsubstantiated"
-
     explanation = f"{support_count} evidentiary source(s), {contradiction_count} contradiction signal(s), {rumor_count} rumor/context signal(s)"
     return {"band": band, "score": round(adjusted, 2), "explanation": explanation}
 
@@ -1319,7 +1165,6 @@ def map_pendulum_to_verified_verdict(band: str) -> str:
         "Strongly evidenced": "Supported",
         "Mostly supported": "Likely supported",
         "Mixed / uncertain": "Misleading framing",
-        "Context-heavy / unsubstantiated": "Not supported by credible evidence",
         "Weakly supported": "Weakly supported / likely incorrect",
         "Unsubstantiated rumor": "Unverified",
         "Contradicted by evidence": "Not supported by credible evidence",
@@ -1343,7 +1188,7 @@ def split_evidence_vs_rumor(sources: List[Dict[str, Any]]) -> Dict[str, List[str
 
 
 def render_pendulum(band: str) -> None:
-    labels = ["Unsubstantiated rumor", "Weakly supported", "Mixed / uncertain", "Context-heavy / unsubstantiated", "Strongly evidenced"]
+    labels = ["Unsubstantiated rumor", "Weakly supported", "Mixed / uncertain", "Mostly supported", "Strongly evidenced"]
     pos_map = {label: idx for idx, label in enumerate(labels)}
     pos = pos_map.get(band, 2)
     cols = st.columns(5)
@@ -1361,11 +1206,6 @@ def render_consensus_block(result: Dict[str, Any]) -> None:
         st.write(f"**{strength}**")
     if summary:
         st.write(summary)
-
-    rule_engine = result.get("rule_engine") or {}
-    stats = rule_engine.get("stats") or {}
-    if stats and stats.get("supportive_evidence", 0) == 0 and stats.get("allegation_or_context_support", 0) > 0:
-        st.caption("Most reviewed material is contextual, allegation-based, or associative rather than direct substantiation.")
 
 
 def render_pipeline_result(result: Dict[str, Any]) -> None:
