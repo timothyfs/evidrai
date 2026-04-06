@@ -252,8 +252,68 @@ def stable_request_key(*parts: Any) -> str:
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
+def ensure_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return []
+        if cleaned.lower() in {
+            "none",
+            "none identified",
+            "none identified.",
+            "none noted",
+            "none noted.",
+            "no conflicts",
+            "no conflicts.",
+            "no conflict",
+            "n/a",
+            "na",
+            "unknown",
+        }:
+            return []
+        return [cleaned]
+    return [str(value).strip()] if str(value).strip() else []
+
+
+def normalize_verified_assessment_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(payload or {})
+
+    reasoning_summary = payload.get("reasoning_summary")
+    if not isinstance(reasoning_summary, dict):
+        reasoning_summary = {}
+    for key in ("supported_points", "contradicted_points", "uncertain_points"):
+        reasoning_summary[key] = ensure_list(reasoning_summary.get(key))
+    payload["reasoning_summary"] = reasoning_summary
+
+    evidence = payload.get("evidence_assessment")
+    if not isinstance(evidence, dict):
+        evidence = {}
+    for key in (
+        "primary_sources_used",
+        "secondary_sources_used",
+        "source_conflicts",
+        "evidence_gaps",
+        "rumor_drivers",
+        "actual_evidence",
+    ):
+        evidence[key] = ensure_list(evidence.get(key))
+    payload["evidence_assessment"] = evidence
+
+    for key in ("misinformation_patterns", "why_this_claim_spreads"):
+        payload[key] = ensure_list(payload.get(key))
+
+    return payload
+
+
 def validate_model(payload: Dict[str, Any], model_cls: Type[BaseModel]) -> Dict[str, Any]:
-    model = model_cls.model_validate(payload)
+    normalized_payload = payload
+    if model_cls is VerifiedAssessmentModel:
+        normalized_payload = normalize_verified_assessment_payload(payload)
+    model = model_cls.model_validate(normalized_payload)
     return model.model_dump()
 
 # -----------------------------
@@ -1038,7 +1098,7 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
 
     evidence_assessment = reasoning.setdefault("evidence_assessment", {})
     stats = rule_view["stats"]
-    evidence_assessment.setdefault("evidence_gaps", [])
+    evidence_assessment["evidence_gaps"] = ensure_list(evidence_assessment.get("evidence_gaps"))
     if stats["supportive_evidence"] == 0:
         evidence_assessment["evidence_gaps"].append("No direct or clearly supportive evidentiary source was identified in the reviewed packet.")
     if rule_view["soft_claim"]:

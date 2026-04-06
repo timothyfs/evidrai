@@ -215,6 +215,22 @@ REASONING_SYSTEM_PROMPT = dedent(
       "why_this_claim_spreads": ["string"],
       "final_explanation": "string"
     }
+
+    Array formatting rules:
+    - The following fields must always be JSON arrays, never strings, null, or prose:
+      reasoning_summary.supported_points
+      reasoning_summary.contradicted_points
+      reasoning_summary.uncertain_points
+      evidence_assessment.primary_sources_used
+      evidence_assessment.secondary_sources_used
+      evidence_assessment.source_conflicts
+      evidence_assessment.evidence_gaps
+      evidence_assessment.actual_evidence
+      evidence_assessment.rumor_drivers
+      misinformation_patterns
+      why_this_claim_spreads
+    - If there are no items, return [] exactly.
+    - Do not write values like "None identified.", "N/A", or any sentence where an array is required.
     """
 ).strip()
 
@@ -340,6 +356,8 @@ def build_reasoning_messages(
                 - If evidence is mixed, mostly interpretive, or limited, say so clearly.
                 - If the evidence packet does not cleanly verify the strongest version of the claim, do not over-reward partial plausibility.
                 - Keep the JSON structure stable.
+                - Every list-shaped field must be a JSON array. If there are no items, return [] exactly.
+                - Never return strings like "None identified." or prose in place of source_conflicts, evidence_gaps, actual_evidence, rumor_drivers, misinformation_patterns, or why_this_claim_spreads.
 
                 Pendulum evidence band: {pendulum_band}
                 Pendulum explanation: {pendulum_explanation}
