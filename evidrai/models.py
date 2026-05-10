@@ -5,6 +5,8 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+
+@dataclass
 class SubClaim:
     id: str
     text: str

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+
+@dataclass(frozen=True)
 class ScoringConfig:
     authority_weight: float = 0.30
     relevance_weight: float = 0.25
@@ -15,3 +17,4 @@ class ScoringConfig:
     term_pattern: str = r"\b{term}\b"
 
 
+SCORING_CONFIG = ScoringConfig()
