@@ -8,6 +8,7 @@ import streamlit as st
 
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
+from evidrai.config import APP_BUILD
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass
 from evidrai.rules.verdict import (
     map_confidence_label,
@@ -303,6 +304,10 @@ def main() -> None:
         st.caption("Auto uses deep verification when search is configured, otherwise it falls back to the fast first-pass flow.")
         st.markdown("---")
         st.caption("The product is optimized around claim → evidence → verdict. Fast mode gives a quick first pass. Deep mode shows the evidence pipeline.")
+        st.markdown("---")
+        st.caption(f"Build: {APP_BUILD}")
+        st.caption(f"OpenAI: {'configured' if llm.configured else 'missing'} • Model: {llm.model} • Base URL: {llm.base_url}")
+        st.caption(f"Tavily: {'configured' if search.configured else 'missing'}")
 
     claim = st.text_area(
         "Paste a claim, link description, quote, or content to assess",
