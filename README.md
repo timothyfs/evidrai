@@ -59,7 +59,7 @@ Use it when:
 
 ## Configuration
 
-The app reads configuration from Streamlit secrets or environment variables.
+The app reads configuration from Streamlit secrets or environment variables. Streamlit Cloud should use app secrets, not browser calls to API URLs.
 
 Required for model calls:
 - `OPENAI_API_KEY`
@@ -68,6 +68,26 @@ Optional:
 - `OPENAI_BASE_URL` (default: `https://api.openai.com/v1`)
 - `OPENAI_MODEL` (default: `gpt-4o-mini`)
 - `TAVILY_API_KEY` for Deep mode
+
+Supported Streamlit secrets formats:
+
+```toml
+OPENAI_API_KEY = "sk-..."
+OPENAI_MODEL = "gpt-4o-mini"
+TAVILY_API_KEY = "tvly-..."
+```
+
+or:
+
+```toml
+[openai]
+api_key = "sk-..."
+base_url = "https://api.openai.com/v1"
+model = "gpt-4o-mini"
+
+[tavily]
+api_key = "tvly-..."
+```
 
 ## Setup
 

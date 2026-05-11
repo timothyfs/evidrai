@@ -1,18 +1,21 @@
 from __future__ import annotations
 
-import os
 import time
 from typing import Any, Dict, List, Optional
 
 import requests
-import streamlit as st
-
-from evidrai.config import SCORING_CONFIG
+from evidrai.config import SCORING_CONFIG, read_config_value
 
 class TavilySearchClient:
     def __init__(self) -> None:
-        secrets = getattr(st, "secrets", {})
-        self.api_key = secrets.get("TAVILY_API_KEY", os.getenv("TAVILY_API_KEY"))
+        self.api_key = read_config_value(
+            secret_paths=(
+                ("TAVILY_API_KEY",),
+                ("tavily", "api_key"),
+                ("tavily", "TAVILY_API_KEY"),
+            ),
+            env_names=("TAVILY_API_KEY",),
+        )
 
     @property
     def configured(self) -> bool:
