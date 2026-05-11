@@ -301,7 +301,7 @@ def main() -> None:
         )
         verification_mode = st.selectbox("Verification depth", ["Auto", "Fast", "Deep"], index=0)
         st.markdown("---")
-        st.caption("Auto uses deep verification when search is configured, otherwise it falls back to the fast first-pass flow.")
+        st.caption("Auto uses the fast first-pass flow by default to avoid unnecessary API usage. Select Deep explicitly for retrieval-backed verification.")
         st.markdown("---")
         st.caption("The product is optimized around claim → evidence → verdict. Fast mode gives a quick first pass. Deep mode shows the evidence pipeline.")
         st.markdown("---")
@@ -338,7 +338,7 @@ def main() -> None:
             return
 
         analysis_input = build_analysis_input(cleaned_claim, cleaned_source_url)
-        use_search = search.configured if verification_mode == "Auto" else verification_mode == "Deep"
+        use_search = verification_mode == "Deep"
         if verification_mode == "Deep" and not search.configured:
             st.error("Deep mode requires TAVILY_API_KEY to be configured.")
             return
