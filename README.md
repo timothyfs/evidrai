@@ -1,6 +1,6 @@
 # Evidrai
 
-Evidrai is a Streamlit-based claim verification prototype for assessing the evidential strength of a claim, headline, quote, post, or article excerpt.
+Evidrai is a Streamlit-based claim verification prototype for assessing the evidential strength of a claim, headline, quote, post, URL, or article excerpt.
 
 It combines:
 - a fast first-pass assessment
@@ -10,7 +10,7 @@ It combines:
 
 ## What it does
 
-Given a claim or a source URL, Evidrai can:
+Given a claim or source URL, Evidrai can:
 - extract the core claim and subclaims
 - retrieve external sources for deeper verification
 - rank and summarise sources
@@ -28,6 +28,7 @@ Supported verdicts:
 ## Verification modes
 
 ### Fast
+
 Fast mode runs a quick first-pass assessment without external retrieval.
 
 Use it when:
@@ -36,12 +37,13 @@ Use it when:
 - you do not need external evidence gathering
 
 ### Deep
+
 Deep mode adds retrieval-backed verification.
 
 It:
 - extracts subclaims
 - generates search queries
-- retrieves sources via Tavily
+- retrieves sources via Tavily, when configured
 - scores and summarises sources
 - applies pendulum and rule-based checks before producing the final verdict
 
@@ -55,7 +57,7 @@ Use it when:
 - Python 3.10+
 - A virtual environment is recommended
 - An OpenAI-compatible API key for model calls
-- A Tavily API key if you want Deep mode
+- A Tavily API key if you want Deep mode retrieval
 
 ## Configuration
 
@@ -65,9 +67,20 @@ Required for model calls:
 - `OPENAI_API_KEY`
 
 Optional:
-- `OPENAI_BASE_URL` (default: `https://api.openai.com/v1`)
-- `OPENAI_MODEL` (default: `gpt-4o-mini`)
-- `TAVILY_API_KEY` for Deep mode
+- `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`
+- `OPENAI_MODEL` defaults to `gpt-4o-mini`
+- `TAVILY_API_KEY` enables Deep mode retrieval
+
+For Streamlit Cloud, configure these under app secrets:
+
+```toml
+OPENAI_API_KEY = "..."
+OPENAI_BASE_URL = "https://api.openai.com/v1" # optional
+OPENAI_MODEL = "gpt-4o-mini"                 # optional
+TAVILY_API_KEY = "..."                       # optional, required for retrieval-backed Deep mode
+```
+
+Do not commit local secrets.
 
 Supported Streamlit secrets formats:
 
@@ -91,41 +104,71 @@ api_key = "tvly-..."
 
 ## Setup
 
-1. Create and activate a virtual environment
-2. Install dependencies:
+Create and activate a virtual environment, then install dependencies:
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
-3. Configure your environment variables or Streamlit secrets
-4. Run the app:
+Run the app locally:
 
 ```bash
 streamlit run app.py
 ```
 
-## Current architecture
+## Validation commands
 
-This repo is intentionally still simple, but the current prototype keeps several concerns in one file:
-- UI rendering
-- model clients
-- retrieval logic
-- source scoring
-- verdict/rule logic
+Run the API-key-free rule-engine tests:
 
-That is workable for now, but it should eventually be split into modules once the behaviour is stable.
+```bash
+python -m pytest -q
+```
 
-## Known limitations
+Run a quick compile check:
+
+```bash
+python -m compileall app.py evidrai prompts.py tests
+```
+
+Both commands should pass before pushing changes.
+
+## Project structure
+
+```text
+app.py                         Streamlit entrypoint; delegates to evidrai.ui.render.main
+prompts.py                     Prompt builders and JSON loading helpers
+requirements.txt               Runtime and test dependencies
+
+evidrai/
+  clients/
+    llm.py                     OpenAI-compatible JSON client
+    search.py                  Tavily search client
+  config.py                    Scoring and retry configuration
+  models.py                    Dataclasses and Pydantic response models
+  pipeline/
+    verification.py            Fast pass and retrieval-backed verification pipeline
+  rules/
+    verdict.py                 Evidence classification, pendulum scoring, and rule guard rails
+  ui/
+    render.py                  Streamlit UI rendering and interaction flow
+  utils.py                     URL handling, source classification, validation helpers
+
+tests/
+  test_rule_engine.py          API-key-free rule-engine regression tests
+```
+
+## Current limitations
 
 - This is still a prototype, not a production verification system
-- Output quality depends heavily on the quality of retrieved sources
+- Output quality depends heavily on retrieved source quality
 - Deep mode depends on external API availability and search quality
 - Some claims are inherently interpretive, predictive, or too vague to verify cleanly
-- The app uses rule-based downgrades to avoid over-claiming, but that does not make it immune to poor retrieval or bad source material
+- Rule-based downgrades reduce over-claiming, but they do not compensate for bad retrieval or weak source material
 
 ## Notes
 
-- The app currently talks to an OpenAI-compatible API via HTTP requests
-- Deep mode is unavailable unless `TAVILY_API_KEY` is configured
-- The repo structure has been intentionally kept unchanged during this cleanup pass to reduce risk
+- Fast mode still requires the model API key because it uses the OpenAI-compatible client.
+- Deep mode can run without Tavily configured, but retrieval will return no sources and the result will be correspondingly weak.
+- Tests are designed to run without API keys.

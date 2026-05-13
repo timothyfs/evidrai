@@ -206,7 +206,7 @@ def rule_based_verdict_from_evidence(
         verdict = "Supported"
         confidence = "High" if supportive >= 3 else "Medium"
         rationale = "The reviewed evidence includes direct or high-quality support without material contradiction."
-    elif supportive >= 2 and contradictory <= 1 and high_quality_supportive >= 1:
+    elif supportive >= 2 and contradictory == 0 and high_quality_supportive >= 1:
         verdict = "Likely supported"
         confidence = "Medium"
         rationale = "The balance of credible evidence leans supportive, but it is not fully closed."
