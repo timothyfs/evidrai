@@ -16,10 +16,16 @@ from evidrai.clients.search import TavilySearchClient
 from evidrai.config import SCORING_CONFIG
 from evidrai.models import (
     ClaimAnalysisModel,
+    ClaimAnalysisResult,
+    EvidencePacket,
     EvidenceSource,
     LegacyAssessmentModel,
+    PendulumResult,
+    RetrievalResult,
+    RuleEngineResult,
     SourceSummaryModel,
     SubClaim,
+    VerificationResult,
     VerifiedAssessmentModel,
 )
 from evidrai.rules.verdict import (
@@ -73,7 +79,7 @@ def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient) 
 # -----------------------------
 
 
-def parse_claim_analysis(payload: Dict[str, Any], user_input: str) -> List[SubClaim]:
+def parse_claim_analysis(payload: Dict[str, Any], user_input: str) -> ClaimAnalysisResult:
     validated = validate_model(payload, ClaimAnalysisModel)
     subclaims = []
     for i, item in enumerate(validated.get("subclaims", []) or []):
@@ -91,7 +97,11 @@ def parse_claim_analysis(payload: Dict[str, Any], user_input: str) -> List[SubCl
         )
     if not subclaims:
         subclaims = [SubClaim(id="sc_1", text=user_input.strip(), claim_type="other")]
-    return subclaims
+    return ClaimAnalysisResult(
+        normalized_claim=validated.get("normalized_claim") or user_input,
+        subclaims=subclaims,
+        overall_notes=list(validated.get("overall_notes", []) or []),
+    )
 
 
 def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
@@ -231,85 +241,75 @@ def provisional_verdict(sources: List[EvidenceSource]) -> str:
     return "unverifiable"
 
 
-def run_claim_pipeline(user_input: str, llm: OpenAICompatibleClient, search: TavilySearchClient) -> Dict[str, Any]:
-    claim_analysis = validate_model(llm.complete_json(build_claim_analysis_messages(user_input)), ClaimAnalysisModel)
-    subclaims = parse_claim_analysis(claim_analysis, user_input)
-    claim_text = claim_analysis.get("normalized_claim") or user_input
-    queries = build_search_queries(subclaims)
+def run_claim_pipeline_typed(user_input: str, llm: OpenAICompatibleClient, search: TavilySearchClient) -> VerificationResult:
+    claim_payload = llm.complete_json(build_claim_analysis_messages(user_input))
+    claim_analysis = parse_claim_analysis(claim_payload, user_input)
+    claim_text = claim_analysis.normalized_claim or user_input
+    queries = build_search_queries(claim_analysis.subclaims)
     sources = retrieve_sources(search, queries, claim_text)
-    sources = summarize_sources(llm, subclaims[0], sources)
+    sources = summarize_sources(llm, claim_analysis.subclaims[0], sources)
+    retrieval = RetrievalResult(queries=queries, sources=sources)
     confidence = compute_confidence(sources)
     pre = provisional_verdict(sources)
 
-    evidence_packet = {
-        "claim": claim_text,
-        "subclaims": [s.text for s in subclaims],
-        "sources": [
-            {
-                "title": s.title,
-                "url": s.url,
-                "domain": s.domain,
-                "source_type": s.source_type,
-                "published_date": s.published_date,
-                "summary": s.snippet,
-                "claim_support": s.claim_support,
-                "evidence_category": getattr(s, "evidence_category", "irrelevant"),
-                "source_role": getattr(s, "source_role", "context"),
-                "narrative_cluster": getattr(s, "narrative_cluster", ""),
-                "weighted_score": s.weighted_score,
-            }
-            for s in sources
-        ],
-    }
+    evidence_packet = EvidencePacket(
+        claim=claim_text,
+        subclaims=claim_analysis.subclaim_texts,
+        sources=[source.to_packet() for source in sources],
+    )
+    evidence_packet_dict = evidence_packet.to_dict()
 
-    pendulum = evidence_pendulum(
-        evidence_packet["sources"],
-        subclaims[0].claim_type if subclaims else "other",
+    pendulum = PendulumResult.from_dict(
+        evidence_pendulum(
+            evidence_packet.sources,
+            claim_analysis.subclaims[0].claim_type if claim_analysis.subclaims else "other",
+        )
     )
 
     reasoning = validate_model(
         llm.complete_json(
             build_reasoning_messages(
                 claim_text,
-                evidence_packet,
+                evidence_packet_dict,
                 pre,
                 confidence,
-                pendulum["band"],
-                pendulum["explanation"],
+                pendulum.band,
+                pendulum.explanation,
             )
         ),
         VerifiedAssessmentModel,
     )
 
     reasoning["claim"] = claim_text
-    reasoning["subclaims"] = evidence_packet["subclaims"]
-    reasoning["sources"] = evidence_packet["sources"]
+    reasoning["subclaims"] = evidence_packet.subclaims
+    reasoning["sources"] = evidence_packet.sources
     reasoning["queries"] = queries
-    reasoning["risk_flags"] = sorted(collect_risk_flags(subclaims))
-    reasoning["pendulum_band"] = reasoning.get("pendulum_band") or pendulum["band"]
-    reasoning["pendulum_explanation"] = reasoning.get("pendulum_explanation") or pendulum["explanation"]
+    reasoning["risk_flags"] = sorted(collect_risk_flags(claim_analysis.subclaims))
+    reasoning["pendulum_band"] = reasoning.get("pendulum_band") or pendulum.band
+    reasoning["pendulum_explanation"] = reasoning.get("pendulum_explanation") or pendulum.explanation
     reasoning["verified_verdict"] = reasoning.get("verified_verdict") or map_pendulum_to_verified_verdict(reasoning["pendulum_band"])
     reasoning["verified_confidence"] = reasoning.get("verified_confidence") or map_confidence_label(reasoning.get("confidence", confidence))
 
-    rule_view = rule_based_verdict_from_evidence(claim_text, subclaims, evidence_packet["sources"], reasoning["pendulum_band"])
-    reasoning = align_reasoning_with_rules(reasoning, rule_view)
-    reasoning["rule_engine"] = {
-        "verdict": rule_view["verdict"],
-        "confidence": rule_view["confidence"],
-        "rationale": rule_view["rationale"],
-        "stats": rule_view["stats"],
-        "risk_flags": rule_view["risk_flags"],
-    }
+    rule_engine = RuleEngineResult.from_dict(
+        rule_based_verdict_from_evidence(
+            claim_text,
+            claim_analysis.subclaims,
+            evidence_packet.sources,
+            reasoning["pendulum_band"],
+        )
+    )
+    reasoning = align_reasoning_with_rules(reasoning, rule_engine.to_dict())
+    reasoning["rule_engine"] = rule_engine.to_public_dict()
 
-    split_view = split_evidence_vs_rumor(evidence_packet["sources"])
+    split_view = split_evidence_vs_rumor(evidence_packet.sources)
     reasoning.setdefault("evidence_assessment", {})
     reasoning["evidence_assessment"]["actual_evidence"] = reasoning["evidence_assessment"].get("actual_evidence") or split_view["actual_evidence"]
     reasoning["evidence_assessment"]["rumor_drivers"] = reasoning["evidence_assessment"].get("rumor_drivers") or split_view["rumor_drivers"]
 
     if not reasoning.get("consensus_strength"):
-        support_count = sum(1 for s in sources if s.claim_support == "supports")
-        contradict_count = sum(1 for s in sources if s.claim_support == "contradicts")
-        primary_support = sum(1 for s in sources if s.source_type == "primary" and s.claim_support == "supports")
+        support_count = sum(1 for source in sources if source.claim_support == "supports")
+        contradict_count = sum(1 for source in sources if source.claim_support == "contradicts")
+        primary_support = sum(1 for source in sources if source.source_type == "primary" and source.claim_support == "supports")
         if support_count >= 3 and contradict_count == 0 and primary_support >= 1:
             reasoning["consensus_strength"] = "Strong agreement"
         elif support_count >= 2 and contradict_count <= 1:
@@ -324,4 +324,19 @@ def run_claim_pipeline(user_input: str, llm: OpenAICompatibleClient, search: Tav
     if not reasoning.get("consensus_summary"):
         reasoning["consensus_summary"] = "This assessment reflects the balance of the reviewed sources rather than a single outlet or internal score."
 
-    return reasoning
+    return VerificationResult(
+        claim=claim_text,
+        claim_analysis=claim_analysis,
+        retrieval=retrieval,
+        evidence_packet=evidence_packet,
+        pendulum=pendulum,
+        rule_engine=rule_engine,
+        reasoning=reasoning,
+        provisional_verdict=pre,
+        provisional_confidence=confidence,
+    )
+
+
+def run_claim_pipeline(user_input: str, llm: OpenAICompatibleClient, search: TavilySearchClient) -> Dict[str, Any]:
+    """Run deep verification and return a UI-compatible serialized result."""
+    return run_claim_pipeline_typed(user_input, llm, search).to_dict()
