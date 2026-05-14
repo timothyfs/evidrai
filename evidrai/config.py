@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+import subprocess
 from typing import Any, Optional, Sequence
 
 import requests
@@ -22,7 +25,39 @@ class ScoringConfig:
     term_pattern: str = r"\b{term}\b"
 
 
-APP_BUILD = "2026-05-14-debug-panel-render-fix"
+APP_BUILD_LABEL = "debug-panel-render-fix"
+
+
+@lru_cache(maxsize=1)
+def get_app_build() -> str:
+    """Return a visible build identifier that changes automatically on deploy.
+
+    Streamlit Cloud exposes commit metadata in some environments; local runs fall
+    back to the current Git commit. The label is intentionally human-readable,
+    while the commit hash confirms the exact deployed version.
+    """
+    commit = (
+        os.getenv("STREAMLIT_GIT_COMMIT")
+        or os.getenv("GITHUB_SHA")
+        or os.getenv("VERCEL_GIT_COMMIT_SHA")
+        or _local_git_commit()
+    )
+    short_commit = commit[:7] if commit else "unknown"
+    return f"{APP_BUILD_LABEL}-{short_commit}"
+
+
+def _local_git_commit() -> Optional[str]:
+    try:
+        repo_root = Path(__file__).resolve().parents[1]
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2,
+        ).strip()
+    except Exception:
+        return None
 
 SCORING_CONFIG = ScoringConfig()
 

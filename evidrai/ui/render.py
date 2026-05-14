@@ -8,7 +8,7 @@ import streamlit as st
 
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import APP_BUILD
+from evidrai.config import get_app_build
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass
 from evidrai.rules.verdict import (
     map_confidence_label,
@@ -291,7 +291,7 @@ def render_developer_debug_panel(
     with st.expander("Runtime configuration", expanded=False):
         st.json(
             {
-                "build": APP_BUILD,
+                "build": get_app_build(),
                 "settings": settings,
                 "openai": {
                     "configured": llm.configured,
@@ -352,7 +352,7 @@ def main() -> None:
         st.markdown("---")
         st.caption("The product is optimized around claim → evidence → verdict. Fast mode gives a quick first pass. Deep mode shows the evidence pipeline.")
         st.markdown("---")
-        st.caption(f"Build: {APP_BUILD}")
+        st.caption(f"Build: {get_app_build()}")
         st.caption(f"OpenAI: {'configured' if llm.configured else 'missing'} • Model: {llm.model} • Base URL: {llm.base_url}")
         st.caption(f"Tavily: {'configured' if search.configured else 'missing'}")
 
