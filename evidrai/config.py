@@ -22,7 +22,7 @@ class ScoringConfig:
     term_pattern: str = r"\b{term}\b"
 
 
-APP_BUILD = "2026-05-13-typed-pipeline-results"
+APP_BUILD = "2026-05-14-debug-panel-render-fix"
 
 SCORING_CONFIG = ScoringConfig()
 
