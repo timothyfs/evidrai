@@ -276,6 +276,47 @@ def render_legacy_result(data: Dict[str, Any], source_url: str) -> None:
 
 
 
+def render_developer_debug_panel(
+    saved: Optional[Dict[str, Any]],
+    settings: Dict[str, Any],
+    llm: OpenAICompatibleClient,
+    search: TavilySearchClient,
+) -> None:
+    """Render opt-in diagnostics without exposing secrets."""
+    st.markdown("---")
+    st.markdown("## Developer debug")
+    st.caption("Visible only when the sidebar toggle is enabled for this browser session.")
+
+    with st.expander("Runtime configuration", expanded=False):
+        st.json(
+            {
+                "build": APP_BUILD,
+                "settings": settings,
+                "openai": {
+                    "configured": llm.configured,
+                    "model": llm.model,
+                    "base_url": llm.base_url,
+                },
+                "tavily": {"configured": search.configured},
+            }
+        )
+
+    cache = st.session_state.get("evidrai_cache", {})
+    with st.expander("Session state summary", expanded=False):
+        st.json(
+            {
+                "cache_entries": len(cache),
+                "has_last_results": saved is not None,
+                "feedback_count": len(st.session_state.get("feedback_log", {})),
+            }
+        )
+
+    if saved:
+        with st.expander("Raw latest result payload", expanded=False):
+            st.json(saved)
+
+
+
 def main() -> None:
     st.set_page_config(page_title="Evidrai", layout="wide")
     st.title("🔎 Evidrai — Claim Check")
@@ -300,6 +341,11 @@ def main() -> None:
             index=0,
         )
         verification_mode = st.selectbox("Verification depth", ["Auto", "Fast", "Deep"], index=0)
+        developer_debug_enabled = st.toggle(
+            "Developer debug panel",
+            value=False,
+            help="Show raw result payloads and non-secret runtime diagnostics for this browser session only.",
+        )
         st.markdown("---")
         st.caption("Auto uses the fast first-pass flow by default to avoid unnecessary API usage. Select Deep explicitly for retrieval-backed verification.")
         st.markdown("---")
@@ -393,3 +439,15 @@ def main() -> None:
             render_provisional_result(saved["quick_result"], saved.get("source_url", ""))
         if saved.get("full_result"):
             render_pipeline_result(saved["full_result"])
+
+    if developer_debug_enabled:
+        render_developer_debug_panel(
+            saved,
+            {
+                "output_mode": detail_mode,
+                "claim_category": category,
+                "verification_depth": verification_mode,
+            },
+            llm,
+            search,
+        )
