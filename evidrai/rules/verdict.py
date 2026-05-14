@@ -290,7 +290,15 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
     rule_verdict = rule_view["verdict"]
     rule_confidence = rule_view["confidence"]
 
-    if VERDICT_ORDER.get(model_verdict, 2) > VERDICT_ORDER.get(rule_verdict, 2):
+    stats = rule_view["stats"]
+    factual_core_supported = stats["supportive_evidence"] >= 2 and stats["contradictory_evidence"] == 0
+    rule_is_stronger = VERDICT_ORDER.get(rule_verdict, 2) > VERDICT_ORDER.get(model_verdict, 2)
+    model_is_stronger = VERDICT_ORDER.get(model_verdict, 2) > VERDICT_ORDER.get(rule_verdict, 2)
+
+    if model_is_stronger:
+        reasoning["verified_verdict"] = rule_verdict
+        reasoning["verified_confidence"] = rule_confidence
+    elif rule_is_stronger and factual_core_supported:
         reasoning["verified_verdict"] = rule_verdict
         reasoning["verified_confidence"] = rule_confidence
     else:
@@ -304,8 +312,6 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
     if rule_view["soft_claim"] and reasoning.get("verified_confidence") == "High":
         reasoning["verified_confidence"] = "Medium"
     if rule_view["soft_claim"] and reasoning.get("verified_verdict") in {"Supported", "Likely supported", "Not supported by credible evidence"}:
-        stats = rule_view["stats"]
-        factual_core_supported = stats["supportive_evidence"] >= 2 and stats["contradictory_evidence"] == 0
         if factual_core_supported:
             if reasoning.get("verified_verdict") == "Supported":
                 reasoning["verified_verdict"] = "Likely supported"

@@ -140,9 +140,16 @@ def test_interpretive_dispute_does_not_downgrade_supported_factual_core_to_unver
     assert result["confidence"] == "Medium"
     assert "interpretive" in result["rationale"] or "legally contested" in result["rationale"]
 
-    aligned = align_reasoning_with_rules(
+    overstated = align_reasoning_with_rules(
         {"verified_verdict": "Supported", "verified_confidence": "High"},
         result,
     )
-    assert aligned["verified_verdict"] == "Likely supported"
-    assert aligned["verified_confidence"] == "Medium"
+    assert overstated["verified_verdict"] == "Likely supported"
+    assert overstated["verified_confidence"] == "Medium"
+
+    understated = align_reasoning_with_rules(
+        {"verified_verdict": "Unverified", "verified_confidence": "Medium"},
+        result,
+    )
+    assert understated["verified_verdict"] == "Likely supported"
+    assert understated["verified_confidence"] == "Medium"
