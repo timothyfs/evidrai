@@ -86,31 +86,58 @@ def render_evidence_snapshot(sources: List[Dict[str, Any]]) -> None:
             st.write(f"- {summary}")
 
 
-def render_assessment_metrics(result: Dict[str, Any]) -> None:
+def source_quality_stats(result: Dict[str, Any]) -> Dict[str, Any]:
     sources = result.get("sources", []) or []
     primary = sum(1 for s in sources if (s.get("source_type") or "").lower() == "primary")
     high_quality = sum(1 for s in sources if map_source_quality_label(s.get("weighted_score")) == "High")
     contradictions = sum(1 for s in sources if normalize_claim_support(s.get("claim_support")) == "Contradicts")
-    elapsed = result.get("elapsed_seconds")
+    supporting = sum(1 for s in sources if normalize_claim_support(s.get("claim_support")) == "Supports")
+    contextual = sum(1 for s in sources if normalize_claim_support(s.get("claim_support")) in {"Mixed", "Context"})
     avg_score = sum(numeric_score(s.get("weighted_score")) for s in sources) / len(sources) if sources else 0.0
-    primary_ratio = primary / len(sources) if sources else 0.0
-    high_quality_ratio = high_quality / len(sources) if sources else 0.0
+    return {
+        "sources": sources,
+        "source_count": len(sources),
+        "primary": primary,
+        "high_quality": high_quality,
+        "contradictions": contradictions,
+        "supporting": supporting,
+        "contextual": contextual,
+        "avg_score": avg_score,
+        "primary_ratio": primary / len(sources) if sources else 0.0,
+        "high_quality_ratio": high_quality / len(sources) if sources else 0.0,
+    }
 
-    st.markdown("### Assessment quality")
+
+def render_evidence_scorecard(result: Dict[str, Any]) -> None:
+    stats = source_quality_stats(result)
+    pendulum = result.get("pendulum", {}) or {}
+    band = result.get("pendulum_band", "") or pendulum.get("band", "Mixed / uncertain")
+    score = result.get("pendulum_score", None) if result.get("pendulum_score", None) is not None else pendulum.get("score")
+
+    st.markdown("### Evidence scorecard")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Sources reviewed", len(sources))
-    c2.metric("Primary sources", primary)
-    c3.metric("High-quality sources", high_quality)
-    c4.metric("Contradiction signals", contradictions)
+    c1.metric("Evidence strength", band)
+    c2.metric("Avg source quality", f"{stats['avg_score']:.1f}/5")
+    c3.metric("Primary sources", f"{stats['primary']}/{stats['source_count']}")
+    c4.metric("Contradictions", stats["contradictions"])
 
-    st.caption("Visual quality indicators")
-    q1, q2, q3 = st.columns(3)
-    with q1:
-        render_score_bar("Average source quality", avg_score, 5)
-    with q2:
-        render_score_bar("Primary-source share", primary_ratio * 100, 100)
-    with q3:
-        render_score_bar("High-quality share", high_quality_ratio * 100, 100)
+    if score is not None:
+        render_score_bar("Overall evidence strength", score, 10, band)
+    render_score_bar("Average source quality", stats["avg_score"], 5)
+    render_score_bar("Primary-source share", stats["primary_ratio"] * 100, 100)
+    render_score_bar("High-quality share", stats["high_quality_ratio"] * 100, 100)
+
+
+def render_assessment_metrics(result: Dict[str, Any]) -> None:
+    stats = source_quality_stats(result)
+    elapsed = result.get("elapsed_seconds")
+
+    st.markdown("### Assessment quality details")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Sources reviewed", stats["source_count"])
+    c2.metric("Supporting", stats["supporting"])
+    c3.metric("Contextual / mixed", stats["contextual"])
+    c4.metric("High-quality", stats["high_quality"])
 
     if elapsed is not None:
         st.caption(f"Completed in {elapsed:.1f}s")
@@ -235,6 +262,7 @@ def render_pipeline_result(result: Dict[str, Any]) -> None:
         badge="Deep cross-evidence review completed.",
     )
 
+    render_evidence_scorecard(result)
     render_claim_under_review(result)
     render_assessment_metrics(result)
     rule_engine = result.get("rule_engine") or {}
