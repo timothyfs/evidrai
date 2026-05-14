@@ -244,14 +244,24 @@ def rule_based_verdict_from_evidence(
         confidence = "Low"
         rationale = "The packet is dominated by allegation, context, adjacency, or rumor signals rather than substantive evidence."
     elif mixed_sources > 0:
-        verdict = "Misleading framing"
-        confidence = "Low"
-        rationale = "The evidence packet is mixed or partly interpretive rather than cleanly confirmatory."
+        if supportive >= 2 and contradictory == 0 and high_quality_supportive >= 1:
+            verdict = "Likely supported"
+            confidence = "Medium"
+            rationale = "The factual core is supported by credible reporting, while the remaining uncertainty is interpretive rather than evidentiary."
+        else:
+            verdict = "Misleading framing"
+            confidence = "Low"
+            rationale = "The evidence packet is mixed or partly interpretive rather than cleanly confirmatory."
 
     if soft_claim and verdict in {"Supported", "Likely supported", "Not supported by credible evidence"}:
-        verdict = "Unverified" if verdict != "Supported" else "Likely supported"
-        confidence = "Low" if verdict == "Unverified" else "Medium"
-        rationale = "The claim is partly interpretive, predictive, rhetorical, or too vague for a stronger factual verdict."
+        if supportive >= 2 and contradictory == 0:
+            verdict = "Likely supported" if verdict == "Supported" else verdict
+            confidence = "Medium"
+            rationale = "The factual core has credible support, but part of the claim is interpretive or legally contested, so confidence is capped."
+        else:
+            verdict = "Unverified" if verdict != "Supported" else "Likely supported"
+            confidence = "Low" if verdict == "Unverified" else "Medium"
+            rationale = "The claim is partly interpretive, predictive, rhetorical, or too vague for a stronger factual verdict."
 
     if "motive_attribution" in flags and verdict not in {"Supported", "Likely supported"}:
         verdict = "Unverified"
@@ -294,7 +304,13 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
     if rule_view["soft_claim"] and reasoning.get("verified_confidence") == "High":
         reasoning["verified_confidence"] = "Medium"
     if rule_view["soft_claim"] and reasoning.get("verified_verdict") in {"Supported", "Likely supported", "Not supported by credible evidence"}:
-        if reasoning.get("verified_verdict") != "Supported":
+        stats = rule_view["stats"]
+        factual_core_supported = stats["supportive_evidence"] >= 2 and stats["contradictory_evidence"] == 0
+        if factual_core_supported:
+            if reasoning.get("verified_verdict") == "Supported":
+                reasoning["verified_verdict"] = "Likely supported"
+            reasoning["verified_confidence"] = "Medium"
+        elif reasoning.get("verified_verdict") != "Supported":
             reasoning["verified_verdict"] = "Unverified"
             reasoning["verified_confidence"] = "Low"
 

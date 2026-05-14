@@ -1,5 +1,5 @@
 from evidrai.models import SubClaim
-from evidrai.rules.verdict import rule_based_verdict_from_evidence
+from evidrai.rules.verdict import align_reasoning_with_rules, rule_based_verdict_from_evidence
 
 
 def subclaim(claim_type="factual", risk_flags=None):
@@ -118,3 +118,31 @@ def test_soft_opinion_claim_is_not_overstated_as_supported():
     assert result["soft_claim"] is True
     assert result["verdict"] == "Likely supported"
     assert result["confidence"] == "Medium"
+
+
+def test_interpretive_dispute_does_not_downgrade_supported_factual_core_to_unverified():
+    sources = [
+        source(support="supports", category="credible_reporting", source_type="secondary", score=3.8, cluster="reporting-1"),
+        source(support="supports", category="credible_reporting", source_type="secondary", score=3.7, cluster="reporting-2"),
+        source(support="mixed", category="credible_reporting", source_type="secondary", score=3.6, cluster="analysis-1"),
+        source(support="mixed", category="credible_reporting", source_type="secondary", score=3.5, cluster="analysis-2"),
+    ]
+    result = verdict_for(
+        sources,
+        subclaims=[subclaim(claim_type="factual", risk_flags=["ambiguity", "legal_interpretation"])],
+    )
+
+    assert result["soft_claim"] is True
+    assert result["stats"]["supportive_evidence"] == 2
+    assert result["stats"]["contradictory_evidence"] == 0
+    assert result["stats"]["mixed_sources"] == 2
+    assert result["verdict"] == "Likely supported"
+    assert result["confidence"] == "Medium"
+    assert "interpretive" in result["rationale"] or "legally contested" in result["rationale"]
+
+    aligned = align_reasoning_with_rules(
+        {"verified_verdict": "Supported", "verified_confidence": "High"},
+        result,
+    )
+    assert aligned["verified_verdict"] == "Likely supported"
+    assert aligned["verified_confidence"] == "Medium"
