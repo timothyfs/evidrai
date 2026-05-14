@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -11,6 +10,7 @@ import streamlit as st
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import get_app_build
+from evidrai.feedback import build_feedback_record, feedback_backend_status, save_feedback
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass
 from evidrai.rules.verdict import (
     map_confidence_label,
@@ -143,10 +143,14 @@ def render_assessment_metrics(result: Dict[str, Any]) -> None:
         st.caption(f"Completed in {elapsed:.1f}s")
 
 
-def render_feedback_controls(result_key: str) -> None:
+def render_feedback_controls(result_key: str, result: Optional[Dict[str, Any]] = None, source_url: str = "") -> None:
     feedback_store = st.session_state.setdefault("feedback_log", {})
     st.markdown("### Feedback")
-    st.caption("Help improve the assessment quality. This is captured for this session only for now.")
+    backend = feedback_backend_status()
+    if backend.get("notion_configured"):
+        st.caption("Feedback is saved to the server log and Notion.")
+    else:
+        st.caption("Feedback is saved to the server log. Notion logging is not configured yet.")
 
     rating = st.radio(
         "Was this useful?",
@@ -176,16 +180,28 @@ def render_feedback_controls(result_key: str) -> None:
     )
 
     if st.button("Submit feedback", key=f"fb_submit_{result_key}", use_container_width=True):
-        feedback_store[result_key] = {
-            "rating": rating,
-            "reasons": reasons,
-            "comment": comment.strip(),
-            "captured_at": datetime.now(timezone.utc).isoformat(),
+        record = build_feedback_record(
+            result_key=result_key,
+            rating=rating,
+            reasons=reasons,
+            comment=comment,
+            result=result,
+            source_url=source_url,
+        )
+        save_result = save_feedback(record)
+        feedback_store[result_key] = record | {
+            "saved": save_result.ok,
+            "destination": save_result.destination,
+            "save_message": save_result.message,
         }
-        st.success("Feedback captured. Thank you.")
+        if save_result.ok:
+            st.success(f"Feedback captured. {save_result.message}")
+        else:
+            st.error(save_result.message)
 
     if result_key in feedback_store:
-        st.caption(f"Latest feedback: {feedback_store[result_key].get('rating', 'captured')}")
+        latest = feedback_store[result_key]
+        st.caption(f"Latest feedback: {latest.get('rating', 'captured')} · {latest.get('destination', 'session')}")
 
 
 def render_methodology_note() -> None:
@@ -335,7 +351,7 @@ def render_pipeline_result(result: Dict[str, Any]) -> None:
         else:
             st.caption("No additional spread analysis returned.")
 
-    render_feedback_controls(result.get("result_id", "latest"))
+    render_feedback_controls(result.get("result_id", "latest"), result=result)
     render_methodology_note()
 
 
@@ -371,7 +387,7 @@ def render_provisional_result(data: Dict[str, Any], source_url: str) -> None:
                 if item.get("note"):
                     st.caption(item["note"])
 
-    render_feedback_controls(data.get("result_id", "quick_latest"))
+    render_feedback_controls(data.get("result_id", "quick_latest"), result=data, source_url=source_url)
 
 
 def render_legacy_result(data: Dict[str, Any], source_url: str) -> None:
@@ -412,6 +428,7 @@ def render_developer_debug_panel(
                 "cache_entries": len(cache),
                 "has_last_results": saved is not None,
                 "feedback_count": len(feedback_log),
+                "feedback_backend": feedback_backend_status(),
             }
         )
     if feedback_log:
