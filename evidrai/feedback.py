@@ -64,8 +64,11 @@ def build_feedback_record(
     comment: str,
     result: Optional[Dict[str, Any]] = None,
     source_url: str = "",
+    settings: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     result = result or {}
+    settings = settings or {}
+    claim = result.get("claim") or result.get("normalized_claim") or settings.get("claim") or settings.get("analysis_input") or ""
     return {
         "feedback_id": str(uuid4()),
         "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -74,12 +77,64 @@ def build_feedback_record(
         "rating": rating,
         "reasons": list(reasons or []),
         "comment": (comment or "").strip(),
-        "claim": result.get("claim") or result.get("normalized_claim") or "",
+        "claim": claim,
         "verdict": result.get("verified_verdict") or result.get("verdict") or "",
         "confidence": result.get("verified_confidence") or result.get("confidence") or "",
-        "source_url": source_url,
+        "source_url": source_url or settings.get("source_url", ""),
         "result_id": result.get("result_id") or result_key,
+        "request": {
+            "claim": claim,
+            "source_url": source_url or settings.get("source_url", ""),
+            "settings": dict(settings),
+        },
+        "assessment_output": result,
     }
+
+
+def _plain_text(text: Any, limit: int = 1900) -> Dict[str, Any]:
+    return {"type": "text", "text": {"content": str(text or "")[:limit]}}
+
+
+def _paragraph(text: Any) -> Dict[str, Any]:
+    return {"object": "block", "type": "paragraph", "paragraph": {"rich_text": [_plain_text(text)]}}
+
+
+def _heading(text: str) -> Dict[str, Any]:
+    return {"object": "block", "type": "heading_2", "heading_2": {"rich_text": [_plain_text(text, 200)]}}
+
+
+def _code_block(text: str, language: str = "json") -> Dict[str, Any]:
+    return {"object": "block", "type": "code", "code": {"language": language, "rich_text": [_plain_text(text)]}}
+
+
+def _json_blocks(title: str, payload: Any, max_chars: int = 45000) -> list[Dict[str, Any]]:
+    serialized = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+    if len(serialized) > max_chars:
+        serialized = serialized[:max_chars] + "\n... [truncated to fit Notion API payload limits]"
+    blocks = [_heading(title)]
+    chunk_size = 1800
+    for idx in range(0, len(serialized), chunk_size):
+        blocks.append(_code_block(serialized[idx : idx + chunk_size]))
+    return blocks
+
+
+def build_notion_feedback_children(record: Dict[str, Any]) -> list[Dict[str, Any]]:
+    summary = {
+        "feedback_id": record.get("feedback_id"),
+        "captured_at": record.get("captured_at"),
+        "build": record.get("build"),
+        "rating": record.get("rating"),
+        "reasons": record.get("reasons", []),
+        "comment": record.get("comment", ""),
+        "claim": record.get("claim", ""),
+        "verdict": record.get("verdict", ""),
+        "confidence": record.get("confidence", ""),
+    }
+    children = [_heading("Feedback summary"), _paragraph(record.get("comment") or "No free-text comment supplied.")]
+    children.extend(_json_blocks("Structured feedback", summary, max_chars=8000))
+    children.extend(_json_blocks("Full request and settings", record.get("request", {}), max_chars=12000))
+    children.extend(_json_blocks("Full assessment output", record.get("assessment_output", {}), max_chars=45000))
+    return children[:95]
 
 
 def append_feedback_jsonl(record: Dict[str, Any], path: Optional[Path] = None) -> Path:
@@ -122,6 +177,7 @@ def create_notion_feedback_page(record: Dict[str, Any]) -> Optional[str]:
             "Workstream": {"rich_text": [{"text": {"content": "User feedback"}}]},
             "Notes": {"rich_text": [{"text": {"content": notes[:1900]}}]},
         },
+        "children": build_notion_feedback_children(record),
     }
     response = requests.post(
         "https://api.notion.com/v1/pages",

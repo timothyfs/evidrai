@@ -143,7 +143,12 @@ def render_assessment_metrics(result: Dict[str, Any]) -> None:
         st.caption(f"Completed in {elapsed:.1f}s")
 
 
-def render_feedback_controls(result_key: str, result: Optional[Dict[str, Any]] = None, source_url: str = "") -> None:
+def render_feedback_controls(
+    result_key: str,
+    result: Optional[Dict[str, Any]] = None,
+    source_url: str = "",
+    settings: Optional[Dict[str, Any]] = None,
+) -> None:
     feedback_store = st.session_state.setdefault("feedback_log", {})
     st.markdown("### Feedback")
     backend = feedback_backend_status()
@@ -187,6 +192,7 @@ def render_feedback_controls(result_key: str, result: Optional[Dict[str, Any]] =
             comment=comment,
             result=result,
             source_url=source_url,
+            settings=settings,
         )
         save_result = save_feedback(record)
         feedback_store[result_key] = record | {
@@ -351,7 +357,7 @@ def render_pipeline_result(result: Dict[str, Any]) -> None:
         else:
             st.caption("No additional spread analysis returned.")
 
-    render_feedback_controls(result.get("result_id", "latest"), result=result)
+    render_feedback_controls(result.get("result_id", "latest"), result=result, source_url=result.get("source_url", ""), settings=result.get("settings", {}))
     render_methodology_note()
 
 
@@ -399,7 +405,7 @@ def render_provisional_result(data: Dict[str, Any], source_url: str) -> None:
                 else:
                     st.write(f"- {title}")
 
-    render_feedback_controls(data.get("result_id", "quick_latest"), result=data, source_url=source_url)
+    render_feedback_controls(data.get("result_id", "quick_latest"), result=data, source_url=source_url, settings=data.get("settings", {}))
 
 
 def render_legacy_result(data: Dict[str, Any], source_url: str) -> None:
@@ -526,6 +532,17 @@ def main() -> None:
 
         analysis_input = build_analysis_input(cleaned_claim, cleaned_source_url)
         use_search = verification_mode == "Deep"
+        request_settings = {
+            "claim_input": cleaned_claim,
+            "source_url": cleaned_source_url,
+            "analysis_input": analysis_input,
+            "output_mode": detail_mode,
+            "claim_category": category,
+            "verification_depth": verification_mode,
+            "lightweight_fast_search_enabled": search.configured,
+            "deep_search_enabled": use_search,
+            "build": get_app_build(),
+        }
         if verification_mode == "Deep" and not search.configured:
             st.error("Deep mode requires TAVILY_API_KEY to be configured.")
             return
@@ -542,6 +559,8 @@ def main() -> None:
                     st.write("Running fast first-pass assessment...")
                 quick_result = run_quick_pass(analysis_input, category, llm, search)
                 quick_result["result_id"] = f"quick_{cache_key}"
+                quick_result["settings"] = request_settings | {"result_mode": "fast"}
+                quick_result["source_url"] = cleaned_source_url
 
                 full_result = None
                 if use_search:
@@ -553,6 +572,8 @@ def main() -> None:
                     full_result = run_claim_pipeline(analysis_input, llm, search)
                     full_result["elapsed_seconds"] = time.time() - started_at
                     full_result["result_id"] = f"deep_{cache_key}"
+                    full_result["settings"] = request_settings | {"result_mode": "deep"}
+                    full_result["source_url"] = cleaned_source_url
                     status.update(label="Assessment complete", state="complete", expanded=False)
                 else:
                     quick_result["elapsed_seconds"] = time.time() - started_at
@@ -562,6 +583,7 @@ def main() -> None:
                     "quick_result": quick_result,
                     "full_result": full_result,
                     "source_url": cleaned_source_url,
+                    "settings": request_settings,
                 }
                 cache[cache_key] = saved
                 st.session_state["last_results"] = saved
