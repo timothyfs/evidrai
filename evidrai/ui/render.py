@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -17,6 +19,24 @@ from evidrai.rules.verdict import (
     normalize_claim_support,
 )
 from evidrai.utils import build_analysis_input, is_probable_url, stable_request_key
+
+
+def clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
+    return max(lower, min(upper, value))
+
+
+def numeric_score(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def render_score_bar(label: str, score: Any, max_score: float, help_text: str = "") -> None:
+    value = numeric_score(score)
+    pct = clamp(value / max_score if max_score else 0.0)
+    st.progress(pct, text=f"{label}: {value:.1f}/{max_score:g}" + (f" · {help_text}" if help_text else ""))
+
 
 def render_claim_under_review(result: Dict[str, Any]) -> None:
     claim = (result.get("claim") or "").strip()
@@ -38,12 +58,18 @@ def render_evidence_snapshot(sources: List[Dict[str, Any]]) -> None:
     supporting = [s for s in sources if normalize_claim_support(s.get("claim_support")) == "Supports"]
     contradicting = [s for s in sources if normalize_claim_support(s.get("claim_support")) == "Contradicts"]
     contextual = [s for s in sources if normalize_claim_support(s.get("claim_support")) in {"Mixed", "Context"}]
+    total = max(len(sources), 1)
 
     st.markdown("### Evidence snapshot")
     c1, c2, c3 = st.columns(3)
-    c1.metric("Supporting sources", len(supporting))
-    c2.metric("Contradicting sources", len(contradicting))
-    c3.metric("Contextual or mixed", len(contextual))
+    c1.metric("Supporting", len(supporting))
+    c2.metric("Contradicting", len(contradicting))
+    c3.metric("Contextual / mixed", len(contextual))
+
+    st.caption("Evidence mix across the reviewed source set")
+    render_score_bar("Supporting", len(supporting), total)
+    render_score_bar("Contradicting", len(contradicting), total)
+    render_score_bar("Contextual / mixed", len(contextual), total)
 
     buckets = [
         ("Evidence supporting the claim", supporting),
@@ -66,6 +92,9 @@ def render_assessment_metrics(result: Dict[str, Any]) -> None:
     high_quality = sum(1 for s in sources if map_source_quality_label(s.get("weighted_score")) == "High")
     contradictions = sum(1 for s in sources if normalize_claim_support(s.get("claim_support")) == "Contradicts")
     elapsed = result.get("elapsed_seconds")
+    avg_score = sum(numeric_score(s.get("weighted_score")) for s in sources) / len(sources) if sources else 0.0
+    primary_ratio = primary / len(sources) if sources else 0.0
+    high_quality_ratio = high_quality / len(sources) if sources else 0.0
 
     st.markdown("### Assessment quality")
     c1, c2, c3, c4 = st.columns(4)
@@ -73,22 +102,63 @@ def render_assessment_metrics(result: Dict[str, Any]) -> None:
     c2.metric("Primary sources", primary)
     c3.metric("High-quality sources", high_quality)
     c4.metric("Contradiction signals", contradictions)
+
+    st.caption("Visual quality indicators")
+    q1, q2, q3 = st.columns(3)
+    with q1:
+        render_score_bar("Average source quality", avg_score, 5)
+    with q2:
+        render_score_bar("Primary-source share", primary_ratio * 100, 100)
+    with q3:
+        render_score_bar("High-quality share", high_quality_ratio * 100, 100)
+
     if elapsed is not None:
         st.caption(f"Completed in {elapsed:.1f}s")
 
 
 def render_feedback_controls(result_key: str) -> None:
     feedback_store = st.session_state.setdefault("feedback_log", {})
-    st.markdown("### Was this useful?")
-    c1, c2, c3 = st.columns(3)
-    if c1.button("Useful", key=f"fb_useful_{result_key}", use_container_width=True):
-        feedback_store[result_key] = "useful"
-    if c2.button("Not useful", key=f"fb_not_useful_{result_key}", use_container_width=True):
-        feedback_store[result_key] = "not_useful"
-    if c3.button("Sources weak", key=f"fb_sources_weak_{result_key}", use_container_width=True):
-        feedback_store[result_key] = "sources_weak"
+    st.markdown("### Feedback")
+    st.caption("Help improve the assessment quality. This is captured for this session only for now.")
+
+    rating = st.radio(
+        "Was this useful?",
+        ["Useful", "Partly useful", "Not useful"],
+        horizontal=True,
+        key=f"fb_rating_{result_key}",
+    )
+    reasons = st.multiselect(
+        "What should improve?",
+        [
+            "Verdict clarity",
+            "Confidence explanation",
+            "Source quality",
+            "Missing source",
+            "Too much detail",
+            "Not enough detail",
+            "Visual presentation",
+            "Other",
+        ],
+        key=f"fb_reasons_{result_key}",
+    )
+    comment = st.text_area(
+        "Optional comment",
+        placeholder="What confused you, what helped, or what source should Evidrai have considered?",
+        height=90,
+        key=f"fb_comment_{result_key}",
+    )
+
+    if st.button("Submit feedback", key=f"fb_submit_{result_key}", use_container_width=True):
+        feedback_store[result_key] = {
+            "rating": rating,
+            "reasons": reasons,
+            "comment": comment.strip(),
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+        }
+        st.success("Feedback captured. Thank you.")
+
     if result_key in feedback_store:
-        st.caption(f"Feedback captured: {feedback_store[result_key].replace('_', ' ')}")
+        st.caption(f"Latest feedback: {feedback_store[result_key].get('rating', 'captured')}")
 
 
 def render_methodology_note() -> None:
@@ -107,13 +177,13 @@ def render_sources(sources: List[Dict[str, Any]]) -> None:
         url = src.get("url", "")
         quality = map_source_quality_label(src.get("weighted_score"))
         stance = normalize_claim_support(src.get("claim_support", "context"))
+        score = numeric_score(src.get("weighted_score"))
         meta = f"{src.get('source_type', 'unknown').title()} • quality {quality} • stance {stance}"
-        if src.get("weighted_score") is not None:
-            meta += f" • score {src.get('weighted_score')}"
         if src.get("published_date"):
             meta += f" • {src['published_date']}"
         st.markdown(f"**[{title}]({url})**")
         st.caption(meta)
+        render_score_bar("Source score", score, 5)
         if src.get("summary"):
             st.write(src["summary"])
         st.markdown("---")
@@ -130,10 +200,12 @@ def render_topline_block(title: str, verdict: str, confidence: Any, tldr: str, c
     if correction:
         st.info(correction)
 
-def render_pendulum(band: str) -> None:
+def render_pendulum(band: str, score: Any = None) -> None:
     labels = ["Unsubstantiated rumor", "Weakly supported", "Mixed / uncertain", "Mostly supported", "Strongly evidenced"]
     pos_map = {label: idx for idx, label in enumerate(labels)}
     pos = pos_map.get(band, 2)
+    if score is not None:
+        render_score_bar("Evidence strength", score, 10, band)
     cols = st.columns(5)
     for i, label in enumerate(labels):
         cols[i].markdown(f"**⬤ {label}**" if i == pos else f"◯ {label}")
@@ -173,11 +245,13 @@ def render_pipeline_result(result: Dict[str, Any]) -> None:
             st.caption("Risk flags: " + ", ".join(rule_engine.get("risk_flags")[:8]))
     render_evidence_snapshot(result.get("sources", []) or [])
 
-    band = result.get("pendulum_band", "")
-    explanation = result.get("pendulum_explanation", "")
+    pendulum = result.get("pendulum", {}) or {}
+    band = result.get("pendulum_band", "") or pendulum.get("band", "")
+    score = result.get("pendulum_score", None) if result.get("pendulum_score", None) is not None else pendulum.get("score")
+    explanation = result.get("pendulum_explanation", "") or pendulum.get("explanation", "")
     if band:
         st.markdown("### Evidence position")
-        render_pendulum(band)
+        render_pendulum(band, score)
         if explanation:
             st.caption(explanation)
 
@@ -303,13 +377,22 @@ def render_developer_debug_panel(
         )
 
     cache = st.session_state.get("evidrai_cache", {})
+    feedback_log = st.session_state.get("feedback_log", {})
     with st.expander("Session state summary", expanded=False):
         st.json(
             {
                 "cache_entries": len(cache),
                 "has_last_results": saved is not None,
-                "feedback_count": len(st.session_state.get("feedback_log", {})),
+                "feedback_count": len(feedback_log),
             }
+        )
+    if feedback_log:
+        st.download_button(
+            "Download feedback JSON",
+            data=json.dumps(feedback_log, indent=2),
+            file_name="evidrai-feedback.json",
+            mime="application/json",
+            use_container_width=True,
         )
 
     if saved:
