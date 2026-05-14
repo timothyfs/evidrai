@@ -13,6 +13,7 @@ from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass
 from evidrai.rules.verdict import (
     map_confidence_label,
     map_pipeline_verdict,
+    map_source_quality_label,
     normalize_claim_support,
 )
 from evidrai.utils import build_analysis_input, is_probable_url, stable_request_key
@@ -435,10 +436,15 @@ def main() -> None:
 
     saved = st.session_state.get("last_results")
     if saved:
-        if saved.get("quick_result"):
-            render_provisional_result(saved["quick_result"], saved.get("source_url", ""))
-        if saved.get("full_result"):
-            render_pipeline_result(saved["full_result"])
+        try:
+            if saved.get("quick_result"):
+                render_provisional_result(saved["quick_result"], saved.get("source_url", ""))
+            if saved.get("full_result"):
+                render_pipeline_result(saved["full_result"])
+        except Exception as exc:
+            st.error("The assessment completed, but Evidrai could not render the result. Enable Developer debug panel for details.")
+            if developer_debug_enabled:
+                st.exception(exc)
 
     if developer_debug_enabled:
         render_developer_debug_panel(
