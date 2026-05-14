@@ -52,6 +52,59 @@ def render_claim_under_review(result: Dict[str, Any]) -> None:
                 st.write(f"- {item}")
 
 
+def claim_dimension_for(subclaim: Dict[str, Any]) -> str:
+    claim_type = (subclaim.get("claim_type") or "").lower()
+    flags = {str(flag).lower() for flag in subclaim.get("risk_flags", []) or []}
+    requirements = " ".join(subclaim.get("verification_requirements", []) or []).lower()
+    text = (subclaim.get("text") or "").lower()
+    if claim_type in {"legal"} or "legal" in flags or "rule" in requirements or "required" in text or "obligation" in text:
+        return "Obligation / rule"
+    if claim_type in {"criminal", "corruption", "misconduct_named_person"} or "wrongdoing" in flags:
+        return "Wrongdoing / allegation"
+    if flags & {"opinion", "value_judgment", "motive_attribution", "ambiguity"}:
+        return "Interpretation"
+    if claim_type in {"factual", "finance", "health", "science"}:
+        return "Factual core"
+    return "Context"
+
+
+def render_claim_breakdown(result: Dict[str, Any]) -> None:
+    analysis = result.get("claim_analysis", {}) or {}
+    subclaims = analysis.get("subclaims", []) or []
+    if not subclaims:
+        return
+    verdict = map_pipeline_verdict(result.get("verified_verdict") or result.get("verdict") or "Unverified")
+    confidence = map_confidence_label(result.get("verified_confidence") or result.get("confidence", "Medium"))
+    st.markdown("### Claim breakdown")
+    st.caption("Separates factual core from interpretation, obligation, and allegation so one label does not flatten the whole claim.")
+    for idx, sub in enumerate(subclaims, start=1):
+        if not isinstance(sub, dict):
+            st.write(f"- {sub}")
+            continue
+        dimension = claim_dimension_for(sub)
+        status = verdict
+        if dimension in {"Interpretation", "Obligation / rule", "Wrongdoing / allegation"} and verdict in {"Supported", "Likely supported", "Partly supported"}:
+            status = "Contested / needs qualification"
+        flags = sub.get("risk_flags", []) or []
+        st.markdown(f"**{idx}. {sub.get('text', 'Subclaim')}**")
+        st.caption(f"{dimension} · {status} · Confidence: {confidence}" + (f" · Flags: {', '.join(flags[:4])}" if flags else ""))
+
+
+def evidence_role_for_source(src: Dict[str, Any]) -> str:
+    role = (src.get("source_role") or "").strip().lower()
+    category = (src.get("evidence_category") or "").strip().lower()
+    support = normalize_claim_support(src.get("claim_support"))
+    if support == "Contradicts" or category == "credible_contradiction":
+        return "Contradicts factual core"
+    if support == "Supports" and category in {"direct_evidence", "credible_reporting", "expert_analysis"}:
+        return "Supports factual core"
+    if role in {"interpretation", "analysis"} or support == "Mixed":
+        return "Disputes or qualifies interpretation"
+    if category in {"reported_allegation", "contextual_signal", "denial_or_rebuttal"}:
+        return "Reported but unconfirmed / context"
+    return "Weak, contextual, or unclear"
+
+
 def render_evidence_snapshot(sources: List[Dict[str, Any]]) -> None:
     if not sources:
         return
@@ -60,21 +113,26 @@ def render_evidence_snapshot(sources: List[Dict[str, Any]]) -> None:
     contextual = [s for s in sources if normalize_claim_support(s.get("claim_support")) in {"Mixed", "Context"}]
     total = max(len(sources), 1)
 
-    st.markdown("### Evidence snapshot")
+    st.markdown("### Evidence map")
     c1, c2, c3 = st.columns(3)
     c1.metric("Supporting", len(supporting))
     c2.metric("Contradicting", len(contradicting))
     c3.metric("Contextual / mixed", len(contextual))
 
-    st.caption("Evidence mix across the reviewed source set")
+    st.caption("Evidence mix across the reviewed source set. Grouped by what each source actually does for the claim.")
     render_score_bar("Supporting", len(supporting), total)
     render_score_bar("Contradicting", len(contradicting), total)
     render_score_bar("Contextual / mixed", len(contextual), total)
 
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for src in sources:
+        grouped.setdefault(evidence_role_for_source(src), []).append(src)
     buckets = [
-        ("Evidence supporting the claim", supporting),
-        ("Evidence contradicting the claim", contradicting),
-        ("Neutral or contextual evidence", contextual),
+        ("Supports factual core", grouped.get("Supports factual core", [])),
+        ("Contradicts factual core", grouped.get("Contradicts factual core", [])),
+        ("Disputes or qualifies interpretation", grouped.get("Disputes or qualifies interpretation", [])),
+        ("Reported but unconfirmed / context", grouped.get("Reported but unconfirmed / context", [])),
+        ("Weak, contextual, or unclear", grouped.get("Weak, contextual, or unclear", [])),
     ]
     for title, bucket in buckets:
         st.markdown(f"**{title}**")
@@ -285,6 +343,7 @@ def render_pipeline_result(result: Dict[str, Any]) -> None:
     )
 
     render_evidence_scorecard(result)
+    render_claim_breakdown(result)
     render_claim_under_review(result)
     render_assessment_metrics(result)
     rule_engine = result.get("rule_engine") or {}
@@ -494,7 +553,7 @@ def main() -> None:
             help="Show raw result payloads and non-secret runtime diagnostics for this browser session only.",
         )
         st.markdown("---")
-        st.caption("Auto uses the fast first-pass flow by default to avoid unnecessary API usage. Select Deep explicitly for retrieval-backed verification.")
+        st.caption("Auto runs Fast for Simple output and Deep for Detailed output. Select Fast or Deep explicitly to override.")
         st.markdown("---")
         st.caption("The product is optimized around claim → evidence → verdict. Fast mode gives a quick first pass. Deep mode shows the evidence pipeline.")
         st.markdown("---")
@@ -515,7 +574,7 @@ def main() -> None:
     )
     st.caption("Tip: if you add a link, also paste the key quote or claim above. The app reasons better when the central claim is explicit.")
     with st.expander("Verdict scale", expanded=False):
-        st.write("Supported, Likely supported, Misleading framing, Weakly supported or likely incorrect, Not supported by credible evidence, or Unverified.")
+        st.write("Supported, Likely supported, Partly supported, Misleading framing, Contested, Reported but unconfirmed, Weakly supported / likely incorrect, Not supported by credible evidence, False / contradicted, or Unverified.")
 
     if st.button("Check claim", type="primary", use_container_width=True):
         cleaned_claim = (claim or "").strip()
@@ -531,7 +590,8 @@ def main() -> None:
             return
 
         analysis_input = build_analysis_input(cleaned_claim, cleaned_source_url)
-        use_search = verification_mode == "Deep"
+        effective_verification_mode = "Deep" if verification_mode == "Auto" and detail_mode == "Detailed" else verification_mode
+        use_search = effective_verification_mode == "Deep"
         request_settings = {
             "claim_input": cleaned_claim,
             "source_url": cleaned_source_url,
@@ -539,15 +599,16 @@ def main() -> None:
             "output_mode": detail_mode,
             "claim_category": category,
             "verification_depth": verification_mode,
+            "effective_verification_depth": effective_verification_mode,
             "lightweight_fast_search_enabled": search.configured,
             "deep_search_enabled": use_search,
             "build": get_app_build(),
         }
-        if verification_mode == "Deep" and not search.configured:
+        if effective_verification_mode == "Deep" and not search.configured:
             st.error("Deep mode requires TAVILY_API_KEY to be configured.")
             return
 
-        cache_key = stable_request_key(analysis_input, category, verification_mode, use_search, detail_mode)
+        cache_key = stable_request_key(analysis_input, category, effective_verification_mode, use_search, detail_mode)
         cache = st.session_state["evidrai_cache"]
         if cache_key in cache:
             st.session_state["last_results"] = cache[cache_key]

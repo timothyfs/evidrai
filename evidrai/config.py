@@ -25,7 +25,7 @@ class ScoringConfig:
     term_pattern: str = r"\b{term}\b"
 
 
-APP_BUILD_LABEL = "visual-scorecard-feedback"
+APP_BUILD_LABEL = "nicholas-regression"
 
 
 @lru_cache(maxsize=1)

@@ -34,10 +34,16 @@ def map_pipeline_verdict(verdict: str) -> str:
         "true": "Supported",
         "supported": "Supported",
         "likely supported": "Likely supported",
+        "partly supported": "Partly supported",
+        "partially supported": "Partly supported",
         "partially_true": "Misleading framing",
         "partially true": "Misleading framing",
         "misleading": "Misleading framing",
-        "false": "Not supported by credible evidence",
+        "contested": "Contested",
+        "reported but unconfirmed": "Reported but unconfirmed",
+        "false": "False / contradicted",
+        "false / contradicted": "False / contradicted",
+        "contradicted": "False / contradicted",
         "not supported by credible evidence": "Not supported by credible evidence",
         "weakly supported / likely incorrect": "Weakly supported / likely incorrect",
         "unverifiable": "Unverified",
@@ -62,10 +68,14 @@ SERIOUS_ALLEGATION_TYPES = {"criminal", "corruption", "espionage", "foreign_agen
 VERDICT_ORDER = {
     "Supported": 5,
     "Likely supported": 4,
+    "Partly supported": 3.5,
     "Misleading framing": 3,
+    "Contested": 2.5,
+    "Reported but unconfirmed": 2.25,
     "Unverified": 2,
     "Weakly supported / likely incorrect": 1,
     "Not supported by credible evidence": 0,
+    "False / contradicted": 0,
 }
 
 SOFT_CLAIM_FLAGS = {
@@ -199,9 +209,9 @@ def rule_based_verdict_from_evidence(
     rationale = "Evidence is limited or mixed."
 
     if has_no_real_support and contextual_support > 0:
-        verdict = "Not supported by credible evidence" if serious_allegation and not soft_claim else "Unverified"
+        verdict = "Reported but unconfirmed" if serious_allegation and not soft_claim else "Unverified"
         confidence = "Medium" if serious_allegation else "Low"
-        rationale = "The reviewed material is largely contextual, allegation-based, or associative. No direct credible evidence in the reviewed set substantiates the claim as stated."
+        rationale = "The reviewed material contains reporting, allegation, context, or association, but no direct confirmation in the reviewed set substantiates the claim as stated."
     elif supportive >= 2 and contradictory == 0 and primary_supportive >= 1:
         verdict = "Supported"
         confidence = "High" if supportive >= 3 else "Medium"
@@ -211,14 +221,14 @@ def rule_based_verdict_from_evidence(
         confidence = "Medium"
         rationale = "The balance of credible evidence leans supportive, but it is not fully closed."
     elif contradictory >= 2 and supportive == 0:
-        verdict = "Not supported by credible evidence"
+        verdict = "False / contradicted" if high_quality_contradictory >= 1 else "Not supported by credible evidence"
         confidence = "High" if primary_contradictory >= 1 or high_quality_contradictory >= 1 else "Medium"
-        rationale = "Credible contradiction outweighs the available support."
+        rationale = "Credible evidence directly contradicts the claim, and no substantive support was identified in the reviewed set."
     elif contradictory >= 1 and supportive >= 1:
         if supportive >= contradictory and high_quality_supportive >= 1:
-            verdict = "Misleading framing"
+            verdict = "Partly supported"
             confidence = "Medium"
-            rationale = "There appears to be a kernel of truth, but the claim overreaches or omits important counter-evidence."
+            rationale = "The factual core has support, but important qualification, framing, or interpretation remains unresolved."
         else:
             verdict = "Weakly supported / likely incorrect"
             confidence = "Medium"
@@ -232,7 +242,7 @@ def rule_based_verdict_from_evidence(
         confidence = "Medium"
         rationale = "The evidence pattern leans supportive, though some uncertainty remains."
     elif pendulum_band == "Contradicted by evidence":
-        verdict = "Not supported by credible evidence"
+        verdict = "False / contradicted"
         confidence = "Medium"
         rationale = "The evidence packet contains credible material that conflicts with the claim."
     elif pendulum_band == "Weakly supported":
@@ -240,20 +250,20 @@ def rule_based_verdict_from_evidence(
         confidence = "Low"
         rationale = "The available support is weak and does not carry the claim cleanly."
     elif mostly_contextual_packet and has_no_real_support:
-        verdict = "Not supported by credible evidence" if serious_allegation and not soft_claim else "Unverified"
+        verdict = "Reported but unconfirmed" if contextual_support > 0 else ("Not supported by credible evidence" if serious_allegation and not soft_claim else "Unverified")
         confidence = "Low"
-        rationale = "The packet is dominated by allegation, context, adjacency, or rumor signals rather than substantive evidence."
+        rationale = "The packet is dominated by allegation, context, adjacency, or rumor signals rather than substantive evidence. Treat this as reported but not confirmed."
     elif mixed_sources > 0:
         if supportive >= 2 and contradictory == 0 and high_quality_supportive >= 1:
             verdict = "Likely supported"
             confidence = "Medium"
             rationale = "The factual core is supported by credible reporting, while the remaining uncertainty is interpretive rather than evidentiary."
         else:
-            verdict = "Misleading framing"
+            verdict = "Contested"
             confidence = "Low"
             rationale = "The evidence packet is mixed or partly interpretive rather than cleanly confirmatory."
 
-    if soft_claim and verdict in {"Supported", "Likely supported", "Not supported by credible evidence"}:
+    if soft_claim and verdict in {"Supported", "Likely supported", "Partly supported", "Not supported by credible evidence", "False / contradicted"}:
         if supportive >= 2 and contradictory == 0:
             verdict = "Likely supported" if verdict == "Supported" else verdict
             confidence = "Medium"
@@ -269,9 +279,9 @@ def rule_based_verdict_from_evidence(
         rationale = "This claim depends on motive attribution, which usually cannot be verified cleanly from public evidence alone."
 
     if serious_allegation and has_no_real_support and verdict == "Unverified" and rumorish >= 1:
-        verdict = "Not supported by credible evidence"
+        verdict = "Reported but unconfirmed" if contextual_support > 0 else "Not supported by credible evidence"
         confidence = "Medium"
-        rationale = "This is a serious allegation, but the reviewed set does not contain credible substantiating evidence."
+        rationale = "This is a serious allegation with reporting or contextual signals, but the reviewed set does not contain direct confirmation."
 
     return {
         "verdict": verdict,
@@ -298,6 +308,12 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
     if model_is_stronger:
         reasoning["verified_verdict"] = rule_verdict
         reasoning["verified_confidence"] = rule_confidence
+    elif rule_verdict == "Reported but unconfirmed" and model_verdict == "Unverified":
+        reasoning["verified_verdict"] = rule_verdict
+        reasoning["verified_confidence"] = rule_confidence
+    elif rule_verdict == "False / contradicted" and stats["contradictory_evidence"] >= 1:
+        reasoning["verified_verdict"] = rule_verdict
+        reasoning["verified_confidence"] = rule_confidence
     elif rule_is_stronger and factual_core_supported:
         reasoning["verified_verdict"] = rule_verdict
         reasoning["verified_confidence"] = rule_confidence
@@ -311,7 +327,7 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
 
     if rule_view["soft_claim"] and reasoning.get("verified_confidence") == "High":
         reasoning["verified_confidence"] = "Medium"
-    if rule_view["soft_claim"] and reasoning.get("verified_verdict") in {"Supported", "Likely supported", "Not supported by credible evidence"}:
+    if rule_view["soft_claim"] and reasoning.get("verified_verdict") in {"Supported", "Likely supported", "Partly supported", "Not supported by credible evidence", "False / contradicted"}:
         if factual_core_supported:
             if reasoning.get("verified_verdict") == "Supported":
                 reasoning["verified_verdict"] = "Likely supported"
@@ -466,7 +482,7 @@ def map_pendulum_to_verified_verdict(band: str) -> str:
         "Mixed / uncertain": "Misleading framing",
         "Weakly supported": "Weakly supported / likely incorrect",
         "Unsubstantiated rumor": "Unverified",
-        "Contradicted by evidence": "Not supported by credible evidence",
+        "Contradicted by evidence": "False / contradicted",
     }
     return mapping.get(band, "Unverified")
 
