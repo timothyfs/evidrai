@@ -356,13 +356,14 @@ def render_pipeline_result(result: Dict[str, Any]) -> None:
 
 
 def render_provisional_result(data: Dict[str, Any], source_url: str) -> None:
+    badge = "Fast assessment with lightweight search snippets." if data.get("used_lightweight_search") else "Fast first-pass assessment. Deep verification may update the verdict."
     render_topline_block(
-        "Provisional assessment",
+        "Fast provisional assessment",
         data.get("verdict", "Unverified"),
         data.get("confidence", "Low"),
         data.get("tldr") or data.get("summary") or "No summary returned.",
         data.get("one_line_correction") or data.get("user_takeaway") or "Deep verification may refine this answer.",
-        badge="Fast first-pass assessment. Deep verification may update the verdict.",
+        badge=badge,
     )
 
     if source_url:
@@ -386,6 +387,17 @@ def render_provisional_result(data: Dict[str, Any], source_url: str) -> None:
                 st.markdown(f"- **{item.get('type', 'Unknown')}** — {item.get('impact', '')}")
                 if item.get("note"):
                     st.caption(item["note"])
+
+        fast_sources = data.get("fast_sources", []) or []
+        if fast_sources:
+            st.markdown("**Lightweight sources checked**")
+            for src in fast_sources[:5]:
+                title = src.get("title") or "Untitled"
+                url = src.get("url") or ""
+                if url:
+                    st.markdown(f"- [{title}]({url})")
+                else:
+                    st.write(f"- {title}")
 
     render_feedback_controls(data.get("result_id", "quick_latest"), result=data, source_url=source_url)
 
@@ -528,7 +540,7 @@ def main() -> None:
                 status = st.status("Starting assessment...", expanded=True)
                 with status:
                     st.write("Running fast first-pass assessment...")
-                quick_result = run_quick_pass(analysis_input, category, llm)
+                quick_result = run_quick_pass(analysis_input, category, llm, search)
                 quick_result["result_id"] = f"quick_{cache_key}"
 
                 full_result = None
@@ -565,10 +577,14 @@ def main() -> None:
     saved = st.session_state.get("last_results")
     if saved:
         try:
-            if saved.get("quick_result"):
-                render_provisional_result(saved["quick_result"], saved.get("source_url", ""))
             if saved.get("full_result"):
                 render_pipeline_result(saved["full_result"])
+                if saved.get("quick_result"):
+                    with st.expander("Initial fast pass", expanded=False):
+                        st.caption("Shown for transparency only. The verified Deep assessment above is the primary result.")
+                        render_provisional_result(saved["quick_result"], saved.get("source_url", ""))
+            elif saved.get("quick_result"):
+                render_provisional_result(saved["quick_result"], saved.get("source_url", ""))
         except Exception as exc:
             st.error("The assessment completed, but Evidrai could not render the result. Enable Developer debug panel for details.")
             if developer_debug_enabled:

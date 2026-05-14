@@ -81,7 +81,7 @@ SYSTEM_PROMPT = dedent(
 ).strip()
 
 
-def build_user_prompt(claim: str, category: str, detail_mode: str) -> str:
+def build_user_prompt(claim: str, category: str, detail_mode: str, evidence_context: str = "") -> str:
     detail_mode = (detail_mode or "fast").strip().lower()
     mode_guidance = {
         "fast": dedent(
@@ -89,7 +89,10 @@ def build_user_prompt(claim: str, category: str, detail_mode: str) -> str:
             Fast mode expectations:
             - Give the clearest defensible answer quickly.
             - Prefer concise reasoning over exhaustive coverage.
-            - If the claim cannot be verified cleanly from the available material, say Unverified or Not supported by credible evidence rather than stretching.
+            - If search snippets are supplied, use them as lightweight external evidence.
+            - Distinguish factual support from legal, ethical, or interpretive dispute.
+            - Do not say "no evidence was provided" when search snippets below contain relevant evidence.
+            - If no evidence context is supplied and the user only provides a bare claim, label the result as provisional.
             """
         ).strip(),
         "deep": dedent(
@@ -114,10 +117,13 @@ def build_user_prompt(claim: str, category: str, detail_mode: str) -> str:
         - If category is "auto-detect", infer the best category.
         - Keep the summary useful for a normal non-expert user.
         - "why_convincing" is mandatory.
-        - "evidence_access_note" must state plainly what evidence was actually available in the input and what was only referenced.
+        - "evidence_access_note" must state plainly what evidence was actually available in the input, including search snippets if supplied.
         - If the input is primarily opinion, prediction, rhetoric, or too vague to verify directly, say that plainly in interpretation_note and caution_flags.
         - Do not confuse plausibility with proof.
         - Return a single JSON object only.
+
+        Lightweight evidence context, if any:
+        {evidence_context or "No external evidence context supplied."}
 
         {mode_guidance}
         """

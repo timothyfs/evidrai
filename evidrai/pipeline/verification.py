@@ -39,10 +39,10 @@ from evidrai.rules.verdict import (
 )
 from evidrai.utils import classify_source_type, domain_from_url, recency_score, validate_model
 
-def call_legacy_model(claim: str, category: str, detail_mode: str, llm: OpenAICompatibleClient) -> Dict[str, Any]:
+def call_legacy_model(claim: str, category: str, detail_mode: str, llm: OpenAICompatibleClient, evidence_context: str = "") -> Dict[str, Any]:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": build_user_prompt(claim, category, detail_mode)},
+        {"role": "user", "content": build_user_prompt(claim, category, detail_mode, evidence_context)},
     ]
     payload = llm.complete_json(messages, temperature=0.1)
     return validate_model(payload, LegacyAssessmentModel)
@@ -53,10 +53,36 @@ def call_legacy_model(claim: str, category: str, detail_mode: str, llm: OpenAICo
 # -----------------------------
 
 
-def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient) -> Dict[str, Any]:
-    """Fast first-pass assessment without external retrieval."""
+def build_fast_evidence_context(user_input: str, search: TavilySearchClient | None = None) -> tuple[str, List[Dict[str, Any]]]:
+    """Fetch a small snippet-only evidence packet for Fast mode.
+
+    This is deliberately lighter than Deep: one search, no source summarisation,
+    no multi-step reasoning. It prevents Fast from being blind on current-news
+    claims while keeping latency and cost low.
+    """
+    if not search or not search.configured:
+        return "", []
     try:
-        data = call_legacy_model(user_input, category or "auto-detect", "Simple", llm)
+        items = search.search(user_input, max_results=5)
+    except Exception:
+        return "", []
+    if not items:
+        return "", []
+
+    lines = []
+    for idx, item in enumerate(items[:5], start=1):
+        title = item.get("title") or "Untitled"
+        url = item.get("url") or ""
+        snippet = (item.get("snippet") or item.get("content") or "").strip().replace("\n", " ")[:700]
+        lines.append(f"{idx}. {title}\nURL: {url}\nSnippet: {snippet}")
+    return "\n\n".join(lines), items[:5]
+
+
+def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient, search: TavilySearchClient | None = None) -> Dict[str, Any]:
+    """Fast first-pass assessment with optional lightweight snippet retrieval."""
+    evidence_context, fast_sources = build_fast_evidence_context(user_input, search)
+    try:
+        data = call_legacy_model(user_input, category or "auto-detect", "fast", llm, evidence_context)
     except Exception:
         # Fallback minimal payload so the UI can still stage the response cleanly.
         data = {}
@@ -71,6 +97,8 @@ def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient) 
         "what_would_change_verdict": data.get("what_would_change_verdict", ""),
         "user_takeaway": data.get("user_takeaway", ""),
         "evidence_types": data.get("evidence_types", []) or [],
+        "fast_sources": fast_sources,
+        "used_lightweight_search": bool(fast_sources),
     }
 
 

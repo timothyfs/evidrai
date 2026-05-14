@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # Streamlit Cloud entrypoint. Keep this file intentionally small, but touch it
 # when deploy-critical fixes land in imported modules so Cloud visibly rebuilds.
-# Rebuild marker: verdict-alignment-uplift.
+# Rebuild marker: search-assisted-fast.
 from evidrai.ui.render import main
 
 
