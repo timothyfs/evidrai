@@ -1,6 +1,6 @@
 import json
 
-from evidrai.feedback import append_feedback_jsonl, build_feedback_record, build_notion_feedback_children
+from evidrai.feedback import append_feedback_jsonl, build_feedback_record, build_notion_feedback_children, build_notion_feedback_payload
 
 
 def test_build_feedback_record_contains_result_context():
@@ -49,6 +49,23 @@ def test_append_feedback_jsonl_writes_one_json_record(tmp_path):
     payload = json.loads(lines[0])
     assert payload["feedback_id"] == record["feedback_id"]
     assert payload["rating"] == "Useful"
+
+
+def test_notion_feedback_payload_initializes_review_workflow_fields():
+    record = build_feedback_record(
+        result_key="deep_review",
+        rating="Partly useful",
+        reasons=["Verdict clarity"],
+        comment="Needs review",
+        result={"claim": "Review claim", "verified_verdict": "Unverified"},
+    )
+
+    payload = build_notion_feedback_payload(record, "database-id")
+    props = payload["properties"]
+
+    assert props["Error type"] == {"multi_select": []}
+    assert props["Accepted as regression case"] == {"checkbox": False}
+    assert props["Reviewer notes"] == {"rich_text": []}
 
 
 def test_notion_feedback_children_include_request_and_full_output():

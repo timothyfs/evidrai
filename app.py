@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # Streamlit Cloud entrypoint. Keep this file intentionally small, but touch it
 # when deploy-critical fixes land in imported modules so Cloud visibly rebuilds.
-# Rebuild marker: full-feedback-context.
+# Rebuild marker: feedback-review-workflow.
 from evidrai.ui.render import main
 
 

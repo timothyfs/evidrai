@@ -147,12 +147,7 @@ def append_feedback_jsonl(record: Dict[str, Any], path: Optional[Path] = None) -
     return target
 
 
-def create_notion_feedback_page(record: Dict[str, Any]) -> Optional[str]:
-    api_key = notion_api_key()
-    database_id = notion_feedback_database_id()
-    if not api_key or not database_id:
-        return None
-
+def build_notion_feedback_payload(record: Dict[str, Any], database_id: str) -> Dict[str, Any]:
     title = f"{record.get('rating', 'Feedback')} — {record.get('claim') or record.get('result_key')}"
     notes = "\n".join(
         part
@@ -167,7 +162,7 @@ def create_notion_feedback_page(record: Dict[str, Any]) -> Optional[str]:
         ]
         if part and not part.endswith(": ")
     )
-    payload = {
+    return {
         "parent": {"database_id": database_id},
         "properties": {
             "Task": {"title": [{"text": {"content": title[:180]}}]},
@@ -176,9 +171,21 @@ def create_notion_feedback_page(record: Dict[str, Any]) -> Optional[str]:
             "Task Type": {"select": {"name": "User feedback"}},
             "Workstream": {"rich_text": [{"text": {"content": "User feedback"}}]},
             "Notes": {"rich_text": [{"text": {"content": notes[:1900]}}]},
+            "Error type": {"multi_select": []},
+            "Accepted as regression case": {"checkbox": False},
+            "Reviewer notes": {"rich_text": []},
         },
         "children": build_notion_feedback_children(record),
     }
+
+
+def create_notion_feedback_page(record: Dict[str, Any]) -> Optional[str]:
+    api_key = notion_api_key()
+    database_id = notion_feedback_database_id()
+    if not api_key or not database_id:
+        return None
+
+    payload = build_notion_feedback_payload(record, database_id)
     response = requests.post(
         "https://api.notion.com/v1/pages",
         headers={
