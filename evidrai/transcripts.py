@@ -32,6 +32,49 @@ def clean_vtt_transcript(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def clean_pasted_youtube_transcript(text: str) -> str:
+    """Clean transcript text copied from YouTube's transcript side panel.
+
+    YouTube copy/paste commonly alternates timestamp lines and caption lines,
+    e.g. "0:04" then "thank you everybody", or puts timestamp and text on the
+    same line. This keeps useful timestamps while making the text suitable for
+    claim extraction.
+    """
+    cleaned_blocks: List[str] = []
+    pending_time = ""
+    previous_text = ""
+    timestamp_re = re.compile(r"^(?:(\d{1,2}:)?\d{1,2}:\d{2})$")
+    inline_timestamp_re = re.compile(r"^(?P<ts>(?:\d{1,2}:)?\d{1,2}:\d{2})\s+(?P<text>.+)$")
+
+    for raw in (text or "").splitlines():
+        line = re.sub(r"\s+", " ", raw.strip())
+        if not line:
+            continue
+        if line.lower() in {"transcript", "show transcript", "chapters", "key moments"}:
+            continue
+
+        inline = inline_timestamp_re.match(line)
+        if inline:
+            pending_time = inline.group("ts")
+            line = inline.group("text").strip()
+        elif timestamp_re.match(line):
+            pending_time = line
+            continue
+
+        line = re.sub(r"\[music\]|\[applause\]|\(applause\)", "", line, flags=re.I).strip()
+        if not line or line == previous_text:
+            continue
+
+        if pending_time:
+            cleaned_blocks.append(f"[{pending_time}] {line}")
+            pending_time = ""
+        else:
+            cleaned_blocks.append(line)
+        previous_text = line
+
+    return "\n".join(cleaned_blocks).strip()
+
+
 def _caption_candidates(tracks: Dict[str, List[Dict[str, Any]]], preferred_langs: Tuple[str, ...]) -> List[Dict[str, Any]]:
     candidates: List[Dict[str, Any]] = []
     usable_tracks = {key: value for key, value in tracks.items() if key.lower() not in {"live_chat", "comments"}}

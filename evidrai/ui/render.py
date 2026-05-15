@@ -18,7 +18,7 @@ from evidrai.rules.verdict import (
     map_source_quality_label,
     normalize_claim_support,
 )
-from evidrai.transcripts import extract_youtube_transcript
+from evidrai.transcripts import clean_pasted_youtube_transcript, extract_youtube_transcript
 from evidrai.utils import build_analysis_input, is_probable_url, stable_request_key
 
 
@@ -598,7 +598,13 @@ def render_speech_audit_page(
         value=5,
         help="Start small: each claim runs through the Deep evidence pipeline.",
     )
-    st.info("MVP note: paste the transcript manually for now. Automatic YouTube transcript extraction can be added next.")
+    with st.expander("Paste YouTube transcript helper", expanded=False):
+        st.write("Copy the transcript from YouTube's transcript panel and paste it above. Evidrai will clean timestamp-only lines, duplicate caption fragments, and common noise before extracting claims.")
+        if st.button("Clean pasted transcript", use_container_width=True):
+            cleaned_preview = clean_pasted_youtube_transcript(st.session_state.get("speech_transcript_input", ""))
+            st.session_state["speech_transcript_input"] = cleaned_preview
+            st.success("Transcript cleaned. Review it above, then run the audit.")
+    st.info("MVP note: if a YouTube URL has accessible captions, Evidrai will try to fetch them. If YouTube blocks access, paste the visible transcript manually.")
 
     if st.button("Audit speech / video", type="primary", use_container_width=True):
         cleaned_transcript = (transcript or "").strip()
@@ -620,6 +626,7 @@ def render_speech_audit_page(
         if not cleaned_transcript:
             st.error("Please paste a transcript or provide a YouTube URL with accessible captions.")
             return
+        cleaned_transcript = clean_pasted_youtube_transcript(cleaned_transcript)
         if not llm.configured:
             st.error("OPENAI_API_KEY is not configured in your app secrets or environment.")
             return

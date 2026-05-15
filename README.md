@@ -59,6 +59,8 @@ In the MVP version, users paste the transcript manually or provide a YouTube URL
 - runs the existing Deep evidence pipeline on each selected claim
 - produces a report with the original quote, normalized claim, verdict, confidence, evidence links, and explanation
 
+If YouTube shows a transcript in the browser but automated extraction fails, copy the visible transcript into the app. The transcript helper cleans timestamp-only lines, duplicate caption fragments, and common noise before the audit runs.
+
 This mode is designed to audit any speaker or institution, not a specific politician or ideology.
 
 Current limitation: some YouTube videos do not expose captions, and YouTube may block audio download. In those cases, paste a transcript manually or use an external speech-to-text workflow.
