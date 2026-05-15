@@ -51,7 +51,7 @@ Single Claim Check is the default mode. It assesses one claim, headline, quote, 
 
 Speech / Video Audit is for longer material such as YouTube transcripts, political speeches, interviews, podcasts, and video captions.
 
-In the MVP version, users paste the transcript manually. Evidrai then:
+In the MVP version, users paste the transcript manually or provide a YouTube URL with accessible captions. Evidrai then:
 
 - extracts concrete, checkable factual claims
 - skips pure rhetoric, slogans, insults, and vague applause lines
@@ -61,7 +61,9 @@ In the MVP version, users paste the transcript manually. Evidrai then:
 
 This mode is designed to audit any speaker or institution, not a specific politician or ideology.
 
-Future improvement: automatic YouTube transcript ingestion and/or speech-to-text fallback.
+Current limitation: some YouTube videos do not expose captions, and YouTube may block audio download. In those cases, paste a transcript manually or use an external speech-to-text workflow.
+
+Future improvement: audio download plus speech-to-text fallback when captions are missing.
 
 ## Verification depths
 

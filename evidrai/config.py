@@ -25,7 +25,7 @@ class ScoringConfig:
     term_pattern: str = r"\b{term}\b"
 
 
-APP_BUILD_LABEL = "speech-audit-mvp"
+APP_BUILD_LABEL = "youtube-captions"
 
 
 @lru_cache(maxsize=1)

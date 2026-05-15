@@ -18,6 +18,7 @@ from evidrai.rules.verdict import (
     map_source_quality_label,
     normalize_claim_support,
 )
+from evidrai.transcripts import extract_youtube_transcript
 from evidrai.utils import build_analysis_input, is_probable_url, stable_request_key
 
 
@@ -602,11 +603,22 @@ def render_speech_audit_page(
     if st.button("Audit speech / video", type="primary", use_container_width=True):
         cleaned_transcript = (transcript or "").strip()
         cleaned_source_url = (source_url or "").strip()
-        if not cleaned_transcript:
-            st.error("Please paste a transcript or speech excerpt first.")
-            return
         if cleaned_source_url and not is_probable_url(cleaned_source_url):
             st.error("The source link does not look like a valid URL. Please include http:// or https://")
+            return
+        if not cleaned_transcript and cleaned_source_url:
+            with st.spinner("Trying to extract YouTube captions..."):
+                transcript_result = extract_youtube_transcript(cleaned_source_url)
+            if transcript_result.get("ok"):
+                cleaned_transcript = transcript_result.get("transcript", "").strip()
+                title = transcript_result.get("title")
+                language = transcript_result.get("language")
+                st.success(f"Transcript extracted" + (f" from {title}" if title else "") + (f" ({language})" if language else ""))
+            else:
+                st.error(transcript_result.get("error") or "Could not extract a transcript from this URL. Please paste the transcript manually.")
+                return
+        if not cleaned_transcript:
+            st.error("Please paste a transcript or provide a YouTube URL with accessible captions.")
             return
         if not llm.configured:
             st.error("OPENAI_API_KEY is not configured in your app secrets or environment.")
