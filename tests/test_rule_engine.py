@@ -1,5 +1,5 @@
 from evidrai.models import SubClaim
-from evidrai.rules.verdict import align_reasoning_with_rules, rule_based_verdict_from_evidence
+from evidrai.rules.verdict import assess_amplification_risk, align_reasoning_with_rules, rule_based_verdict_from_evidence
 
 
 def subclaim(claim_type="factual", risk_flags=None):
@@ -209,3 +209,32 @@ def test_nicholas_regression_currently_cancelled_event_with_official_rebuttal_is
 
     assert result["verdict"] == "False / contradicted"
     assert result["confidence"] == "High"
+
+
+def test_amplification_warning_triggers_for_repeated_single_cluster_without_primary_support():
+    warning = assess_amplification_risk(
+        [
+            source(support="supports", category="credible_reporting", source_type="secondary", cluster="same-briefing"),
+            source(support="supports", category="credible_reporting", source_type="secondary", cluster="same-briefing"),
+            source(support="supports", category="reported_allegation", source_type="secondary", cluster="same-briefing"),
+            source(support="mixed", category="contextual_signal", source_type="secondary", cluster="same-briefing"),
+        ]
+    )
+
+    assert warning["triggered"] is True
+    assert warning["level"] == "high"
+    assert warning["details"]["dominant_cluster_count"] == 4
+    assert warning["details"]["primary_support_clusters"] == 0
+
+
+def test_amplification_warning_stays_clear_for_independent_primary_and_reporting_chains():
+    warning = assess_amplification_risk(
+        [
+            source(support="supports", category="direct_evidence", source_type="primary", cluster="court-record"),
+            source(support="supports", category="credible_reporting", source_type="secondary", cluster="independent-reporting"),
+            source(support="contradicts", category="credible_contradiction", source_type="secondary", cluster="independent-rebuttal"),
+        ]
+    )
+
+    assert warning["triggered"] is False
+    assert warning["level"] == "none"

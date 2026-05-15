@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any, Dict, List
 
 from evidrai.models import SubClaim
@@ -177,6 +178,81 @@ def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     stats["unique_clusters"] = len(stats["unique_clusters"])
     return stats
+
+
+def assess_amplification_risk(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Identify when repeated coverage looks like amplification, not corroboration.
+
+    The warning is deliberately separate from source quality. A reputable outlet can
+    still be part of the same evidentiary chain as other outlets if they are all
+    repeating the same allegation, briefing, wire copy, or narrative cluster.
+    """
+    total_sources = len(sources or [])
+    if not total_sources:
+        return {"triggered": False, "level": "none", "message": "", "details": {}}
+
+    clusters: Counter[str] = Counter()
+    substantive_support_clusters: set[str] = set()
+    primary_support_clusters: set[str] = set()
+    rumor_context_count = 0
+    supportive_count = 0
+
+    for idx, source in enumerate(sources or []):
+        category = normalize_evidence_category(source.get("evidence_category", "irrelevant"))
+        support = (source.get("claim_support") or "").strip().lower()
+        cluster = (source.get("narrative_cluster") or source.get("url") or source.get("title") or f"source-{idx}").strip().lower()
+        if cluster:
+            clusters[cluster] += 1
+        if support == "supports":
+            supportive_count += 1
+        if category in {"reported_allegation", "contextual_signal", "rumor_amplification", "denial_or_rebuttal"}:
+            rumor_context_count += 1
+        if support == "supports" and category in {"direct_evidence", "credible_reporting", "expert_analysis"}:
+            substantive_support_clusters.add(cluster)
+            source_type = (source.get("source_type") or "").lower()
+            if source_type in {"primary", "official", "government", "court", "parliament", "document", "record"}:
+                primary_support_clusters.add(cluster)
+
+    dominant_cluster, dominant_count = clusters.most_common(1)[0] if clusters else ("", 0)
+    dominant_ratio = dominant_count / total_sources if total_sources else 0.0
+    substantive_cluster_count = len(substantive_support_clusters)
+    primary_cluster_count = len(primary_support_clusters)
+
+    repeated_single_chain = total_sources >= 3 and dominant_count >= 3 and dominant_ratio >= 0.6
+    thin_independence = supportive_count >= 2 and substantive_cluster_count <= 1 and primary_cluster_count == 0
+    mostly_contextual = rumor_context_count >= max(2, supportive_count)
+    triggered = repeated_single_chain or thin_independence or mostly_contextual
+
+    if repeated_single_chain and thin_independence:
+        level = "high"
+    elif triggered:
+        level = "medium"
+    else:
+        level = "none"
+
+    message = ""
+    if triggered:
+        message = (
+            "This claim appears to rely on repeated coverage or contextual signals more than independent evidentiary chains. "
+            "Evidrai treats amplification as a visibility signal, not corroboration."
+        )
+
+    return {
+        "triggered": triggered,
+        "level": level,
+        "message": message,
+        "details": {
+            "source_count": total_sources,
+            "unique_narrative_clusters": len(clusters),
+            "dominant_cluster": dominant_cluster,
+            "dominant_cluster_count": dominant_count,
+            "dominant_cluster_ratio": round(dominant_ratio, 2),
+            "supportive_sources": supportive_count,
+            "substantive_support_clusters": substantive_cluster_count,
+            "primary_support_clusters": primary_cluster_count,
+            "rumor_or_context_sources": rumor_context_count,
+        },
+    }
 
 
 def rule_based_verdict_from_evidence(

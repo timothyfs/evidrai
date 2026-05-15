@@ -17,6 +17,21 @@ Given a claim or source URL, Evidrai can:
 - distinguish evidence from rumour, allegation, and contextual noise
 - produce a user-facing verdict with confidence and explanation
 
+## How Evidrai scores evidence
+
+Evidrai is claim-first, not speaker-first. A claim is assessed against the evidence chain behind it, not against the popularity, status, or confidence of whoever repeated it.
+
+Core principles:
+
+- **Amplification is not corroboration.** Repeated publication, social sharing, political prominence, or syndication does not make a claim more true by itself.
+- **Independence beats volume.** Five articles repeating the same allegation, briefing, wire story, or social post may count as one evidentiary chain, not five independent confirmations.
+- **Primary evidence carries the most weight.** Court records, official documents, filings, datasets, direct transcripts, and other primary material are preferred over commentary or repetition.
+- **Reputable media are weighted signals, not arbiters of truth.** Outlets with rigorous reporting standards can increase confidence when they add transparent, independently sourced evidence. They do not define the answer alone.
+- **Authority triggers attention, not automatic credibility.** Politicians, governments, celebrities, institutions, and high-profile media can all make unsupported claims. Evidrai scores the claim, not the title of the person saying it.
+- **Context is separated from support.** Background, association, allegation, denial, and narrative momentum are useful for understanding why a claim spreads, but they are not treated as direct substantiation.
+
+When Evidrai detects that many reviewed sources appear to trace back to the same narrative cluster, it may show an **amplification warning**. That warning means the claim may be widely repeated while still lacking independent evidentiary support.
+
 Supported verdicts:
 - Supported
 - Likely supported

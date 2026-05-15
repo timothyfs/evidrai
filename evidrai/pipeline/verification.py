@@ -29,6 +29,7 @@ from evidrai.models import (
     VerifiedAssessmentModel,
 )
 from evidrai.rules.verdict import (
+    assess_amplification_risk,
     align_reasoning_with_rules,
     collect_risk_flags,
     evidence_pendulum,
@@ -328,6 +329,15 @@ def run_claim_pipeline_typed(user_input: str, llm: OpenAICompatibleClient, searc
     )
     reasoning = align_reasoning_with_rules(reasoning, rule_engine.to_dict())
     reasoning["rule_engine"] = rule_engine.to_public_dict()
+    amplification_warning = assess_amplification_risk(evidence_packet.sources)
+    reasoning["amplification_warning"] = amplification_warning
+
+    if amplification_warning.get("triggered"):
+        reasoning.setdefault("evidence_assessment", {})
+        reasoning["evidence_assessment"].setdefault("evidence_gaps", [])
+        warning_gap = "Repeated coverage or a shared narrative cluster was detected; this is treated as amplification, not independent confirmation."
+        if warning_gap not in reasoning["evidence_assessment"]["evidence_gaps"]:
+            reasoning["evidence_assessment"]["evidence_gaps"].append(warning_gap)
 
     split_view = split_evidence_vs_rumor(evidence_packet.sources)
     reasoning.setdefault("evidence_assessment", {})

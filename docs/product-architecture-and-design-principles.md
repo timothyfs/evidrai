@@ -76,6 +76,39 @@ Sources should be grouped by function:
 
 A flat source list forces the user to do the reasoning themselves. Evidrai should show the evidence map.
 
+### 3a. Independence beats amplification
+
+Evidrai should not treat repetition as corroboration.
+
+The system should distinguish:
+
+- one claim repeated by many outlets
+- one claim syndicated from the same wire story
+- one claim laundered through social media, state media, or partisan commentary
+- one claim independently confirmed by separate evidentiary chains
+
+The product principle is:
+
+> Amplification is not corroboration. Evidrai scores claims against independent evidentiary chains, not against volume, visibility, status, or repetition.
+
+This matters because weak claims can look credible when bots, state-aligned outlets, partisan media, populist figures, or even reputable publications repeat the same unsupported source event. Reputable news organisations should improve confidence only when they add transparent reporting, named evidence, primary documents, or independently derived confirmation.
+
+Implementation implications:
+
+- Narrative clusters should be treated as evidence chains.
+- Multiple sources in the same narrative cluster should decay in marginal value.
+- Primary sources, official records, court filings, datasets, direct transcripts, and clearly attributed documents should carry more weight than repeated commentary.
+- Political status, institutional office, media prominence, follower count, or social engagement should increase review priority, not truth score.
+- The UI should warn users when a claim is widely repeated but has thin independent support.
+
+Good pattern:
+
+> Amplification warning: this claim appears in several sources, but they mostly trace back to the same allegation or narrative cluster. Evidrai treats this as visibility, not independent confirmation.
+
+Bad pattern:
+
+> Many sources say this, therefore it is likely true.
+
 ### 4. Confidence must explain its own limits
 
 Confidence should answer: confidence in what?

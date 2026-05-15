@@ -186,6 +186,23 @@ def render_evidence_scorecard(result: Dict[str, Any]) -> None:
     render_score_bar("High-quality share", stats["high_quality_ratio"] * 100, 100)
 
 
+def render_amplification_warning(result: Dict[str, Any]) -> None:
+    warning = result.get("amplification_warning") or {}
+    if not warning.get("triggered"):
+        return
+
+    details = warning.get("details") or {}
+    level = str(warning.get("level") or "medium").title()
+    st.warning(warning.get("message") or "Repeated coverage detected. Evidrai treats amplification as visibility, not corroboration.")
+    st.caption(
+        f"Amplification risk: {level} · "
+        f"{details.get('unique_narrative_clusters', 0)} narrative cluster(s) across "
+        f"{details.get('source_count', 0)} source(s) · "
+        f"{details.get('substantive_support_clusters', 0)} substantive support chain(s) · "
+        f"{details.get('primary_support_clusters', 0)} primary support chain(s)."
+    )
+
+
 def render_assessment_metrics(result: Dict[str, Any]) -> None:
     stats = source_quality_stats(result)
     elapsed = result.get("elapsed_seconds")
@@ -343,6 +360,7 @@ def render_pipeline_result(result: Dict[str, Any]) -> None:
     )
 
     render_evidence_scorecard(result)
+    render_amplification_warning(result)
     render_claim_breakdown(result)
     render_claim_under_review(result)
     render_assessment_metrics(result)
