@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # Streamlit Cloud entrypoint. Keep this file intentionally small, but touch it
 # when deploy-critical fixes land in imported modules so Cloud visibly rebuilds.
-# Rebuild marker: amplification-warning-evidence-doctrine.
+# Rebuild marker: public-methodology-explainer.
 from evidrai.ui.render import main
 
 

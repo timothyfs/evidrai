@@ -25,7 +25,7 @@ class ScoringConfig:
     term_pattern: str = r"\b{term}\b"
 
 
-APP_BUILD_LABEL = "amplification-warning"
+APP_BUILD_LABEL = "public-methodology"
 
 
 @lru_cache(maxsize=1)

@@ -292,6 +292,26 @@ def render_methodology_note() -> None:
         st.write("Confidence reflects the quantity, quality, directness, recency, and agreement level of the reviewed evidence. It is not a claim of certainty.")
 
 
+def render_public_methodology_explainer() -> None:
+    with st.expander("How Evidrai works", expanded=False):
+        st.markdown(
+            """
+Evidrai is **claim-first, not speaker-first**. It assesses the evidence behind a claim rather than trusting popularity, status, or repetition.
+
+Core principles:
+
+- **Amplification is not corroboration.** Repeated publication, social sharing, political prominence, or syndication does not make a claim more true by itself.
+- **Independence beats volume.** Five articles repeating the same allegation, briefing, wire story, or social post may count as one evidentiary chain, not five independent confirmations.
+- **Primary evidence carries the most weight.** Court records, official documents, filings, datasets, direct transcripts, and other primary material are preferred over commentary or repetition.
+- **Reputable media are weighted signals, not arbiters of truth.** Strong outlets can improve confidence when they add transparent, independently sourced evidence. They do not define the answer alone.
+- **Authority triggers attention, not automatic credibility.** Politicians, governments, celebrities, institutions, and high-profile media can all make unsupported claims. Evidrai scores the claim, not the title of the person saying it.
+- **Context is separated from support.** Background, association, allegation, denial, and narrative momentum help explain why a claim spreads, but they are not treated as direct proof.
+
+When many reviewed sources appear to trace back to the same narrative cluster, Evidrai may show an **amplification warning**. That means the claim may be widely repeated while still lacking independent evidentiary support.
+            """.strip()
+        )
+
+
 def render_sources(sources: List[Dict[str, Any]]) -> None:
     if not sources:
         return
@@ -545,6 +565,7 @@ def main() -> None:
     st.set_page_config(page_title="Evidrai", layout="wide")
     st.title("🔎 Evidrai — Claim Check")
     st.caption("Assess the evidence behind a claim, story, or post — not just how confidently it is repeated.")
+    render_public_methodology_explainer()
 
     llm = OpenAICompatibleClient()
     search = TavilySearchClient()
