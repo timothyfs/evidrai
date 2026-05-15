@@ -160,6 +160,20 @@ Run the app locally:
 streamlit run app.py
 ```
 
+Run the Phase 1 API locally:
+
+```bash
+uvicorn api.main:app --reload
+```
+
+Initial API endpoints:
+
+- `GET /health`
+- `POST /claims/check`
+- `POST /speech/audit`
+
+API docs are available locally at `http://127.0.0.1:8000/docs` when Uvicorn is running.
+
 ## Validation commands
 
 Run the API-key-free rule-engine tests:
@@ -180,6 +194,7 @@ Both commands should pass before pushing changes.
 
 ```text
 app.py                         Streamlit entrypoint; delegates to evidrai.ui.render.main
+api/main.py                    Phase 1 FastAPI wrapper around the verification engine
 prompts.py                     Prompt builders and JSON loading helpers
 requirements.txt               Runtime and test dependencies
 

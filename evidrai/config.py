@@ -25,7 +25,7 @@ class ScoringConfig:
     term_pattern: str = r"\b{term}\b"
 
 
-APP_BUILD_LABEL = "transcript-helper"
+APP_BUILD_LABEL = "phase-1-api"
 
 
 @lru_cache(maxsize=1)
