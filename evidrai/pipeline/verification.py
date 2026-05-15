@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from prompts import (
     SYSTEM_PROMPT,
+    build_speech_audit_extraction_messages,
     build_user_prompt,
     build_claim_analysis_messages,
     build_reasoning_messages,
@@ -23,6 +24,7 @@ from evidrai.models import (
     PendulumResult,
     RetrievalResult,
     RuleEngineResult,
+    SpeechAuditExtractionModel,
     SourceSummaryModel,
     SubClaim,
     VerificationResult,
@@ -34,6 +36,7 @@ from evidrai.rules.verdict import (
     collect_risk_flags,
     evidence_pendulum,
     map_confidence_label,
+    map_pipeline_verdict,
     map_pendulum_to_verified_verdict,
     rule_based_verdict_from_evidence,
     split_evidence_vs_rumor,
@@ -378,3 +381,93 @@ def run_claim_pipeline_typed(user_input: str, llm: OpenAICompatibleClient, searc
 def run_claim_pipeline(user_input: str, llm: OpenAICompatibleClient, search: TavilySearchClient) -> Dict[str, Any]:
     """Run deep verification and return a UI-compatible serialized result."""
     return run_claim_pipeline_typed(user_input, llm, search).to_dict()
+
+
+def select_audit_claims(claims: List[Dict[str, Any]], max_claims: int) -> List[Dict[str, Any]]:
+    """Pick the most useful claims to verify from a speech extraction payload."""
+    priority_rank = {"high": 0, "medium": 1, "low": 2}
+    checkability_rank = {"checkable": 0, "partly_checkable": 1, "rhetoric": 9}
+    candidates = [
+        dict(claim)
+        for claim in claims or []
+        if (claim.get("checkability") or "").lower() in {"checkable", "partly_checkable"}
+        and (claim.get("normalized_claim") or claim.get("quote") or "").strip()
+    ]
+    candidates.sort(
+        key=lambda claim: (
+            priority_rank.get((claim.get("priority") or "medium").lower(), 1),
+            checkability_rank.get((claim.get("checkability") or "checkable").lower(), 1),
+            len((claim.get("normalized_claim") or claim.get("quote") or "")),
+        )
+    )
+    return candidates[: max(1, int(max_claims or 1))]
+
+
+def extract_speech_audit_claims(
+    transcript: str,
+    source_url: str,
+    max_claims: int,
+    llm: OpenAICompatibleClient,
+) -> Dict[str, Any]:
+    payload = llm.complete_json(
+        build_speech_audit_extraction_messages(
+            transcript[:24000],
+            source_url=source_url,
+            max_claims=max_claims,
+        ),
+        temperature=0.1,
+    )
+    extraction = validate_model(payload, SpeechAuditExtractionModel)
+    extraction["claims"] = select_audit_claims(extraction.get("claims", []), max_claims)
+    extraction["source_url"] = extraction.get("source_url") or source_url
+    return extraction
+
+
+def run_speech_audit(
+    transcript: str,
+    source_url: str,
+    max_claims: int,
+    llm: OpenAICompatibleClient,
+    search: TavilySearchClient,
+) -> Dict[str, Any]:
+    """Extract and verify key claims from a long speech or video transcript."""
+    extraction = extract_speech_audit_claims(transcript, source_url, max_claims, llm)
+    checked_claims: List[Dict[str, Any]] = []
+    for idx, claim in enumerate(extraction.get("claims", [])[:max_claims], start=1):
+        normalized = (claim.get("normalized_claim") or claim.get("quote") or "").strip()
+        if not normalized:
+            continue
+        audit_input = normalized
+        if claim.get("quote"):
+            audit_input += f"\n\nOriginal quote: {claim['quote']}"
+        if source_url:
+            audit_input += f"\n\nSpeech/video source: {source_url}"
+        result = run_claim_pipeline(audit_input, llm, search)
+        result["speech_claim"] = claim
+        result["audit_index"] = idx
+        checked_claims.append(result)
+
+    inaccurate_verdicts = {
+        "False / contradicted",
+        "Not supported by credible evidence",
+        "Weakly supported / likely incorrect",
+        "Misleading framing",
+    }
+    needs_attention = [
+        item for item in checked_claims
+        if map_pendulum_to_verified_verdict(item.get("pendulum_band", "")) in inaccurate_verdicts
+        or map_pipeline_verdict(item.get("verified_verdict") or item.get("verdict") or "") in inaccurate_verdicts
+    ]
+    return {
+        "schema_version": "speech_audit.v1",
+        "title": extraction.get("title") or "Speech / video audit",
+        "speaker": extraction.get("speaker", ""),
+        "source_url": source_url or extraction.get("source_url", ""),
+        "summary": extraction.get("summary", ""),
+        "claims_extracted": extraction.get("claims", []),
+        "claims_checked": checked_claims,
+        "claims_checked_count": len(checked_claims),
+        "claims_needing_attention_count": len(needs_attention),
+        "skipped_rhetoric": extraction.get("skipped_rhetoric", []),
+        "extraction_notes": extraction.get("extraction_notes", []),
+    }

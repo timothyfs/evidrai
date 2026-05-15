@@ -193,6 +193,21 @@ Every result should be reproducible and inspectable internally:
 
 ## Target user experience
 
+### Product modes
+
+Evidrai should support two user-facing workflows:
+
+1. **Single Claim Check**
+   - Best for a headline, quote, post, URL, or short claim.
+   - Produces one focused verdict and evidence map.
+
+2. **Speech / Video Audit**
+   - Best for YouTube speeches, political rallies, interviews, podcasts, video captions, or long transcripts.
+   - Extracts checkable factual claims, skips pure rhetoric, prioritises public-interest claims, and verifies selected claims through the same evidence pipeline.
+   - Produces a report showing quote/timestamp, normalized claim, verdict, confidence, source evidence, and caveats.
+
+The speech audit mode must remain speaker-neutral. It should work for Donald Trump, Joe Biden, Keir Starmer, Nigel Farage, Emmanuel Macron, a corporate CEO, an activist, or a podcast guest. The product audits factual claims, not ideology, personality, or delivery style.
+
 ### Ideal result page structure
 
 #### 1. Verdict card

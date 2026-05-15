@@ -11,7 +11,7 @@ from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import get_app_build
 from evidrai.feedback import build_feedback_record, feedback_backend_status, save_feedback
-from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass
+from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
 from evidrai.rules.verdict import (
     map_confidence_label,
     map_pipeline_verdict,
@@ -458,6 +458,68 @@ def render_pipeline_result(result: Dict[str, Any]) -> None:
     render_methodology_note()
 
 
+def render_speech_audit_result(result: Dict[str, Any]) -> None:
+    st.markdown("## Speech / Video Audit")
+    title = result.get("title") or "Speech / video audit"
+    speaker = result.get("speaker") or "Unknown speaker"
+    st.write(f"**{title}**")
+    st.caption(f"Speaker: {speaker}")
+    if result.get("source_url"):
+        st.caption(f"Source: {result['source_url']}")
+    if result.get("summary"):
+        st.write(result["summary"])
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Claims extracted", len(result.get("claims_extracted", []) or []))
+    c2.metric("Claims checked", result.get("claims_checked_count", 0))
+    c3.metric("Needs attention", result.get("claims_needing_attention_count", 0))
+
+    checked = result.get("claims_checked", []) or []
+    if not checked:
+        st.info("No checkable claims were extracted from the supplied transcript.")
+    for item in checked:
+        speech_claim = item.get("speech_claim", {}) or {}
+        verdict = map_pipeline_verdict(item.get("verified_verdict") or item.get("verdict") or "Unverified")
+        confidence = map_confidence_label(item.get("verified_confidence") or item.get("confidence") or "Low")
+        label = f"{item.get('audit_index', '')}. {verdict} · {confidence}"
+        quote = speech_claim.get("quote") or speech_claim.get("normalized_claim") or "Claim"
+        if speech_claim.get("timestamp"):
+            label += f" · {speech_claim['timestamp']}"
+        with st.expander(label, expanded=verdict in {"False / contradicted", "Not supported by credible evidence", "Weakly supported / likely incorrect", "Misleading framing"}):
+            st.markdown("**Original quote**")
+            st.write(quote)
+            st.markdown("**Claim checked**")
+            st.write(speech_claim.get("normalized_claim") or quote)
+            if speech_claim.get("why_it_matters"):
+                st.markdown("**Why it matters**")
+                st.write(speech_claim["why_it_matters"])
+            if item.get("tldr"):
+                st.markdown("**Evidrai assessment**")
+                st.write(item["tldr"])
+            if item.get("one_line_correction"):
+                st.info(item["one_line_correction"])
+            rule_engine = item.get("rule_engine") or {}
+            if rule_engine.get("rationale"):
+                st.caption("Rule check: " + rule_engine["rationale"])
+            render_amplification_warning(item)
+            render_sources((item.get("sources") or [])[:4])
+
+    skipped = result.get("skipped_rhetoric", []) or []
+    notes = result.get("extraction_notes", []) or []
+    if skipped or notes:
+        with st.expander("Extraction notes", expanded=False):
+            if notes:
+                st.markdown("**Notes**")
+                for note in notes:
+                    st.write(f"- {note}")
+            if skipped:
+                st.markdown("**Skipped rhetoric / low-checkability lines**")
+                for item in skipped[:8]:
+                    st.write(f"- {item}")
+
+    render_feedback_controls(result.get("result_id", "speech_latest"), result=result, source_url=result.get("source_url", ""), settings=result.get("settings", {}))
+
+
 def render_provisional_result(data: Dict[str, Any], source_url: str) -> None:
     badge = "Fast assessment with lightweight search snippets." if data.get("used_lightweight_search") else "Fast first-pass assessment. Deep verification may update the verdict."
     render_topline_block(
@@ -507,6 +569,96 @@ def render_provisional_result(data: Dict[str, Any], source_url: str) -> None:
 
 def render_legacy_result(data: Dict[str, Any], source_url: str) -> None:
     render_provisional_result(data, source_url)
+
+
+def render_speech_audit_page(
+    llm: OpenAICompatibleClient,
+    search: TavilySearchClient,
+    developer_debug_enabled: bool,
+) -> None:
+    st.markdown("### Speech / Video Audit")
+    st.caption("Paste a transcript or long speech excerpt. Evidrai extracts checkable factual claims, verifies the selected claims, and highlights inaccurate or unsupported statements.")
+
+    transcript = st.text_area(
+        "Paste transcript or speech text",
+        placeholder="Paste YouTube transcript, rally speech, interview excerpt, podcast transcript, or captions here...",
+        height=260,
+        key="speech_transcript_input",
+    )
+    source_url = st.text_input(
+        "Optional video/source URL",
+        placeholder="https://www.youtube.com/watch?v=...",
+        key="speech_source_url_input",
+    )
+    max_claims = st.slider(
+        "Maximum claims to verify",
+        min_value=1,
+        max_value=10,
+        value=5,
+        help="Start small: each claim runs through the Deep evidence pipeline.",
+    )
+    st.info("MVP note: paste the transcript manually for now. Automatic YouTube transcript extraction can be added next.")
+
+    if st.button("Audit speech / video", type="primary", use_container_width=True):
+        cleaned_transcript = (transcript or "").strip()
+        cleaned_source_url = (source_url or "").strip()
+        if not cleaned_transcript:
+            st.error("Please paste a transcript or speech excerpt first.")
+            return
+        if cleaned_source_url and not is_probable_url(cleaned_source_url):
+            st.error("The source link does not look like a valid URL. Please include http:// or https://")
+            return
+        if not llm.configured:
+            st.error("OPENAI_API_KEY is not configured in your app secrets or environment.")
+            return
+        if not search.configured:
+            st.error("Speech / Video Audit requires TAVILY_API_KEY because each extracted claim is evidence-checked.")
+            return
+
+        cache_key = stable_request_key("speech_audit", cleaned_transcript, cleaned_source_url, max_claims)
+        cache = st.session_state["evidrai_cache"]
+        if cache_key in cache:
+            st.session_state["last_results"] = cache[cache_key]
+        else:
+            try:
+                started_at = time.time()
+                status = st.status("Starting speech audit...", expanded=True)
+                with status:
+                    st.write("Extracting checkable factual claims...")
+                    st.write("Running Evidrai evidence checks claim by claim...")
+                audit_result = run_speech_audit(cleaned_transcript, cleaned_source_url, max_claims, llm, search)
+                audit_result["elapsed_seconds"] = time.time() - started_at
+                audit_result["result_id"] = f"speech_{cache_key}"
+                audit_result["settings"] = {
+                    "result_mode": "speech_audit",
+                    "source_url": cleaned_source_url,
+                    "max_claims": max_claims,
+                    "build": get_app_build(),
+                }
+                saved = {"speech_result": audit_result, "source_url": cleaned_source_url, "settings": audit_result["settings"]}
+                cache[cache_key] = saved
+                st.session_state["last_results"] = saved
+                status.update(label="Speech audit complete", state="complete", expanded=False)
+            except requests.HTTPError as exc:
+                try:
+                    detail = exc.response.text[:500]
+                except Exception:
+                    detail = str(exc)
+                st.error(f"API error: {detail}")
+            except Exception as exc:
+                st.error(f"Error: {exc}")
+
+    saved = st.session_state.get("last_results")
+    if saved and saved.get("speech_result"):
+        try:
+            render_speech_audit_result(saved["speech_result"])
+        except Exception as exc:
+            st.error("The speech audit completed, but Evidrai could not render the result. Enable Developer debug panel for details.")
+            if developer_debug_enabled:
+                st.exception(exc)
+
+    if developer_debug_enabled:
+        render_developer_debug_panel(saved, {"app_mode": "speech_audit"}, llm, search)
 
 
 
@@ -579,6 +731,7 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Settings")
+        app_mode = st.radio("Mode", ["Single Claim Check", "Speech / Video Audit"], index=0)
         detail_mode = st.radio("Output mode", ["Simple", "Detailed"], index=0)
         category = st.selectbox(
             "Claim category",
@@ -599,6 +752,10 @@ def main() -> None:
         st.caption(f"Build: {get_app_build()}")
         st.caption(f"OpenAI: {'configured' if llm.configured else 'missing'} • Model: {llm.model} • Base URL: {llm.base_url}")
         st.caption(f"Tavily: {'configured' if search.configured else 'missing'}")
+
+    if app_mode == "Speech / Video Audit":
+        render_speech_audit_page(llm, search, developer_debug_enabled)
+        return
 
     claim = st.text_area(
         "Paste a claim, link description, quote, or content to assess",

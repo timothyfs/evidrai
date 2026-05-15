@@ -280,6 +280,60 @@ SOURCE_SUMMARY_SYSTEM_PROMPT = dedent(
 ).strip()
 
 
+SPEECH_AUDIT_SYSTEM_PROMPT = dedent(
+    """
+    You are Evidrai's speech and video claim extraction engine.
+    Extract factual claims from a speech, interview, podcast transcript, article transcript, or video transcript for later evidence checking.
+    Do not verify the claims yet. Do not decide whether they are true or false.
+    Return valid JSON only.
+
+    Goals:
+    - Identify concrete, checkable factual claims.
+    - Preserve the exact quote or closest available wording.
+    - Normalize each claim into a falsifiable statement suitable for evidence retrieval.
+    - Prioritize high-impact public claims, especially around elections, crime, immigration, war, health, economy, law, public spending, and named people or institutions.
+    - Skip pure applause lines, insults, slogans, predictions, and vague rhetoric unless they contain a checkable factual proposition.
+    - If a quote contains several checkable claims, split them.
+    - If timestamps are present in the transcript, preserve them. If not, leave timestamp blank.
+
+    Claim checkability values:
+    - checkable: concrete factual claim that can be tested against evidence
+    - partly_checkable: contains a factual core but also interpretation, vagueness, or rhetoric
+    - rhetoric: mainly opinion/slogan/boast/insult/prediction and should not be verified as fact
+
+    Priority values:
+    - high: potentially material public-interest claim or serious allegation
+    - medium: factual claim worth checking
+    - low: minor factual detail or low-impact claim
+
+    Schema:
+    {
+      "title": "string",
+      "speaker": "string",
+      "source_url": "string",
+      "summary": "string",
+      "claims": [
+        {
+          "id": "string",
+          "quote": "string",
+          "normalized_claim": "string",
+          "timestamp": "string",
+          "speaker": "string",
+          "topic": "string",
+          "claim_type": "factual|political|economic|legal|health|science|historical|crime|immigration|foreign_policy|other",
+          "checkability": "checkable|partly_checkable|rhetoric",
+          "priority": "high|medium|low",
+          "why_it_matters": "string",
+          "verification_query": "string"
+        }
+      ],
+      "skipped_rhetoric": ["string"],
+      "extraction_notes": ["string"]
+    }
+    """
+).strip()
+
+
 def build_claim_analysis_messages(user_input: str) -> List[Dict[str, str]]:
     return [
         {"role": "system", "content": CLAIM_ANALYSIS_SYSTEM_PROMPT},
@@ -295,6 +349,33 @@ def build_claim_analysis_messages(user_input: str) -> List[Dict[str, str]]:
                 - Extract the most falsifiable version of the claim.
                 - Split factual content from opinion, motive attribution, or rhetorical framing where possible.
                 - Flag ambiguity, time sensitivity, and any terms that need definition before verification.
+                """
+            ).strip(),
+        },
+    ]
+
+
+def build_speech_audit_extraction_messages(transcript: str, source_url: str = "", max_claims: int = 8) -> List[Dict[str, str]]:
+    return [
+        {"role": "system", "content": SPEECH_AUDIT_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": dedent(
+                f"""
+                Extract the strongest checkable claims from this speech/video transcript.
+
+                Source URL, if supplied: {source_url or "Not supplied"}
+                Maximum claims to return: {max_claims}
+
+                Instructions:
+                - Return at most {max_claims} claims.
+                - Prefer high-impact claims over chronological order when there are many.
+                - Do not include more than 2 low-priority claims.
+                - Keep quotes short but specific enough to identify the original statement.
+                - If the transcript is too short or lacks factual claims, return an empty claims array and explain why in extraction_notes.
+
+                Transcript:
+                {transcript}
                 """
             ).strip(),
         },

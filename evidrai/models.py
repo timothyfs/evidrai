@@ -234,6 +234,30 @@ class ClaimAnalysisModel(BaseModel):
     overall_notes: List[str] = Field(default_factory=list)
 
 
+class SpeechAuditClaimModel(BaseModel):
+    id: str = "claim_1"
+    quote: str
+    normalized_claim: str
+    timestamp: str = ""
+    speaker: str = ""
+    topic: str = "general"
+    claim_type: str = "factual"
+    checkability: str = "checkable"
+    priority: str = "medium"
+    why_it_matters: str = ""
+    verification_query: str = ""
+
+
+class SpeechAuditExtractionModel(BaseModel):
+    title: str = "Speech / video audit"
+    speaker: str = ""
+    source_url: str = ""
+    summary: str = ""
+    claims: List[SpeechAuditClaimModel] = Field(default_factory=list)
+    skipped_rhetoric: List[str] = Field(default_factory=list)
+    extraction_notes: List[str] = Field(default_factory=list)
+
+
 class SourceSummaryModel(BaseModel):
     summary: str = ""
     claim_support: str = "irrelevant"

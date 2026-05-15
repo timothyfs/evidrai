@@ -16,6 +16,7 @@ Given a claim or source URL, Evidrai can:
 - rank and summarise sources
 - distinguish evidence from rumour, allegation, and contextual noise
 - produce a user-facing verdict with confidence and explanation
+- audit a pasted speech or video transcript by extracting checkable claims and verifying them claim by claim
 
 ## How Evidrai scores evidence
 
@@ -40,7 +41,29 @@ Supported verdicts:
 - Weakly supported / likely incorrect
 - Not supported by credible evidence
 
-## Verification modes
+## Product modes
+
+### Single Claim Check
+
+Single Claim Check is the default mode. It assesses one claim, headline, quote, post, URL, or article excerpt through the Fast or Deep verification flow.
+
+### Speech / Video Audit
+
+Speech / Video Audit is for longer material such as YouTube transcripts, political speeches, interviews, podcasts, and video captions.
+
+In the MVP version, users paste the transcript manually. Evidrai then:
+
+- extracts concrete, checkable factual claims
+- skips pure rhetoric, slogans, insults, and vague applause lines
+- prioritises high-impact claims
+- runs the existing Deep evidence pipeline on each selected claim
+- produces a report with the original quote, normalized claim, verdict, confidence, evidence links, and explanation
+
+This mode is designed to audit any speaker or institution, not a specific politician or ideology.
+
+Future improvement: automatic YouTube transcript ingestion and/or speech-to-text fallback.
+
+## Verification depths
 
 ### Fast
 
