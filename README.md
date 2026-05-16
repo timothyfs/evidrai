@@ -218,6 +218,8 @@ prompts.py                     Prompt builders and JSON loading helpers
 requirements.txt               Runtime and test dependencies
 web/                           Thin Next.js customer frontend for the independent API
 
+Frontend deployment notes: `docs/frontend-deployment.md`
+
 evidrai/
   clients/
     llm.py                     OpenAI-compatible JSON client

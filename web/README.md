@@ -36,6 +36,12 @@ The variable is public because it is used by the browser frontend. Do not put se
 - recent saved reports from `/reports`
 - load report by ID
 
+## Deployment
+
+Recommended first deployment target: Vercel.
+
+See `../docs/frontend-deployment.md`.
+
 ## Next frontend slices
 
 - feedback controls
