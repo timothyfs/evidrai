@@ -216,6 +216,7 @@ app.py                         Streamlit entrypoint; delegates to evidrai.ui.ren
 api/main.py                    Phase 1 FastAPI wrapper around the verification engine
 prompts.py                     Prompt builders and JSON loading helpers
 requirements.txt               Runtime and test dependencies
+web/                           Thin Next.js customer frontend for the independent API
 
 evidrai/
   clients/

@@ -14,5 +14,13 @@ __pycache__/
 .evidrai/
 .evidrai_feedback/
 
+# Node / Next.js
+node_modules/
+.next/
+out/
+web/node_modules/
+web/.next/
+web/out/
+
 # Local/private test coordination notes
 /docs/nicholas-user-test.md
