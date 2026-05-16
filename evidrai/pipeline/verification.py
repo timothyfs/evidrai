@@ -43,6 +43,8 @@ from evidrai.rules.verdict import (
 )
 from evidrai.utils import classify_source_type, domain_from_url, recency_score, validate_model
 
+SPEECH_AUDIT_MAX_TRANSCRIPT_CHARS = 12000
+
 def call_legacy_model(claim: str, category: str, detail_mode: str, llm: OpenAICompatibleClient, evidence_context: str = "") -> Dict[str, Any]:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -403,15 +405,23 @@ def select_audit_claims(claims: List[Dict[str, Any]], max_claims: int) -> List[D
     return candidates[: max(1, int(max_claims or 1))]
 
 
+def truncate_speech_transcript(transcript: str, max_chars: int = SPEECH_AUDIT_MAX_TRANSCRIPT_CHARS) -> tuple[str, bool]:
+    cleaned = transcript or ""
+    if len(cleaned) <= max_chars:
+        return cleaned, False
+    return cleaned[:max_chars], True
+
+
 def extract_speech_audit_claims(
     transcript: str,
     source_url: str,
     max_claims: int,
     llm: OpenAICompatibleClient,
 ) -> Dict[str, Any]:
+    transcript_for_extraction, truncated = truncate_speech_transcript(transcript)
     payload = llm.complete_json(
         build_speech_audit_extraction_messages(
-            transcript[:24000],
+            transcript_for_extraction,
             source_url=source_url,
             max_claims=max_claims,
         ),
@@ -420,7 +430,45 @@ def extract_speech_audit_claims(
     extraction = validate_model(payload, SpeechAuditExtractionModel)
     extraction["claims"] = select_audit_claims(extraction.get("claims", []), max_claims)
     extraction["source_url"] = extraction.get("source_url") or source_url
+    extraction.setdefault("extraction_notes", [])
+    extraction["transcript_truncated"] = truncated
+    extraction["transcript_chars_used"] = len(transcript_for_extraction)
+    extraction["transcript_chars_original"] = len(transcript or "")
+    if truncated:
+        extraction["extraction_notes"].append(
+            f"Transcript was truncated to {len(transcript_for_extraction)} characters to control token usage."
+        )
     return extraction
+
+
+def speech_claim_to_input(claim: Dict[str, Any], source_url: str = "") -> str:
+    normalized = (claim.get("normalized_claim") or claim.get("quote") or "").strip()
+    audit_input = normalized
+    if claim.get("quote"):
+        audit_input += f"\n\nOriginal quote: {claim['quote']}"
+    if source_url:
+        audit_input += f"\n\nSpeech/video source: {source_url}"
+    return audit_input.strip()
+
+
+def verify_speech_claim(
+    claim: Dict[str, Any],
+    *,
+    index: int,
+    source_url: str,
+    mode: str,
+    llm: OpenAICompatibleClient,
+    search: TavilySearchClient,
+) -> Dict[str, Any]:
+    audit_input = speech_claim_to_input(claim, source_url)
+    if mode == "deep":
+        result = run_claim_pipeline(audit_input, llm, search)
+    else:
+        result = run_quick_pass(audit_input, "auto-detect", llm, search)
+        result["verification_mode"] = "fast"
+    result["speech_claim"] = claim
+    result["audit_index"] = index
+    return result
 
 
 def run_speech_audit(
@@ -429,22 +477,16 @@ def run_speech_audit(
     max_claims: int,
     llm: OpenAICompatibleClient,
     search: TavilySearchClient,
+    verification_mode: str = "fast",
 ) -> Dict[str, Any]:
     """Extract and verify key claims from a long speech or video transcript."""
     extraction = extract_speech_audit_claims(transcript, source_url, max_claims, llm)
+    mode = "deep" if verification_mode == "deep" else "fast"
     checked_claims: List[Dict[str, Any]] = []
     for idx, claim in enumerate(extraction.get("claims", [])[:max_claims], start=1):
-        normalized = (claim.get("normalized_claim") or claim.get("quote") or "").strip()
-        if not normalized:
+        if not (claim.get("normalized_claim") or claim.get("quote") or "").strip():
             continue
-        audit_input = normalized
-        if claim.get("quote"):
-            audit_input += f"\n\nOriginal quote: {claim['quote']}"
-        if source_url:
-            audit_input += f"\n\nSpeech/video source: {source_url}"
-        result = run_claim_pipeline(audit_input, llm, search)
-        result["speech_claim"] = claim
-        result["audit_index"] = idx
+        result = verify_speech_claim(claim, index=idx, source_url=source_url, mode=mode, llm=llm, search=search)
         checked_claims.append(result)
 
     inaccurate_verdicts = {
@@ -467,6 +509,10 @@ def run_speech_audit(
         "claims_extracted": extraction.get("claims", []),
         "claims_checked": checked_claims,
         "claims_checked_count": len(checked_claims),
+        "verification_mode": mode,
+        "transcript_truncated": extraction.get("transcript_truncated", False),
+        "transcript_chars_used": extraction.get("transcript_chars_used", 0),
+        "transcript_chars_original": extraction.get("transcript_chars_original", 0),
         "claims_needing_attention_count": len(needs_attention),
         "skipped_rhetoric": extraction.get("skipped_rhetoric", []),
         "extraction_notes": extraction.get("extraction_notes", []),

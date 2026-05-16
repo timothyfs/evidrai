@@ -15,7 +15,14 @@ from evidrai.api_models import AssessmentResponse, serialize_assessment_response
 from evidrai.export import assessment_export_json
 from evidrai.feedback import build_feedback_record, feedback_backend_status, save_feedback
 from evidrai.ingestion.url import fetch_source_url
-from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
+from evidrai.pipeline.verification import (
+    SPEECH_AUDIT_MAX_TRANSCRIPT_CHARS,
+    extract_speech_audit_claims,
+    run_claim_pipeline,
+    run_quick_pass,
+    run_speech_audit,
+    verify_speech_claim,
+)
 from evidrai.reports import list_reports, load_report, save_report
 from evidrai.rules.verdict import (
     map_confidence_label,
@@ -552,7 +559,10 @@ def render_speech_audit_result(result: Dict[str, Any]) -> None:
 
     checked = result.get("claims_checked", []) or []
     if not checked:
-        st.info("No checkable claims were extracted from the supplied transcript.")
+        if result.get("claims_extracted") or result.get("claims"):
+            st.info("Claims have been extracted. Select claims above and run verification when ready.")
+        else:
+            st.info("No checkable claims were extracted from the supplied transcript.")
     for item in checked:
         speech_claim = item.get("speech_claim", {}) or {}
         verdict = map_pipeline_verdict(item.get("verified_verdict") or item.get("verdict") or "Unverified")
@@ -653,7 +663,7 @@ def render_speech_audit_page(
     developer_debug_enabled: bool,
 ) -> None:
     st.markdown("### Speech / Video Audit")
-    st.caption("Paste a transcript or long speech excerpt. Evidrai extracts checkable factual claims, verifies the selected claims, and highlights inaccurate or unsupported statements.")
+    st.caption("Two-stage flow: first extract and rank claims, then verify only the claims worth spending tokens on.")
 
     transcript = st.text_area(
         "Paste transcript or speech text",
@@ -667,21 +677,30 @@ def render_speech_audit_page(
         key="speech_source_url_input",
     )
     max_claims = st.slider(
-        "Maximum claims to verify",
+        "Claims to extract / verify by default",
         min_value=1,
         max_value=10,
-        value=5,
-        help="Start small: each claim runs through the Deep evidence pipeline.",
+        value=3,
+        help="Default is 3 to control token use. Extract first, then choose which claims to verify.",
     )
+    verification_mode = st.radio(
+        "Verification mode for selected claims",
+        ["Fast", "Deep"],
+        index=0,
+        horizontal=True,
+        help="Fast is the default token-saving pass. Use Deep only for claims that matter.",
+    )
+    st.caption(f"Token guardrail: extraction uses at most {SPEECH_AUDIT_MAX_TRANSCRIPT_CHARS:,} transcript characters.")
+
     with st.expander("Paste YouTube transcript helper", expanded=False):
         st.write("Copy the transcript from YouTube's transcript panel and paste it above. Evidrai will clean timestamp-only lines, duplicate caption fragments, and common noise before extracting claims.")
         if st.button("Clean pasted transcript", use_container_width=True):
             cleaned_preview = clean_pasted_youtube_transcript(st.session_state.get("speech_transcript_input", ""))
             st.session_state["speech_transcript_input"] = cleaned_preview
-            st.success("Transcript cleaned. Review it above, then run the audit.")
-    st.info("MVP note: if a YouTube URL has accessible captions, Evidrai will try to fetch them. If YouTube blocks access, paste the visible transcript manually.")
+            st.success("Transcript cleaned. Review it above, then extract claims.")
+    st.info("Step 1 extracts candidate claims only. Step 2 verifies selected claims. This avoids running Deep verification across an entire transcript by accident.")
 
-    if st.button("Audit speech / video", type="primary", use_container_width=True):
+    if st.button("1. Extract claims", type="primary", use_container_width=True):
         cleaned_transcript = (transcript or "").strip()
         cleaned_source_url = (source_url or "").strip()
         if cleaned_source_url and not is_probable_url(cleaned_source_url):
@@ -705,48 +724,133 @@ def render_speech_audit_page(
         if not llm.configured:
             st.error("OPENAI_API_KEY is not configured in your app secrets or environment.")
             return
-        if not search.configured:
-            st.error("Speech / Video Audit requires TAVILY_API_KEY because each extracted claim is evidence-checked.")
-            return
+        try:
+            started_at = time.time()
+            with st.spinner("Extracting and ranking checkable claims..."):
+                extraction = extract_speech_audit_claims(cleaned_transcript, cleaned_source_url, max_claims, llm)
+            extraction["claims_extracted"] = extraction.get("claims", [])
+            extraction["claims_checked"] = []
+            extraction["claims_checked_count"] = 0
+            extraction["claims_needing_attention_count"] = 0
+            extraction["elapsed_seconds"] = time.time() - started_at
+            extraction["settings"] = {
+                "result_mode": "speech_extraction",
+                "source_url": cleaned_source_url,
+                "max_claims": max_claims,
+                "build": get_app_build(),
+            }
+            st.session_state["speech_extraction"] = extraction
+            st.session_state["last_results"] = {"speech_result": extraction, "source_url": cleaned_source_url, "settings": extraction["settings"]}
+            st.success(f"Extracted {len(extraction.get('claims', []) or [])} checkable claim(s). Select claims below to verify.")
+        except EvidraiError as exc:
+            st.error(exc.message)
+            if developer_debug_enabled and exc.developer_detail:
+                st.caption(exc.developer_detail)
+        except Exception as exc:
+            st.error("Claim extraction failed. Enable Developer debug panel for details.")
+            if developer_debug_enabled:
+                st.exception(exc)
 
-        cache_key = stable_request_key("speech_audit", cleaned_transcript, cleaned_source_url, max_claims)
-        cache = st.session_state["evidrai_cache"]
-        if cache_key in cache:
-            st.session_state["last_results"] = cache[cache_key]
+    extraction = st.session_state.get("speech_extraction")
+    if extraction:
+        claims = extraction.get("claims", []) or []
+        st.markdown("### Extracted claims")
+        if extraction.get("transcript_truncated"):
+            st.warning(
+                f"Transcript was truncated to {extraction.get('transcript_chars_used', 0):,} of {extraction.get('transcript_chars_original', 0):,} characters to control token usage."
+            )
+        if not claims:
+            st.info("No checkable claims were extracted from the supplied transcript.")
         else:
-            try:
-                started_at = time.time()
-                status = st.status("Starting speech audit...", expanded=True)
-                with status:
-                    st.write("Extracting checkable factual claims...")
-                    st.write("Running Evidrai evidence checks claim by claim...")
-                audit_result = run_speech_audit(cleaned_transcript, cleaned_source_url, max_claims, llm, search)
-                audit_result["elapsed_seconds"] = time.time() - started_at
-                audit_result["result_id"] = f"speech_{cache_key}"
-                audit_result["settings"] = {
-                    "result_mode": "speech_audit",
-                    "source_url": cleaned_source_url,
-                    "max_claims": max_claims,
-                    "build": get_app_build(),
-                }
-                saved = {"speech_result": audit_result, "source_url": cleaned_source_url, "settings": audit_result["settings"]}
-                cache[cache_key] = saved
-                st.session_state["last_results"] = saved
-                status.update(label="Speech audit complete", state="complete", expanded=False)
-            except EvidraiError as exc:
-                st.error(exc.message)
-                if developer_debug_enabled and exc.developer_detail:
-                    st.caption(exc.developer_detail)
-            except requests.HTTPError as exc:
+            options = list(range(len(claims)))
+            labels = {
+                idx: f"{idx + 1}. {(claims[idx].get('priority') or 'medium').title()} · {(claims[idx].get('normalized_claim') or claims[idx].get('quote') or 'Claim')[:120]}"
+                for idx in options
+            }
+            selected_indexes = st.multiselect(
+                "Claims to verify",
+                options,
+                default=options[: min(max_claims, len(options))],
+                format_func=lambda idx: labels[idx],
+                key="speech_claims_to_verify",
+            )
+            for idx, claim in enumerate(claims, start=1):
+                with st.expander(f"{idx}. {(claim.get('normalized_claim') or claim.get('quote') or 'Claim')[:90]}", expanded=False):
+                    st.write(claim.get("normalized_claim") or claim.get("quote") or "")
+                    if claim.get("quote"):
+                        st.caption(f"Original quote: {claim['quote']}")
+                    st.caption(f"Priority: {claim.get('priority', 'medium')} · Checkability: {claim.get('checkability', 'checkable')}")
+                    if claim.get("why_it_matters"):
+                        st.write(claim["why_it_matters"])
+
+            if st.button("2. Verify selected claims", use_container_width=True):
+                cleaned_source_url = extraction.get("source_url") or (source_url or "").strip()
+                if not selected_indexes:
+                    st.error("Select at least one claim to verify.")
+                    return
+                if verification_mode == "Deep" and not search.configured:
+                    st.error("Deep verification requires TAVILY_API_KEY. Use Fast mode or configure Tavily.")
+                    return
                 try:
-                    detail = exc.response.text[:500]
-                except Exception:
-                    detail = str(exc)
-                st.error(f"API error: {detail}")
-            except Exception as exc:
-                st.error("Speech audit failed. Enable Developer debug panel for details.")
-                if developer_debug_enabled:
-                    st.exception(exc)
+                    started_at = time.time()
+                    checked_claims: List[Dict[str, Any]] = []
+                    mode = verification_mode.lower()
+                    status = st.status(f"Running {verification_mode} verification on {len(selected_indexes)} selected claim(s)...", expanded=True)
+                    with status:
+                        for audit_index, claim_index in enumerate(selected_indexes, start=1):
+                            claim = claims[claim_index]
+                            st.write(f"Checking claim {audit_index}/{len(selected_indexes)}...")
+                            result = verify_speech_claim(
+                                claim,
+                                index=audit_index,
+                                source_url=cleaned_source_url,
+                                mode=mode,
+                                llm=llm,
+                                search=search,
+                            )
+                            result["result_id"] = f"speech_{mode}_{stable_request_key(result.get('speech_claim', {}), cleaned_source_url, audit_index)}"
+                            result["settings"] = {
+                                "result_mode": f"speech_audit_{mode}",
+                                "source_url": cleaned_source_url,
+                                "max_claims": max_claims,
+                                "build": get_app_build(),
+                            }
+                            checked_claims.append(result)
+                    status.update(label="Selected claims verified", state="complete", expanded=False)
+                    audit_result = dict(extraction)
+                    audit_result["claims_extracted"] = extraction.get("claims", [])
+                    audit_result.update(
+                        {
+                            "schema_version": "speech_audit.v1",
+                            "claims_checked": checked_claims,
+                            "claims_checked_count": len(checked_claims),
+                            "claims_needing_attention_count": sum(
+                                1
+                                for item in checked_claims
+                                if map_pipeline_verdict(item.get("verified_verdict") or item.get("verdict") or "")
+                                in {"False / contradicted", "Not supported by credible evidence", "Weakly supported / likely incorrect", "Misleading framing"}
+                            ),
+                            "verification_mode": mode,
+                            "elapsed_seconds": time.time() - started_at,
+                            "result_id": f"speech_{mode}_{stable_request_key(extraction.get('title', ''), cleaned_source_url, selected_indexes)}",
+                            "settings": {
+                                "result_mode": f"speech_audit_{mode}",
+                                "source_url": cleaned_source_url,
+                                "max_claims": max_claims,
+                                "selected_claim_count": len(selected_indexes),
+                                "build": get_app_build(),
+                            },
+                        }
+                    )
+                    st.session_state["last_results"] = {"speech_result": audit_result, "source_url": cleaned_source_url, "settings": audit_result["settings"]}
+                except EvidraiError as exc:
+                    st.error(exc.message)
+                    if developer_debug_enabled and exc.developer_detail:
+                        st.caption(exc.developer_detail)
+                except Exception as exc:
+                    st.error("Selected-claim verification failed. Enable Developer debug panel for details.")
+                    if developer_debug_enabled:
+                        st.exception(exc)
 
     saved = st.session_state.get("last_results")
     if saved and saved.get("speech_result"):
@@ -759,7 +863,6 @@ def render_speech_audit_page(
 
     if developer_debug_enabled:
         render_developer_debug_panel(saved, {"app_mode": "speech_audit"}, llm, search)
-
 
 
 def render_pipeline_trace(trace: Dict[str, Any]) -> None:

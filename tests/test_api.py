@@ -46,6 +46,34 @@ def test_speech_audit_rejects_invalid_source_url():
     assert "source_url" in response.json()["detail"]
 
 
+def test_speech_audit_defaults_to_fast_without_tavily(monkeypatch):
+    class FakeLLM:
+        configured = True
+
+    class FakeSearch:
+        configured = False
+
+    monkeypatch.setattr(api_main, "_clients", lambda: (FakeLLM(), FakeSearch()))
+    monkeypatch.setattr(
+        api_main,
+        "run_speech_audit",
+        lambda transcript, source_url, max_claims, llm, search, verification_mode="fast": {
+            "schema_version": "speech_audit.v1",
+            "claims_checked": [],
+            "claims_checked_count": 0,
+            "claims_needing_attention_count": 0,
+            "verification_mode": verification_mode,
+        },
+    )
+
+    response = client.post("/speech/audit", json={"transcript": "some speech"})
+
+    assert response.status_code == 200
+    payload = response.json()["result"]
+    assert payload["verification_mode"] == "fast"
+    assert payload["settings"]["max_claims"] == 3
+
+
 def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     def fake_run_claim_assessment(*, claim, source_url, category, mode):
         return {

@@ -9,7 +9,56 @@ from evidrai.models import (
     VerificationResult,
     PipelineResultModel,
 )
-from evidrai.pipeline.verification import parse_claim_analysis
+from evidrai.pipeline.verification import parse_claim_analysis, run_speech_audit, truncate_speech_transcript
+
+
+def test_truncate_speech_transcript_limits_extraction_budget():
+    text = "x" * 13000
+
+    truncated, was_truncated = truncate_speech_transcript(text, max_chars=12000)
+
+    assert was_truncated is True
+    assert len(truncated) == 12000
+
+
+def test_run_speech_audit_defaults_to_fast_verification(monkeypatch):
+    class FakeLLM:
+        configured = True
+
+        def complete_json(self, messages, temperature=0.1):
+            return {
+                "title": "Speech",
+                "speaker": "Speaker",
+                "summary": "Summary",
+                "claims": [
+                    {
+                        "quote": "A quote",
+                        "normalized_claim": "A checkable claim",
+                        "priority": "high",
+                        "checkability": "checkable",
+                    }
+                ],
+                "skipped_rhetoric": [],
+                "extraction_notes": [],
+            }
+
+    class FakeSearch:
+        configured = False
+
+    calls = []
+
+    def fake_run_quick_pass(user_input, category, llm, search):
+        calls.append(user_input)
+        return {"verdict": "Unverified", "confidence": "Low", "tldr": "Fast result"}
+
+    monkeypatch.setattr("evidrai.pipeline.verification.run_quick_pass", fake_run_quick_pass)
+
+    result = run_speech_audit("transcript", "", 3, FakeLLM(), FakeSearch())
+
+    assert result["verification_mode"] == "fast"
+    assert result["claims_checked_count"] == 1
+    assert result["claims_checked"][0]["verification_mode"] == "fast"
+    assert calls == ["A checkable claim\n\nOriginal quote: A quote"]
 
 
 def test_parse_claim_analysis_returns_typed_result_with_fallback_subclaim():

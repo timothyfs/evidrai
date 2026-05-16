@@ -99,6 +99,12 @@ Date: 2026-05-10
 - Area: Ingestion
 - Description: Add a separate ingestion layer for article/page URLs instead of relying on pasted claims plus optional URL context.
 
+### Reduce speech/video audit token usage
+- Status: Done
+- Priority: High
+- Area: Product / Cost control
+- Description: Convert speech/video audit into a two-stage workflow: extract and rank claims first, verify selected claims second, default to three claims, use Fast verification by default, and cap transcript characters for extraction.
+
 ### Support multiple search providers
 - Status: Backlog
 - Priority: Medium

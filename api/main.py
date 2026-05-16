@@ -50,7 +50,8 @@ class AssessmentCreateRequest(BaseModel):
 class SpeechAuditRequest(BaseModel):
     transcript: str = ""
     source_url: str = ""
-    max_claims: int = Field(default=5, ge=1, le=10)
+    max_claims: int = Field(default=3, ge=1, le=10)
+    verification_mode: str = Field(default="fast", pattern="^(fast|deep)$")
     try_youtube_captions: bool = True
 
 
@@ -234,14 +235,15 @@ def speech_audit(request: SpeechAuditRequest) -> ApiEnvelope:
     llm, search = _clients()
     if not llm.configured:
         raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "OPENAI_API_KEY is not configured"})
-    if not search.configured:
-        raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "TAVILY_API_KEY is required for speech audit"})
+    if request.verification_mode == "deep" and not search.configured:
+        raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "TAVILY_API_KEY is required for deep speech audit"})
 
-    result = run_speech_audit(transcript, source_url, request.max_claims, llm, search)
+    result = run_speech_audit(transcript, source_url, request.max_claims, llm, search, verification_mode=request.verification_mode)
     result["settings"] = {
         "result_mode": "speech_audit",
         "source_url": source_url,
         "max_claims": request.max_claims,
+        "verification_mode": request.verification_mode,
         "build": get_app_build(),
     }
     return ApiEnvelope(ok=True, build=get_app_build(), result=result)
