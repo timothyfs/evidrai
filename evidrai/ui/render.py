@@ -9,7 +9,7 @@ import streamlit as st
 
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import get_app_build
+from evidrai.config import config_presence_diagnostics, get_app_build
 from evidrai.errors import EvidraiError
 from evidrai.api_models import AssessmentResponse, serialize_assessment_response
 from evidrai.export import assessment_export_json
@@ -1032,6 +1032,11 @@ def main() -> None:
         st.caption(f"Storage: {storage_label}")
         st.caption(f"OpenAI: {'configured' if llm.configured else 'missing'} • Model: {llm.model} • Base URL: {llm.base_url}")
         st.caption(f"Tavily: {'configured' if search.configured else 'missing'}")
+        if developer_debug_enabled:
+            diagnostics = config_presence_diagnostics()
+            st.caption(f"DB secret detected: {'yes' if diagnostics.get('database_url_configured') else 'no'}")
+            st.caption(f"DB secret path(s): {', '.join(diagnostics.get('database_secret_paths_configured') or []) or 'none'}")
+            st.caption(f"Available secret key names: {', '.join(diagnostics.get('streamlit_secret_keys') or []) or 'none'}")
 
     render_saved_assessment_history()
     loaded_report = st.session_state.get("loaded_report")

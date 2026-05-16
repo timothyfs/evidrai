@@ -62,11 +62,51 @@ def _local_git_commit() -> Optional[str]:
 SCORING_CONFIG = ScoringConfig()
 
 
+DATABASE_URL_SECRET_PATHS = (
+    ("database", "url"),
+    ("postgres", "url"),
+    ("supabase", "database_url"),
+    ("supabase", "db_url"),
+    ("DATABASE_URL",),
+    ("database_url",),
+    ("POSTGRES_URL",),
+    ("SUPABASE_DATABASE_URL",),
+)
+DATABASE_URL_ENV_NAMES = ("DATABASE_URL", "POSTGRES_URL", "SUPABASE_DATABASE_URL")
+
+
 def database_url() -> Optional[str]:
-    return read_config_value(
-        secret_paths=(("database", "url"), ("DATABASE_URL",)),
-        env_names=("DATABASE_URL",),
+    value = read_config_value(
+        secret_paths=DATABASE_URL_SECRET_PATHS,
+        env_names=DATABASE_URL_ENV_NAMES,
     )
+    if value and value.startswith("postgres://"):
+        value = "postgresql://" + value[len("postgres://") :]
+    return value
+
+
+def config_presence_diagnostics() -> dict[str, Any]:
+    """Return non-secret config diagnostics for UI troubleshooting."""
+    secret_keys: list[str] = []
+    try:
+        secrets = getattr(st, "secrets", {})
+        if hasattr(secrets, "keys"):
+            secret_keys = sorted(str(key) for key in secrets.keys())
+    except Exception:
+        secret_keys = []
+
+    configured_paths = []
+    for path in DATABASE_URL_SECRET_PATHS:
+        if _clean_secret(_lookup_secret(path)):
+            configured_paths.append(".".join(path))
+
+    configured_env = [name for name in DATABASE_URL_ENV_NAMES if _clean_secret(os.getenv(name))]
+    return {
+        "database_url_configured": bool(database_url()),
+        "database_secret_paths_configured": configured_paths,
+        "database_env_names_configured": configured_env,
+        "streamlit_secret_keys": secret_keys,
+    }
 
 
 def _lookup_secret(path: Sequence[str]) -> Optional[Any]:
