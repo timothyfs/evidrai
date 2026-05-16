@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Protocol
 from uuid import uuid4
 
 import requests
@@ -23,6 +23,27 @@ class FeedbackResult:
     destination: str
     message: str
     feedback_id: str
+
+
+class FeedbackStore(Protocol):
+    """Persistence boundary for assessment feedback."""
+
+    def save(self, record: Dict[str, Any]) -> FeedbackResult:
+        ...
+
+    def list_by_assessment(self, assessment_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        ...
+
+
+class LocalFeedbackStore:
+    def __init__(self, path: Optional[Path] = None) -> None:
+        self.path = path or feedback_log_path()
+
+    def save(self, record: Dict[str, Any]) -> FeedbackResult:
+        return _save_feedback_record(record, path=self.path)
+
+    def list_by_assessment(self, assessment_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        return list_feedback_by_assessment_id(assessment_id, limit=limit, path=self.path)
 
 
 def feedback_log_path() -> Path:
@@ -203,10 +224,34 @@ def create_notion_feedback_page(record: Dict[str, Any]) -> Optional[str]:
     return response.json().get("url")
 
 
-def save_feedback(record: Dict[str, Any]) -> FeedbackResult:
+def list_feedback_by_assessment_id(assessment_id: str, limit: int = 100, path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    target = path or feedback_log_path()
+    if not target.is_absolute():
+        target = Path.cwd() / target
+    if not target.exists():
+        return []
+
+    matches: List[Dict[str, Any]] = []
+    with target.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if record.get("assessment_id") == assessment_id:
+                matches.append(record)
+    matches.sort(key=lambda item: item.get("captured_at", ""), reverse=True)
+    return matches[:limit]
+
+
+def get_feedback_store() -> FeedbackStore:
+    return LocalFeedbackStore()
+
+
+def _save_feedback_record(record: Dict[str, Any], path: Optional[Path] = None) -> FeedbackResult:
     feedback_id = record.get("feedback_id") or str(uuid4())
     record["feedback_id"] = feedback_id
-    log_path = append_feedback_jsonl(record)
+    log_path = append_feedback_jsonl(record, path=path)
 
     notion_url = None
     try:
@@ -232,3 +277,18 @@ def save_feedback(record: Dict[str, Any]) -> FeedbackResult:
         message=f"Saved to feedback log: {log_path}",
         feedback_id=feedback_id,
     )
+
+
+def save_feedback(record: Dict[str, Any], store: Optional[FeedbackStore] = None) -> FeedbackResult:
+    return (store or get_feedback_store()).save(record)
+
+
+def list_feedback_for_assessment(
+    assessment_id: str,
+    limit: int = 100,
+    store: Optional[FeedbackStore] = None,
+    path: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    if path is not None:
+        return LocalFeedbackStore(path).list_by_assessment(assessment_id, limit=limit)
+    return (store or get_feedback_store()).list_by_assessment(assessment_id, limit=limit)

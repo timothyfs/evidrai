@@ -1,6 +1,6 @@
 import json
 
-from evidrai.feedback import append_feedback_jsonl, build_feedback_record, build_notion_feedback_children, build_notion_feedback_payload
+from evidrai.feedback import LocalFeedbackStore, append_feedback_jsonl, build_feedback_record, build_notion_feedback_children, build_notion_feedback_payload, list_feedback_for_assessment
 
 
 def test_build_feedback_record_contains_result_context():
@@ -51,6 +51,58 @@ def test_append_feedback_jsonl_writes_one_json_record(tmp_path):
     payload = json.loads(lines[0])
     assert payload["feedback_id"] == record["feedback_id"]
     assert payload["rating"] == "Useful"
+
+
+def test_list_feedback_for_assessment_filters_and_sorts(tmp_path):
+    path = tmp_path / "feedback.jsonl"
+    older = build_feedback_record(
+        result_key="old",
+        rating="Useful",
+        reasons=[],
+        comment="older",
+        result={"assessment_id": "assess_1", "claim": "Claim 1"},
+    )
+    newer = build_feedback_record(
+        result_key="new",
+        rating="Useful",
+        reasons=[],
+        comment="newer",
+        result={"assessment_id": "assess_1", "claim": "Claim 1"},
+    )
+    other = build_feedback_record(
+        result_key="other",
+        rating="Useful",
+        reasons=[],
+        comment="other",
+        result={"assessment_id": "assess_2", "claim": "Claim 2"},
+    )
+    older["captured_at"] = "2026-01-01T00:00:00+00:00"
+    newer["captured_at"] = "2026-01-02T00:00:00+00:00"
+    append_feedback_jsonl(older, path)
+    append_feedback_jsonl(other, path)
+    append_feedback_jsonl(newer, path)
+    path.write_text(path.read_text(encoding="utf-8") + "not-json\n", encoding="utf-8")
+
+    results = list_feedback_for_assessment("assess_1", path=path)
+
+    assert [item["comment"] for item in results] == ["newer", "older"]
+
+
+def test_local_feedback_store_can_be_injected(tmp_path, monkeypatch):
+    monkeypatch.setattr("evidrai.feedback.create_notion_feedback_page", lambda record: None)
+    store = LocalFeedbackStore(tmp_path / "feedback.jsonl")
+    record = build_feedback_record(
+        result_key="key",
+        rating="Useful",
+        reasons=[],
+        comment="stored",
+        result={"assessment_id": "assess_store", "claim": "Claim"},
+    )
+
+    save_result = store.save(record)
+
+    assert save_result.ok is True
+    assert store.list_by_assessment("assess_store")[0]["comment"] == "stored"
 
 
 def test_notion_feedback_payload_initializes_review_workflow_fields():

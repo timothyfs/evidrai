@@ -94,6 +94,15 @@ GET /assessment-jobs/{job_id}
 GET /assessments/{assessment_id}
 ```
 
+### List reports
+
+```http
+GET /reports
+GET /reports/{report_id}
+```
+
+`GET /reports` returns recent persisted report summaries. `GET /reports/{report_id}` returns the full `AssessmentResponse`.
+
 ### Submit feedback
 
 ```http
@@ -104,11 +113,9 @@ Request:
 
 ```json
 {
-  "rating": "partly_useful",
-  "reasons": ["verdict_clarity", "too_cautious"],
-  "comment": "The factual claim seems supported but the app calls it unverified.",
-  "expected_verdict": "Likely supported",
-  "expected_confidence": "Medium"
+  "rating": "Partly useful",
+  "reasons": ["Verdict clarity", "Too cautious"],
+  "comment": "The factual claim seems supported but the app calls it unverified."
 }
 ```
 
@@ -118,7 +125,26 @@ Response:
 {
   "ok": true,
   "feedback_id": "uuid",
-  "review_status": "pending"
+  "assessment_id": "uuid",
+  "destination": "local_jsonl",
+  "message": "Saved to feedback log: .evidrai_feedback/feedback.jsonl"
+}
+```
+
+### Retrieve feedback for an assessment
+
+```http
+GET /assessments/{assessment_id}/feedback
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "assessment_id": "uuid",
+  "feedback_count": 1,
+  "feedback": []
 }
 ```
 
@@ -278,11 +304,12 @@ Allowed `assessment`:
 
 ## Implementation sequence
 
-1. Add Pydantic models matching this contract inside `evidrai/api_models.py`.
-2. Add serializer from current `VerificationResult.to_dict()` into `AssessmentResponse`.
-3. Add FastAPI skeleton under `api/` or `services/api/`.
-4. Keep Streamlit rendering from the same serialized response.
-5. Add fixture tests for response schema stability.
+1. Add Pydantic models matching this contract inside `evidrai/api_models.py`. — Done
+2. Add serializer from current `VerificationResult.to_dict()` into `AssessmentResponse`. — Done
+3. Add FastAPI skeleton under `api/` or `services/api/`. — Done
+4. Keep Streamlit rendering from the same serialized response. — In progress
+5. Add fixture tests for response schema stability. — In progress
+6. Move report and feedback persistence behind `ReportStore` / `FeedbackStore` interfaces. — Done for local JSON implementations
 
 ---
 

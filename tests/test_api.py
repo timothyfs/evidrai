@@ -135,6 +135,13 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     assert feedback_payload["assessment_id"] == payload["assessment_id"]
     assert feedback_payload["feedback_id"]
 
+    feedback_list_response = client.get(f"/assessments/{payload['assessment_id']}/feedback")
+    assert feedback_list_response.status_code == 200
+    feedback_list_payload = feedback_list_response.json()
+    assert feedback_list_payload["assessment_id"] == payload["assessment_id"]
+    assert feedback_list_payload["feedback_count"] == 1
+    assert feedback_list_payload["feedback"][0]["comment"] == "Good enough"
+
 
 def test_claim_check_embeds_assessment_contract(monkeypatch):
     def fake_run_claim_assessment(*, claim, source_url, category, mode):

@@ -11,7 +11,7 @@ from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import get_app_build
 from evidrai.errors import EvidraiError, safe_error_payload
-from evidrai.feedback import build_feedback_record, save_feedback
+from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, save_feedback
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
 from evidrai.reports import list_reports, load_report, save_report
@@ -164,6 +164,18 @@ def create_assessment_feedback(assessment_id: str, request: FeedbackCreateReques
         "assessment_id": assessment.assessment_id,
         "destination": saved.destination,
         "message": saved.message,
+    }
+
+
+@app.get("/assessments/{assessment_id}/feedback", response_model=Dict[str, Any])
+def get_assessment_feedback(assessment_id: str, limit: int = 100) -> Dict[str, Any]:
+    assessment = load_report(assessment_id)
+    feedback = list_feedback_for_assessment(assessment.assessment_id, limit=limit)
+    return {
+        "ok": True,
+        "assessment_id": assessment.assessment_id,
+        "feedback_count": len(feedback),
+        "feedback": feedback,
     }
 
 
