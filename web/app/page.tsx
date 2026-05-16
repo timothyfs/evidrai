@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { API_BASE_URL, AssessmentResponse, ReportSummary, RuntimeStatus, createAssessment, getReport, getRuntime } from '../lib/api';
+import { API_BASE_URL, AssessmentResponse, FeedbackRating, ReportSummary, RuntimeStatus, createAssessment, getReport, getRuntime, submitFeedback } from '../lib/api';
 
 const verdictClass: Record<string, string> = {
   Supported: 'good',
@@ -40,6 +40,80 @@ function SourceList({ assessment }: { assessment: AssessmentResponse }) {
         </article>
       ))}
     </div>
+  );
+}
+
+const feedbackReasons = [
+  'Verdict clarity',
+  'Confidence explanation',
+  'Source quality',
+  'Missing source',
+  'Too much detail',
+  'Not enough detail',
+  'Visual presentation',
+  'Other',
+];
+
+function FeedbackControls({ assessment }: { assessment: AssessmentResponse }) {
+  const [rating, setRating] = useState<FeedbackRating>('Useful');
+  const [reasons, setReasons] = useState<string[]>([]);
+  const [comment, setComment] = useState('');
+  const [status, setStatus] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  function toggleReason(reason: string) {
+    setReasons((current) => current.includes(reason) ? current.filter((item) => item !== reason) : [...current, reason]);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    setStatus('');
+    try {
+      const response = await submitFeedback({ assessment_id: assessment.assessment_id, rating, reasons, comment });
+      setStatus(response.ok ? `Feedback saved. Thank you. ID: ${response.feedback_id}` : 'Feedback submitted, but response was unexpected.');
+      setComment('');
+      setReasons([]);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Could not save feedback.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="feedbackBox">
+      <h3>Was this useful?</h3>
+      <p className="muted">Your feedback is linked to this exact assessment and helps improve verdict quality.</p>
+      <form onSubmit={submit}>
+        <div className="segmented" role="radiogroup" aria-label="Feedback rating">
+          {(['Useful', 'Partly useful', 'Not useful'] as FeedbackRating[]).map((item) => (
+            <button
+              className={rating === item ? 'active' : ''}
+              key={item}
+              onClick={() => setRating(item)}
+              type="button"
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+        <div className="reasonGrid">
+          {feedbackReasons.map((reason) => (
+            <label className="checkPill" key={reason}>
+              <input checked={reasons.includes(reason)} onChange={() => toggleReason(reason)} type="checkbox" />
+              {reason}
+            </label>
+          ))}
+        </div>
+        <label>
+          Optional comment
+          <textarea className="commentBox" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="What was useful, confusing, missing, or wrong?" />
+        </label>
+        <button disabled={submitting} type="submit">{submitting ? 'Saving…' : 'Send feedback'}</button>
+      </form>
+      {status && <p className={status.startsWith('Could not') ? 'error' : 'success'}>{status}</p>}
+    </section>
   );
 }
 
@@ -86,6 +160,8 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
         <summary>Evidence sources</summary>
         <SourceList assessment={assessment} />
       </details>
+
+      <FeedbackControls assessment={assessment} />
     </section>
   );
 }

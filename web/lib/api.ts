@@ -63,6 +63,16 @@ export type RuntimeStatus = {
   storage_backend: string;
 };
 
+export type FeedbackRating = 'Useful' | 'Partly useful' | 'Not useful';
+
+export type FeedbackResponse = {
+  ok: boolean;
+  feedback_id: string;
+  assessment_id: string;
+  destination: string;
+  message: string;
+};
+
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://evidrai.onrender.com').replace(/\/$/, '');
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -111,4 +121,20 @@ export async function listReports(): Promise<ReportSummary[]> {
 
 export function getReport(id: string): Promise<AssessmentResponse> {
   return request<AssessmentResponse>(`/reports/${encodeURIComponent(id)}`);
+}
+
+export function submitFeedback(input: {
+  assessment_id: string;
+  rating: FeedbackRating;
+  reasons: string[];
+  comment: string;
+}): Promise<FeedbackResponse> {
+  return request<FeedbackResponse>(`/assessments/${encodeURIComponent(input.assessment_id)}/feedback`, {
+    method: 'POST',
+    body: JSON.stringify({
+      rating: input.rating,
+      reasons: input.reasons,
+      comment: input.comment,
+    }),
+  });
 }

@@ -35,6 +35,7 @@ The variable is public because it is used by the browser frontend. Do not put se
 - evidence source list
 - current-browser report history using localStorage
 - load report by ID
+- assessment feedback controls linked to the backend feedback API
 
 ## Deployment
 
@@ -44,7 +45,6 @@ See `../docs/frontend-deployment.md`.
 
 ## Next frontend slices
 
-- feedback controls
 - shareable report route `/reports/[id]`
 - speech/video audit UI
 - better loading/error states

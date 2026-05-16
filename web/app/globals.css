@@ -153,7 +153,48 @@ summary { cursor: pointer; font-weight: 900; }
 .sourceTitle { display: block; color: var(--ink); font-weight: 900; margin: 6px 0; text-decoration: none; }
 .sourceTitle:hover { text-decoration: underline; }
 .source p { color: var(--muted); line-height: 1.5; margin-bottom: 0; }
+.feedbackBox {
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+  padding-top: 20px;
+}
+.feedbackBox h3 { margin: 0 0 6px; }
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.segmented button {
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+  padding: 10px 14px;
+}
+.segmented button.active {
+  background: var(--accent);
+  color: white;
+}
+.reasonGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.checkPill {
+  align-items: center;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  display: flex;
+  flex-direction: row;
+  font-size: 0.9rem;
+  gap: 8px;
+  padding: 9px 12px;
+}
+.checkPill input { width: auto; }
+.commentBox { min-height: 96px; }
 .error { color: var(--bad); font-weight: 800; }
+.success { color: var(--good); font-weight: 800; }
 
 @media (max-width: 880px) {
   .hero, .layout, .sourceGrid { grid-template-columns: 1fr; }
