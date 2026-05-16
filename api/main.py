@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from evidrai.api_models import AssessmentResponse, serialize_assessment_response
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import get_app_build
+from evidrai.config import database_url, get_app_build
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, save_feedback
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
@@ -187,6 +187,7 @@ def health() -> Dict[str, Any]:
         "build": get_app_build(),
         "openai_configured": llm.configured,
         "tavily_configured": search.configured,
+        "storage_backend": "postgres" if database_url() else "local_json",
     }
 
 

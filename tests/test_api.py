@@ -16,6 +16,7 @@ def test_health_endpoint_returns_build_and_config_flags():
     assert "build" in payload
     assert "openai_configured" in payload
     assert "tavily_configured" in payload
+    assert "storage_backend" in payload
 
 
 def test_claim_check_requires_input():

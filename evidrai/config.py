@@ -62,6 +62,13 @@ def _local_git_commit() -> Optional[str]:
 SCORING_CONFIG = ScoringConfig()
 
 
+def database_url() -> Optional[str]:
+    return read_config_value(
+        secret_paths=(("database", "url"), ("DATABASE_URL",)),
+        env_names=("DATABASE_URL",),
+    )
+
+
 def _lookup_secret(path: Sequence[str]) -> Optional[Any]:
     """Read from Streamlit secrets without assuming a specific secrets.toml shape."""
     try:

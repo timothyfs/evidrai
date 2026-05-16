@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Protocol
 
 from evidrai.api_models import AssessmentResponse
+from evidrai.config import database_url
 from evidrai.errors import EvidraiError
 
 
@@ -17,6 +18,15 @@ class ReportNotFoundError(EvidraiError):
 class ReportStoreError(EvidraiError):
     def __init__(self, message: str, *, developer_detail: str = "") -> None:
         super().__init__(message, code="report_store_error", status_code=500, developer_detail=developer_detail)
+
+
+def _psycopg():
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+    except Exception as exc:
+        raise ReportStoreError("Postgres support requires psycopg.", developer_detail=str(exc))
+    return psycopg, dict_row
 
 
 class ReportStore(Protocol):
@@ -88,6 +98,119 @@ class LocalReportStore:
         return items
 
 
+class PostgresReportStore:
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self._schema_ready = False
+
+    def _connect(self):
+        psycopg, dict_row = _psycopg()
+        return psycopg.connect(self.url, row_factory=dict_row)
+
+    def _ensure_schema(self) -> None:
+        if self._schema_ready:
+            return
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS assessments (
+                            assessment_id TEXT PRIMARY KEY,
+                            created_at TIMESTAMPTZ,
+                            mode TEXT,
+                            claim TEXT,
+                            source_url TEXT,
+                            verdict TEXT,
+                            confidence TEXT,
+                            payload JSONB NOT NULL,
+                            updated_at TIMESTAMPTZ DEFAULT now()
+                        )
+                        """
+                    )
+                    cur.execute("CREATE INDEX IF NOT EXISTS assessments_created_at_idx ON assessments (created_at DESC)")
+                conn.commit()
+            self._schema_ready = True
+        except Exception as exc:
+            raise ReportStoreError("Could not initialise report store.", developer_detail=str(exc))
+
+    def save(self, assessment: AssessmentResponse) -> AssessmentResponse:
+        self._ensure_schema()
+        payload = assessment.model_dump(mode="json")
+        request = payload.get("request") or {}
+        verdict = payload.get("verdict") or {}
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO assessments (
+                            assessment_id, created_at, mode, claim, source_url, verdict, confidence, payload, updated_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, now())
+                        ON CONFLICT (assessment_id) DO UPDATE SET
+                            created_at = EXCLUDED.created_at,
+                            mode = EXCLUDED.mode,
+                            claim = EXCLUDED.claim,
+                            source_url = EXCLUDED.source_url,
+                            verdict = EXCLUDED.verdict,
+                            confidence = EXCLUDED.confidence,
+                            payload = EXCLUDED.payload,
+                            updated_at = now()
+                        """,
+                        (
+                            assessment.assessment_id,
+                            payload.get("created_at"),
+                            payload.get("mode"),
+                            request.get("claim"),
+                            request.get("source_url"),
+                            verdict.get("label"),
+                            verdict.get("confidence"),
+                            json.dumps(payload),
+                        ),
+                    )
+                conn.commit()
+            return assessment
+        except Exception as exc:
+            raise ReportStoreError("Could not save report.", developer_detail=str(exc))
+
+    def load(self, report_id: str) -> AssessmentResponse:
+        self._ensure_schema()
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT payload FROM assessments WHERE assessment_id = %s", (report_id,))
+                    row = cur.fetchone()
+            if not row:
+                raise ReportNotFoundError(report_id)
+            payload = row["payload"]
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            return AssessmentResponse.model_validate(payload)
+        except EvidraiError:
+            raise
+        except Exception as exc:
+            raise ReportStoreError("Could not load report.", developer_detail=str(exc))
+
+    def list(self, limit: int = 50) -> List[Dict[str, Any]]:
+        self._ensure_schema()
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT assessment_id, created_at, mode, claim, verdict
+                        FROM assessments
+                        ORDER BY created_at DESC NULLS LAST, updated_at DESC
+                        LIMIT %s
+                        """,
+                        (limit,),
+                    )
+                    rows = cur.fetchall()
+            return [dict(row) for row in rows]
+        except Exception as exc:
+            raise ReportStoreError("Could not list reports.", developer_detail=str(exc))
+
+
 def report_store_dir() -> Path:
     configured = os.getenv("EVIDRAI_REPORT_STORE")
     return Path(configured) if configured else Path(".evidrai/reports")
@@ -98,6 +221,9 @@ def report_path(report_id: str) -> Path:
 
 
 def get_report_store() -> ReportStore:
+    url = database_url()
+    if url:
+        return PostgresReportStore(url)
     return LocalReportStore()
 
 

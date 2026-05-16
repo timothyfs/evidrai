@@ -1,5 +1,5 @@
 from evidrai.api_models import AssessmentRequestRecord, AssessmentResponse, AssessmentVerdict
-from evidrai.reports import LocalReportStore, list_reports, load_report, save_report
+from evidrai.reports import LocalReportStore, PostgresReportStore, get_report_store, list_reports, load_report, save_report
 
 
 def test_save_load_and_list_report(tmp_path, monkeypatch):
@@ -19,6 +19,14 @@ def test_save_load_and_list_report(tmp_path, monkeypatch):
     assert loaded.request.claim == "A test claim"
     assert reports[0]["assessment_id"] == assessment.assessment_id
     assert reports[0]["verdict"] == "Supported"
+
+
+def test_get_report_store_uses_postgres_when_database_url_is_configured(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@example.com/db")
+
+    store = get_report_store()
+
+    assert isinstance(store, PostgresReportStore)
 
 
 def test_local_report_store_can_be_injected(tmp_path):

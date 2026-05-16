@@ -310,6 +310,7 @@ Allowed `assessment`:
 4. Keep Streamlit rendering from the same serialized response. — In progress
 5. Add fixture tests for response schema stability. — In progress
 6. Move report and feedback persistence behind `ReportStore` / `FeedbackStore` interfaces. — Done for local JSON implementations
+7. Add optional Postgres-backed `ReportStore` / `FeedbackStore` selected by `DATABASE_URL`. — Done
 
 ---
 

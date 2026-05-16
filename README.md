@@ -174,6 +174,14 @@ Initial API endpoints:
 
 API docs are available locally at `http://127.0.0.1:8000/docs` when Uvicorn is running.
 
+## Storage backend
+
+Evidrai uses local JSON persistence by default. If `DATABASE_URL` is configured, it switches to Postgres-backed assessment and feedback stores.
+
+Recommended prototype backend: Supabase Postgres with `sslmode=require`.
+
+See `docs/supabase-postgres-setup.md`.
+
 ## Validation commands
 
 Run the API-key-free rule-engine tests:

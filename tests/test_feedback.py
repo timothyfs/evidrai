@@ -1,6 +1,6 @@
 import json
 
-from evidrai.feedback import LocalFeedbackStore, append_feedback_jsonl, build_feedback_record, build_notion_feedback_children, build_notion_feedback_payload, list_feedback_for_assessment
+from evidrai.feedback import LocalFeedbackStore, PostgresFeedbackStore, append_feedback_jsonl, build_feedback_record, build_notion_feedback_children, build_notion_feedback_payload, get_feedback_store, list_feedback_for_assessment
 
 
 def test_build_feedback_record_contains_result_context():
@@ -51,6 +51,14 @@ def test_append_feedback_jsonl_writes_one_json_record(tmp_path):
     payload = json.loads(lines[0])
     assert payload["feedback_id"] == record["feedback_id"]
     assert payload["rating"] == "Useful"
+
+
+def test_get_feedback_store_uses_postgres_when_database_url_is_configured(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@example.com/db")
+
+    store = get_feedback_store()
+
+    assert isinstance(store, PostgresFeedbackStore)
 
 
 def test_list_feedback_for_assessment_filters_and_sorts(tmp_path):

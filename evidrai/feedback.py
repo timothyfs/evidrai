@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,7 +9,7 @@ from uuid import uuid4
 
 import requests
 
-from evidrai.config import get_app_build, read_config_value, http_error_detail
+from evidrai.config import database_url, get_app_build, read_config_value, http_error_detail
 
 
 NOTION_VERSION = "2025-09-03"
@@ -25,6 +24,15 @@ class FeedbackResult:
     feedback_id: str
 
 
+def _psycopg():
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+    except Exception as exc:
+        raise RuntimeError(f"Postgres support requires psycopg: {exc}")
+    return psycopg, dict_row
+
+
 class FeedbackStore(Protocol):
     """Persistence boundary for assessment feedback."""
 
@@ -33,6 +41,96 @@ class FeedbackStore(Protocol):
 
     def list_by_assessment(self, assessment_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         ...
+
+
+class PostgresFeedbackStore:
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self._schema_ready = False
+
+    def _connect(self):
+        psycopg, dict_row = _psycopg()
+        return psycopg.connect(self.url, row_factory=dict_row)
+
+    def _ensure_schema(self) -> None:
+        if self._schema_ready:
+            return
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS feedback (
+                        feedback_id TEXT PRIMARY KEY,
+                        assessment_id TEXT,
+                        captured_at TIMESTAMPTZ,
+                        rating TEXT,
+                        payload JSONB NOT NULL
+                    )
+                    """
+                )
+                cur.execute("CREATE INDEX IF NOT EXISTS feedback_assessment_id_idx ON feedback (assessment_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS feedback_captured_at_idx ON feedback (captured_at DESC)")
+            conn.commit()
+        self._schema_ready = True
+
+    def save(self, record: Dict[str, Any]) -> FeedbackResult:
+        self._ensure_schema()
+        feedback_id = record.get("feedback_id") or str(uuid4())
+        record["feedback_id"] = feedback_id
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO feedback (feedback_id, assessment_id, captured_at, rating, payload)
+                    VALUES (%s, %s, %s, %s, %s::jsonb)
+                    ON CONFLICT (feedback_id) DO UPDATE SET
+                        assessment_id = EXCLUDED.assessment_id,
+                        captured_at = EXCLUDED.captured_at,
+                        rating = EXCLUDED.rating,
+                        payload = EXCLUDED.payload
+                    """,
+                    (
+                        feedback_id,
+                        record.get("assessment_id"),
+                        record.get("captured_at"),
+                        record.get("rating"),
+                        json.dumps(record),
+                    ),
+                )
+            conn.commit()
+
+        notion_url = None
+        try:
+            notion_url = create_notion_feedback_page(record)
+        except Exception as exc:
+            return FeedbackResult(ok=True, destination="postgres", message=f"Saved to Postgres. Notion logging failed: {exc}", feedback_id=feedback_id)
+
+        if notion_url:
+            return FeedbackResult(ok=True, destination="postgres+notion", message="Saved to Postgres and Notion.", feedback_id=feedback_id)
+        return FeedbackResult(ok=True, destination="postgres", message="Saved to Postgres feedback store.", feedback_id=feedback_id)
+
+    def list_by_assessment(self, assessment_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        self._ensure_schema()
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT payload
+                    FROM feedback
+                    WHERE assessment_id = %s
+                    ORDER BY captured_at DESC NULLS LAST
+                    LIMIT %s
+                    """,
+                    (assessment_id, limit),
+                )
+                rows = cur.fetchall()
+        results: List[Dict[str, Any]] = []
+        for row in rows:
+            payload = row["payload"]
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            results.append(payload)
+        return results
 
 
 class LocalFeedbackStore:
@@ -71,7 +169,9 @@ def notion_api_key() -> Optional[str]:
 
 def feedback_backend_status() -> Dict[str, Any]:
     return {
+        "store": "postgres" if database_url() else "local_jsonl",
         "local_jsonl_log": str(feedback_log_path()),
+        "postgres_configured": bool(database_url()),
         "notion_configured": bool(notion_api_key() and notion_feedback_database_id()),
         "notion_database_configured": bool(notion_feedback_database_id()),
     }
@@ -245,6 +345,9 @@ def list_feedback_by_assessment_id(assessment_id: str, limit: int = 100, path: O
 
 
 def get_feedback_store() -> FeedbackStore:
+    url = database_url()
+    if url:
+        return PostgresFeedbackStore(url)
     return LocalFeedbackStore()
 
 
