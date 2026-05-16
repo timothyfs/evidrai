@@ -81,8 +81,15 @@ def api_allowed_origins() -> list[str]:
         env_names=("API_ALLOWED_ORIGINS",),
         default="",
     )
-    origins = [item.strip() for item in (raw or "").split(",") if item.strip()]
-    return origins or ["http://localhost:3000", "http://127.0.0.1:3000"]
+    default_origins = [
+        "https://evidrai.vercel.app",
+        "https://evidrai-i74sha2rjrzchntsofrmmc.streamlit.app",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    origins = [item.strip().rstrip("/") for item in (raw or "").split(",") if item.strip()]
+    combined = origins or default_origins
+    return list(dict.fromkeys(combined))
 
 
 def database_url() -> Optional[str]:
