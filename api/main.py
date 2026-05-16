@@ -160,7 +160,14 @@ def _run_claim_assessment(
     return run_quick_pass(analysis_input, category, llm, search)
 
 
-def _assessment_response_from_request(request: AssessmentCreateRequest, mode: str) -> AssessmentResponse:
+def _owner_id_from_request(request: Request) -> str:
+    owner_id = (request.headers.get("x-evidrai-user-id") or "").strip()
+    if len(owner_id) > 128:
+        raise HTTPException(status_code=400, detail="x-evidrai-user-id is too long")
+    return owner_id
+
+
+def _assessment_response_from_request(request: AssessmentCreateRequest, mode: str, owner_id: str = "") -> AssessmentResponse:
     claim = (request.claim or "").strip()
     source_url = (request.source_url or "").strip()
     _validate_claim_request(claim, source_url)
@@ -173,6 +180,7 @@ def _assessment_response_from_request(request: AssessmentCreateRequest, mode: st
         mode=mode,
         build=get_app_build(),
         include_debug=request.include_debug,
+        owner_id=owner_id,
     )
     return save_report(assessment)
 
@@ -184,8 +192,9 @@ def extract_source(request: SourceExtractRequest) -> ExtractedSource:
 
 
 @app.get("/reports", response_model=Dict[str, Any])
-def reports_index(limit: int = 50) -> Dict[str, Any]:
-    return {"ok": True, "reports": list_reports(limit=limit)}
+def reports_index(http_request: Request, limit: int = 50) -> Dict[str, Any]:
+    owner_id = _owner_id_from_request(http_request)
+    return {"ok": True, "owner_id": owner_id or None, "reports": list_reports(limit=limit, owner_id=owner_id)}
 
 
 @app.get("/reports/{report_id}", response_model=AssessmentResponse)
@@ -273,7 +282,7 @@ def runtime() -> Dict[str, Any]:
 
 
 @app.post("/claims/check", response_model=ApiEnvelope)
-def check_claim(request: ClaimCheckRequest) -> ApiEnvelope:
+def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelope:
     claim = (request.claim or "").strip()
     source_url = (request.source_url or "").strip()
     _validate_claim_request(claim, source_url)
@@ -287,6 +296,7 @@ def check_claim(request: ClaimCheckRequest) -> ApiEnvelope:
         mode=request.mode,
         build=get_app_build(),
         include_debug=request.include_debug,
+        owner_id=_owner_id_from_request(http_request),
     ).model_dump(mode="json")
     result["settings"] = {
         "result_mode": request.mode,
@@ -299,13 +309,13 @@ def check_claim(request: ClaimCheckRequest) -> ApiEnvelope:
 
 
 @app.post("/assessments/fast", response_model=AssessmentResponse)
-def create_fast_assessment(request: AssessmentCreateRequest) -> AssessmentResponse:
-    return _assessment_response_from_request(request, "fast")
+def create_fast_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
+    return _assessment_response_from_request(request, "fast", owner_id=_owner_id_from_request(http_request))
 
 
 @app.post("/assessments/deep", response_model=AssessmentResponse)
-def create_deep_assessment(request: AssessmentCreateRequest) -> AssessmentResponse:
-    return _assessment_response_from_request(request, "deep")
+def create_deep_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
+    return _assessment_response_from_request(request, "deep", owner_id=_owner_id_from_request(http_request))
 
 
 @app.post("/speech/extract", response_model=ApiEnvelope)

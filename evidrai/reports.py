@@ -43,7 +43,7 @@ class ReportStore(Protocol):
     def load(self, report_id: str) -> AssessmentResponse:
         ...
 
-    def list(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def list(self, limit: int = 50, owner_id: str = "") -> List[Dict[str, Any]]:
         ...
 
 
@@ -78,13 +78,15 @@ class LocalReportStore:
         except Exception as exc:
             raise ReportStoreError("Could not load report.", developer_detail=str(exc))
 
-    def list(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def list(self, limit: int = 50, owner_id: str = "") -> List[Dict[str, Any]]:
         if not self.directory.exists():
             return []
         items = []
-        for path in sorted(self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
+        for path in sorted(self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
+                if owner_id and payload.get("owner_id") != owner_id:
+                    continue
                 items.append(
                     {
                         "assessment_id": payload.get("assessment_id"),
@@ -92,8 +94,11 @@ class LocalReportStore:
                         "mode": payload.get("mode"),
                         "claim": (payload.get("request") or {}).get("claim"),
                         "verdict": (payload.get("verdict") or {}).get("label"),
+                        "owner_id": payload.get("owner_id"),
                     }
                 )
+                if len(items) >= limit:
+                    break
             except Exception:
                 continue
         return items
@@ -128,8 +133,8 @@ class PostgresReportStore:
                     cur.execute(
                         """
                         INSERT INTO assessments (
-                            assessment_id, created_at, mode, claim, source_url, verdict, confidence, payload, updated_at
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, now())
+                            assessment_id, created_at, mode, claim, source_url, verdict, confidence, owner_id, payload, updated_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, now())
                         ON CONFLICT (assessment_id) DO UPDATE SET
                             created_at = EXCLUDED.created_at,
                             mode = EXCLUDED.mode,
@@ -137,6 +142,7 @@ class PostgresReportStore:
                             source_url = EXCLUDED.source_url,
                             verdict = EXCLUDED.verdict,
                             confidence = EXCLUDED.confidence,
+                            owner_id = EXCLUDED.owner_id,
                             payload = EXCLUDED.payload,
                             updated_at = now()
                         """,
@@ -148,6 +154,7 @@ class PostgresReportStore:
                             request.get("source_url"),
                             verdict.get("label"),
                             verdict.get("confidence"),
+                            payload.get("owner_id"),
                             json.dumps(payload),
                         ),
                     )
@@ -174,20 +181,32 @@ class PostgresReportStore:
         except Exception as exc:
             raise ReportStoreError("Could not load report.", developer_detail=str(exc))
 
-    def list(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def list(self, limit: int = 50, owner_id: str = "") -> List[Dict[str, Any]]:
         self._ensure_schema()
         try:
             with self._connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT assessment_id, created_at, mode, claim, verdict
-                        FROM assessments
-                        ORDER BY created_at DESC NULLS LAST, updated_at DESC
-                        LIMIT %s
-                        """,
-                        (limit,),
-                    )
+                    if owner_id:
+                        cur.execute(
+                            """
+                            SELECT assessment_id, created_at, mode, claim, verdict, owner_id
+                            FROM assessments
+                            WHERE owner_id = %s
+                            ORDER BY created_at DESC NULLS LAST, updated_at DESC
+                            LIMIT %s
+                            """,
+                            (owner_id, limit),
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            SELECT assessment_id, created_at, mode, claim, verdict, owner_id
+                            FROM assessments
+                            ORDER BY created_at DESC NULLS LAST, updated_at DESC
+                            LIMIT %s
+                            """,
+                            (limit,),
+                        )
                     rows = cur.fetchall()
             items: List[Dict[str, Any]] = []
             for row in rows:
@@ -225,5 +244,5 @@ def load_report(report_id: str, store: ReportStore | None = None) -> AssessmentR
     return (store or get_report_store()).load(report_id)
 
 
-def list_reports(limit: int = 50, store: ReportStore | None = None) -> List[Dict[str, Any]]:
-    return (store or get_report_store()).list(limit=limit)
+def list_reports(limit: int = 50, owner_id: str = "", store: ReportStore | None = None) -> List[Dict[str, Any]]:
+    return (store or get_report_store()).list(limit=limit, owner_id=owner_id)

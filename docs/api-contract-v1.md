@@ -101,7 +101,7 @@ GET /reports
 GET /reports/{report_id}
 ```
 
-`GET /reports` returns recent persisted report summaries. `GET /reports/{report_id}` returns the full `AssessmentResponse`.
+`GET /reports` returns recent persisted report summaries. If `X-Evidrai-User-Id` is supplied, report history is scoped to that owner. `GET /reports/{report_id}` returns the full `AssessmentResponse`.
 
 ### Speech / video audit
 
@@ -203,6 +203,7 @@ Response:
   "created_at": "2026-05-14T11:00:00Z",
   "build": "040c8f1",
   "mode": "deep",
+  "owner_id": "anon_browser_or_user_id",
   "request": {
     "claim": "Nigel Farage failed to disclose a £5M gift.",
     "source_url": null,

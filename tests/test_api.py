@@ -215,6 +215,7 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     payload = response.json()
     assert payload["schema_version"] == "assessment_response.v1"
     assert payload["mode"] == "fast"
+    assert payload["owner_id"] is None
     assert payload["verdict"]["label"] == "Supported"
     assert payload["claim_breakdown"][0]["id"] == "sc_1"
     assert payload["evidence_map"]["supports_factual_core"] == ["src_1"]
@@ -247,6 +248,25 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     assert feedback_list_payload["feedback"][0]["comment"] == "Good enough"
 
 
+def test_report_history_can_be_scoped_by_owner_header(monkeypatch, tmp_path):
+    def fake_run_claim_assessment(*, claim, source_url, category, mode):
+        return {"verdict": "Supported", "confidence": "High", "summary": "ok"}
+
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
+    monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
+
+    alice = client.post("/assessments/fast", json={"claim": "Alice claim"}, headers={"X-Evidrai-User-Id": "alice"}).json()
+    client.post("/assessments/fast", json={"claim": "Bob claim"}, headers={"X-Evidrai-User-Id": "bob"})
+
+    response = client.get("/reports", headers={"X-Evidrai-User-Id": "alice"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["owner_id"] == "alice"
+    assert [item["assessment_id"] for item in payload["reports"]] == [alice["assessment_id"]]
+    assert payload["reports"][0]["owner_id"] == "alice"
+
+
 def test_claim_check_embeds_assessment_contract(monkeypatch):
     def fake_run_claim_assessment(*, claim, source_url, category, mode):
         return {
@@ -264,6 +284,7 @@ def test_claim_check_embeds_assessment_contract(monkeypatch):
     payload = response.json()
     assessment = payload["result"]["assessment"]
     assert assessment["schema_version"] == "assessment_response.v1"
+    assert assessment["owner_id"] is None
     assert assessment["debug"]["schema_version"] == "pipeline_trace.v1"
 
 

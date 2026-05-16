@@ -105,6 +105,7 @@ class AssessmentResponse(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     build: str
     mode: str
+    owner_id: Optional[str] = None
     request: AssessmentRequestRecord
     verdict: AssessmentVerdict
     claim_breakdown: List[ClaimBreakdownItem] = Field(default_factory=list)
@@ -137,6 +138,7 @@ def serialize_assessment_response(
     mode: str,
     build: str,
     include_debug: bool = False,
+    owner_id: str = "",
 ) -> AssessmentResponse:
     """Map the current pipeline/fast payload into the public API v1 shape."""
     sources = list(result.get("sources") or result.get("fast_sources") or [])
@@ -194,6 +196,7 @@ def serialize_assessment_response(
     return AssessmentResponse(
         build=build,
         mode=mode,
+        owner_id=owner_id or None,
         request=AssessmentRequestRecord(
             claim=claim,
             source_url=source_url or None,

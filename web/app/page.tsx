@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   API_BASE_URL,
+  AccountProfile,
   AssessmentResponse,
   FeedbackRating,
   ReportSummary,
@@ -13,6 +14,7 @@ import {
   SpeechVerificationResult,
   createAssessment,
   extractSpeechClaims,
+  getAccountProfile,
   getReport,
   getRuntime,
   submitFeedback,
@@ -244,6 +246,18 @@ function SpeechResult({
   );
 }
 
+function AccountPanel({ account }: { account: AccountProfile | null }) {
+  return (
+    <section className="accountPanel">
+      <div>
+        <strong>{account?.label || 'Anonymous browser'}</strong>
+        <span>{account?.plan || 'Free'} plan preview</span>
+      </div>
+      <small>Account login is coming next. For now reports are scoped to this browser profile.</small>
+    </section>
+  );
+}
+
 function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
   const tone = verdictTone(assessment.verdict.label);
   return (
@@ -307,6 +321,7 @@ export default function Home() {
   const [selectedSpeechClaims, setSelectedSpeechClaims] = useState<string[]>([]);
   const [speechVerification, setSpeechVerification] = useState<SpeechVerificationResult | null>(null);
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
+  const [account, setAccount] = useState<AccountProfile | null>(null);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
   const [reportIdInput, setReportIdInput] = useState('');
@@ -333,6 +348,8 @@ export default function Home() {
   }
 
   useEffect(() => {
+    const profile = getAccountProfile();
+    setAccount(profile);
     getRuntime().then(setRuntime).catch((err) => setError(err.message));
     try {
       const saved = window.localStorage.getItem('evidrai_recent_reports');
@@ -428,6 +445,7 @@ export default function Home() {
           <span>API build: {runtime?.build || 'checking...'}</span>
           <span>Storage: {runtime?.storage_backend || 'checking...'}</span>
           <span>OpenAI: {runtime?.openai_configured ? 'configured' : 'missing'}</span>
+          <span>Account: {account?.owner_id.slice(0, 18) || 'checking...'}</span>
         </div>
       </section>
 
@@ -498,10 +516,11 @@ export default function Home() {
         </section>
 
         <aside className="card reports">
+          <AccountPanel account={account} />
           <div className="sectionHeader">
             <h2>Your reports</h2>
           </div>
-          <p className="muted">Reports created or loaded in this browser. Public test/admin reports are hidden.</p>
+          <p className="muted">Reports created or loaded by this browser profile. Real login will replace this anonymous profile ID.</p>
           <form className="loadForm" onSubmit={(event) => { event.preventDefault(); if (reportIdInput.trim()) loadReport(reportIdInput); }}>
             <label>
               Load by report ID

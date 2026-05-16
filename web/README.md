@@ -42,6 +42,7 @@ The UI displays two build labels:
 - load report by ID
 - assessment feedback controls linked to the backend feedback API
 - two-stage speech/video audit UI: extract claims, select claims, verify selected claims
+- auth-ready account shell with browser profile ID and owner-scoped report history
 
 ## Deployment
 

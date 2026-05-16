@@ -44,6 +44,7 @@ export type AssessmentResponse = {
   evidence_map: Record<string, string[]>;
   sources: AssessmentSource[];
   reasoning: Record<string, unknown>;
+  owner_id?: string | null;
 };
 
 export type ReportSummary = {
@@ -52,6 +53,13 @@ export type ReportSummary = {
   mode: string;
   claim: string;
   verdict: string;
+  owner_id?: string | null;
+};
+
+export type AccountProfile = {
+  owner_id: string;
+  label: string;
+  plan: 'Free' | 'Pro' | 'Journalist';
 };
 
 export type RuntimeStatus = {
@@ -129,11 +137,29 @@ export type SpeechAuditResult = SpeechExtractionResult & SpeechVerificationResul
 
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://evidrai.onrender.com').replace(/\/$/, '');
 
+const ACCOUNT_KEY = 'evidrai_account_profile';
+
+function randomId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  return `anon_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+export function getAccountProfile(): AccountProfile {
+  if (typeof window === 'undefined') return { owner_id: 'server', label: 'Anonymous browser', plan: 'Free' };
+  const saved = window.localStorage.getItem(ACCOUNT_KEY);
+  if (saved) return JSON.parse(saved) as AccountProfile;
+  const profile: AccountProfile = { owner_id: `anon_${randomId()}`, label: 'Anonymous browser', plan: 'Free' };
+  window.localStorage.setItem(ACCOUNT_KEY, JSON.stringify(profile));
+  return profile;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const account = getAccountProfile();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      'X-Evidrai-User-Id': account.owner_id,
       ...(init?.headers || {}),
     },
   });

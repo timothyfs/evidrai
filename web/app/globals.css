@@ -107,6 +107,18 @@ button.secondary {
 }
 
 .sectionHeader { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 14px; }
+.accountPanel {
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 18px;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 14px;
+}
+.accountPanel div { display: grid; gap: 4px; }
+.accountPanel span, .accountPanel small { color: var(--muted); }
+.accountPanel small { line-height: 1.4; }
 .reportItem {
   display: grid;
   width: 100%;
