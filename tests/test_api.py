@@ -46,7 +46,7 @@ def test_speech_audit_rejects_invalid_source_url():
     assert "source_url" in response.json()["detail"]
 
 
-def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch):
+def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     def fake_run_claim_assessment(*, claim, source_url, category, mode):
         return {
             "verdict": "Supported",
@@ -73,6 +73,7 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch):
             "rule_engine": {"rationale": "Direct support found."},
         }
 
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path))
     monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
 
     response = client.post("/assessments/fast", json={"claim": "Paris is the capital of France."})
@@ -86,6 +87,14 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch):
     assert payload["evidence_map"]["supports_factual_core"] == ["src_1"]
     assert payload["sources"][0]["id"] == "src_1"
     assert payload["debug"] is None
+
+    report_response = client.get(f"/reports/{payload['assessment_id']}")
+    assert report_response.status_code == 200
+    assert report_response.json()["assessment_id"] == payload["assessment_id"]
+
+    list_response = client.get("/reports")
+    assert list_response.status_code == 200
+    assert list_response.json()["reports"][0]["assessment_id"] == payload["assessment_id"]
 
 
 def test_claim_check_embeds_assessment_contract(monkeypatch):

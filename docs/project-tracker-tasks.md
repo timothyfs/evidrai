@@ -111,6 +111,12 @@ Date: 2026-05-10
 - Area: Evidence quality
 - Description: Add configurable source metadata for domains, source types, known authority, and risk labels.
 
+### Add report persistence and report IDs
+- Status: Done
+- Priority: High
+- Area: Persistence
+- Description: Persist AssessmentResponse packets locally and expose saved reports by ID.
+
 ### Persist user feedback
 - Status: Backlog
 - Priority: Low

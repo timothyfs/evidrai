@@ -13,6 +13,7 @@ from evidrai.config import get_app_build
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
+from evidrai.reports import list_reports, load_report, save_report
 from evidrai.transcripts import clean_pasted_youtube_transcript, extract_youtube_transcript
 from evidrai.utils import build_analysis_input, is_probable_url
 
@@ -107,7 +108,7 @@ def _assessment_response_from_request(request: AssessmentCreateRequest, mode: st
     source_url = (request.source_url or "").strip()
     _validate_claim_request(claim, source_url)
     result = _run_claim_assessment(claim=claim, source_url=source_url, category=request.category, mode=mode)
-    return serialize_assessment_response(
+    assessment = serialize_assessment_response(
         result,
         claim=claim,
         source_url=source_url,
@@ -116,12 +117,23 @@ def _assessment_response_from_request(request: AssessmentCreateRequest, mode: st
         build=get_app_build(),
         include_debug=request.include_debug,
     )
+    return save_report(assessment)
 
 
 @app.post("/sources/extract", response_model=ExtractedSource)
 def extract_source(request: SourceExtractRequest) -> ExtractedSource:
     source_url = (request.source_url or "").strip()
     return fetch_source_url(source_url)
+
+
+@app.get("/reports", response_model=Dict[str, Any])
+def reports_index(limit: int = 50) -> Dict[str, Any]:
+    return {"ok": True, "reports": list_reports(limit=limit)}
+
+
+@app.get("/reports/{report_id}", response_model=AssessmentResponse)
+def get_report(report_id: str) -> AssessmentResponse:
+    return load_report(report_id)
 
 
 @app.get("/health")
