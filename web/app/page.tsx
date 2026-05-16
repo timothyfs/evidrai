@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { API_BASE_URL, AssessmentResponse, ReportSummary, RuntimeStatus, createAssessment, getReport, getRuntime, listReports } from '../lib/api';
+import { API_BASE_URL, AssessmentResponse, ReportSummary, RuntimeStatus, createAssessment, getReport, getRuntime } from '../lib/api';
 
 const verdictClass: Record<string, string> = {
   Supported: 'good',
@@ -98,22 +98,35 @@ export default function Home() {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
+  const [reportIdInput, setReportIdInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const ready = useMemo(() => claim.trim().length > 0 || sourceUrl.trim().length > 0, [claim, sourceUrl]);
 
-  async function refreshReports() {
-    try {
-      setReports(await listReports());
-    } catch (err) {
-      console.warn(err);
-    }
+  function rememberReport(result: AssessmentResponse) {
+    const summary: ReportSummary = {
+      assessment_id: result.assessment_id,
+      created_at: result.created_at,
+      mode: result.mode,
+      claim: result.request.claim,
+      verdict: result.verdict.label,
+    };
+    setReports((current) => {
+      const next = [summary, ...current.filter((item) => item.assessment_id !== summary.assessment_id)].slice(0, 8);
+      window.localStorage.setItem('evidrai_recent_reports', JSON.stringify(next));
+      return next;
+    });
   }
 
   useEffect(() => {
     getRuntime().then(setRuntime).catch((err) => setError(err.message));
-    refreshReports();
+    try {
+      const saved = window.localStorage.getItem('evidrai_recent_reports');
+      if (saved) setReports(JSON.parse(saved));
+    } catch (err) {
+      console.warn(err);
+    }
   }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -124,7 +137,7 @@ export default function Home() {
     try {
       const result = await createAssessment({ claim, source_url: sourceUrl, category, mode });
       setAssessment(result);
-      await refreshReports();
+      rememberReport(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Assessment failed');
     } finally {
@@ -136,7 +149,9 @@ export default function Home() {
     setLoading(true);
     setError('');
     try {
-      setAssessment(await getReport(id));
+      const result = await getReport(id.trim());
+      setAssessment(result);
+      rememberReport(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load report');
     } finally {
@@ -193,10 +208,17 @@ export default function Home() {
 
         <aside className="card reports">
           <div className="sectionHeader">
-            <h2>Recent reports</h2>
-            <button className="secondary" onClick={refreshReports} type="button">Refresh</button>
+            <h2>Your reports</h2>
           </div>
-          {reports.length === 0 ? <p className="muted">No saved reports yet.</p> : reports.slice(0, 8).map((report) => (
+          <p className="muted">Reports created or loaded in this browser. Public test/admin reports are hidden.</p>
+          <form className="loadForm" onSubmit={(event) => { event.preventDefault(); if (reportIdInput.trim()) loadReport(reportIdInput); }}>
+            <label>
+              Load by report ID
+              <input value={reportIdInput} onChange={(event) => setReportIdInput(event.target.value)} placeholder="assessment_id" />
+            </label>
+            <button className="secondary" type="submit" disabled={!reportIdInput.trim() || loading}>Load report</button>
+          </form>
+          {reports.length === 0 ? <p className="muted">No reports in this browser yet. Run a check to start a local history.</p> : reports.slice(0, 8).map((report) => (
             <button className="reportItem" key={report.assessment_id} onClick={() => loadReport(report.assessment_id)} type="button">
               <strong>{report.verdict || 'Unverified'}</strong>
               <span>{report.claim || 'Untitled claim'}</span>

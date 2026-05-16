@@ -73,6 +73,7 @@ h2 { font-size: 1.35rem; }
 .card { padding: 24px; }
 
 form { display: grid; gap: 18px; }
+.loadForm { margin: 14px 0 18px; gap: 10px; }
 label { display: grid; gap: 8px; color: var(--muted); font-weight: 700; }
 textarea, input, select {
   width: 100%;

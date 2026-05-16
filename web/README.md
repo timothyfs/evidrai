@@ -33,7 +33,7 @@ The variable is public because it is used by the browser frontend. Do not put se
 - optional source URL
 - verdict/confidence display
 - evidence source list
-- recent saved reports from `/reports`
+- current-browser report history using localStorage
 - load report by ID
 
 ## Deployment
