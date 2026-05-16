@@ -38,14 +38,27 @@ Do not commit credentials. `.streamlit/secrets.toml` must stay local/private.
 
 The API health endpoint reports the selected backend as `storage_backend`.
 
-## Tables created automatically
+## Migrations
 
-The app creates minimal tables on first use:
+Schema is controlled by explicit SQL migrations in `migrations/`.
 
-- `assessments`
-- `feedback`
+Current migrations:
 
-This is intentionally simple for the prototype. Later production hardening should add explicit migrations, backups, row-level security policy decisions, and object storage for large artefacts.
+- `001_create_assessments_feedback.sql`
+
+The app applies unapplied migrations on first Postgres store use and records them in:
+
+- `evidrai_schema_migrations`
+
+You can also apply migrations manually from a configured environment:
+
+```bash
+python scripts/apply_migrations.py
+```
+
+For Supabase SQL Editor/manual setup, copy the SQL from the migration file and run it once. The SQL is idempotent (`IF NOT EXISTS`).
+
+Later production hardening should add backups, row-level security policy decisions, and object storage for large artefacts.
 
 ## Supabase notes
 

@@ -10,6 +10,7 @@ from uuid import uuid4
 import requests
 
 from evidrai.config import database_url, get_app_build, read_config_value, http_error_detail
+from evidrai.db import run_migrations
 
 
 NOTION_VERSION = "2025-09-03"
@@ -55,22 +56,7 @@ class PostgresFeedbackStore:
     def _ensure_schema(self) -> None:
         if self._schema_ready:
             return
-        with self._connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS feedback (
-                        feedback_id TEXT PRIMARY KEY,
-                        assessment_id TEXT,
-                        captured_at TIMESTAMPTZ,
-                        rating TEXT,
-                        payload JSONB NOT NULL
-                    )
-                    """
-                )
-                cur.execute("CREATE INDEX IF NOT EXISTS feedback_assessment_id_idx ON feedback (assessment_id)")
-                cur.execute("CREATE INDEX IF NOT EXISTS feedback_captured_at_idx ON feedback (captured_at DESC)")
-            conn.commit()
+        run_migrations(self._connect)
         self._schema_ready = True
 
     def save(self, record: Dict[str, Any]) -> FeedbackResult:

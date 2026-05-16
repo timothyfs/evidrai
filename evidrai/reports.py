@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Protocol
 
 from evidrai.api_models import AssessmentResponse
 from evidrai.config import database_url
+from evidrai.db import run_migrations
 from evidrai.errors import EvidraiError
 
 
@@ -111,25 +112,7 @@ class PostgresReportStore:
         if self._schema_ready:
             return
         try:
-            with self._connect() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        CREATE TABLE IF NOT EXISTS assessments (
-                            assessment_id TEXT PRIMARY KEY,
-                            created_at TIMESTAMPTZ,
-                            mode TEXT,
-                            claim TEXT,
-                            source_url TEXT,
-                            verdict TEXT,
-                            confidence TEXT,
-                            payload JSONB NOT NULL,
-                            updated_at TIMESTAMPTZ DEFAULT now()
-                        )
-                        """
-                    )
-                    cur.execute("CREATE INDEX IF NOT EXISTS assessments_created_at_idx ON assessments (created_at DESC)")
-                conn.commit()
+            run_migrations(self._connect)
             self._schema_ready = True
         except Exception as exc:
             raise ReportStoreError("Could not initialise report store.", developer_detail=str(exc))

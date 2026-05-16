@@ -180,7 +180,7 @@ Evidrai uses local JSON persistence by default. If `DATABASE_URL` is configured,
 
 Recommended prototype backend: Supabase Postgres with `sslmode=require`.
 
-See `docs/supabase-postgres-setup.md`.
+See `docs/supabase-postgres-setup.md`. SQL migrations live in `migrations/` and can be applied with `python scripts/apply_migrations.py` when `DATABASE_URL` is configured.
 
 ## Validation commands
 
