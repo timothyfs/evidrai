@@ -183,6 +183,8 @@ Backend runtime endpoints:
 
 See `docs/fastapi-backend-hardening.md` for the first independent-backend hardening slice.
 
+Independent API deployment prep lives in `docs/fastapi-independent-deployment.md`. Deployment entrypoints are available via `Procfile`, `Dockerfile.api`, and `render.yaml`.
+
 ## Storage backend
 
 Evidrai uses local JSON persistence by default. If `DATABASE_URL` is configured, it switches to Postgres-backed assessment and feedback stores.

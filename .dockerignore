@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.DS_Store
+.env
+.streamlit/secrets.toml
+.evidrai
+.evidrai_feedback
+*.pyc
+*.pyo
+*.pyd
