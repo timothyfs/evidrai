@@ -100,3 +100,7 @@ def test_verification_result_serializes_ui_compatibility_and_trace_boundaries():
     assert payload["provisional_confidence"] == 77
     assert "content" not in payload["sources"][0]
     assert payload["retrieval"]["sources"][0]["domain"] == "example.com"
+    assert payload["debug_trace"]["schema_version"] == "pipeline_trace.v1"
+    assert payload["debug_trace"]["normalized_claim"] == "Typed claim"
+    assert payload["debug_trace"]["scoring"]["source_scores"][0]["scoring_factors"]["weighted"] == 4.5
+    assert payload["debug_trace"]["downgrade_rationale"] == "Direct evidence found."

@@ -681,6 +681,60 @@ def render_speech_audit_page(
 
 
 
+def render_pipeline_trace(trace: Dict[str, Any]) -> None:
+    """Render the structured trace packet without exposing secrets or raw fetched content."""
+    if not trace:
+        st.caption("No structured trace packet is available for this result.")
+        return
+
+    st.write("**Normalized claim**")
+    st.write(trace.get("normalized_claim") or "")
+
+    claim_analysis = trace.get("claim_analysis") or {}
+    subclaims = claim_analysis.get("subclaims") or []
+    if subclaims:
+        st.write("**Subclaims**")
+        for item in subclaims:
+            st.write(f"- {item.get('id', 'sc')}: {item.get('text', '')} · {item.get('claim_type', 'other')}")
+
+    queries = trace.get("queries") or []
+    if queries:
+        st.write("**Queries**")
+        for query in queries:
+            st.write(f"- {query}")
+
+    scoring = trace.get("scoring") or {}
+    source_scores = scoring.get("source_scores") or []
+    if source_scores:
+        st.write("**Source scoring factors**")
+        for source in source_scores:
+            factors = source.get("scoring_factors") or {}
+            label = source.get("title") or source.get("domain") or "Source"
+            with st.expander(label, expanded=False):
+                st.caption(source.get("url") or "")
+                st.json(
+                    {
+                        "classification": {
+                            "source_type": source.get("source_type"),
+                            "claim_support": source.get("claim_support"),
+                            "evidence_category": source.get("evidence_category"),
+                            "source_role": source.get("source_role"),
+                            "narrative_cluster": source.get("narrative_cluster"),
+                        },
+                        "scoring_factors": factors,
+                    }
+                )
+
+    rule_engine = trace.get("rule_engine") or {}
+    if rule_engine:
+        st.write("**Rule engine**")
+        st.json(rule_engine)
+
+    if trace.get("downgrade_rationale"):
+        st.write("**Downgrade / arbitration rationale**")
+        st.write(trace["downgrade_rationale"])
+
+
 def render_developer_debug_panel(
     saved: Optional[Dict[str, Any]],
     settings: Dict[str, Any],
@@ -727,6 +781,10 @@ def render_developer_debug_panel(
         )
 
     if saved:
+        latest_result = saved.get("full_result") or saved.get("quick_result") or saved.get("speech_result") or {}
+        trace = latest_result.get("debug_trace") if isinstance(latest_result, dict) else None
+        with st.expander("Structured pipeline trace", expanded=False):
+            render_pipeline_trace(trace or {})
         with st.expander("Raw latest result payload", expanded=False):
             st.json(saved)
 

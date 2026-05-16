@@ -53,6 +53,19 @@ class EvidenceSource:
             "weighted_score": self.weighted_score,
         }
 
+    def to_trace_packet(self) -> Dict[str, Any]:
+        return {
+            **self.to_packet(),
+            "scoring_factors": {
+                "authority": self.authority_score,
+                "relevance": self.relevance_score,
+                "directness": self.directness_score,
+                "recency": self.recency_score,
+                "bias_risk": self.bias_risk_score,
+                "weighted": self.weighted_score,
+            },
+        }
+
 
 @dataclass
 class ClaimAnalysisResult:
@@ -81,6 +94,12 @@ class RetrievalResult:
         return {
             "queries": list(self.queries),
             "sources": [source.to_packet() for source in self.sources],
+        }
+
+    def to_trace_packet(self) -> Dict[str, Any]:
+        return {
+            "queries": list(self.queries),
+            "sources": [source.to_trace_packet() for source in self.sources],
         }
 
 
@@ -172,6 +191,36 @@ class VerificationResult:
     provisional_confidence: int = 0
     schema_version: str = "pipeline_result.v1"
 
+    def to_trace_packet(self) -> Dict[str, Any]:
+        return {
+            "schema_version": "pipeline_trace.v1",
+            "normalized_claim": self.claim,
+            "claim_analysis": self.claim_analysis.to_packet(),
+            "queries": list(self.retrieval.queries),
+            "retrieval": self.retrieval.to_trace_packet(),
+            "source_classifications": [
+                {
+                    "title": source.title,
+                    "url": source.url,
+                    "domain": source.domain,
+                    "source_type": source.source_type,
+                    "claim_support": source.claim_support,
+                    "evidence_category": source.evidence_category,
+                    "source_role": source.source_role,
+                    "narrative_cluster": source.narrative_cluster,
+                }
+                for source in self.retrieval.sources
+            ],
+            "scoring": {
+                "provisional_verdict": self.provisional_verdict,
+                "provisional_confidence": self.provisional_confidence,
+                "pendulum": self.pendulum.to_dict(),
+                "source_scores": [source.to_trace_packet() for source in self.retrieval.sources],
+            },
+            "rule_engine": self.rule_engine.to_dict(),
+            "downgrade_rationale": self.rule_engine.rationale,
+        }
+
     def to_payload(self) -> Dict[str, Any]:
         payload = dict(self.reasoning)
         payload.update(
@@ -189,6 +238,7 @@ class VerificationResult:
                 "rule_engine": self.rule_engine.to_public_dict(),
                 "provisional_verdict": self.provisional_verdict,
                 "provisional_confidence": self.provisional_confidence,
+                "debug_trace": self.to_trace_packet(),
             }
         )
         return payload
@@ -267,6 +317,27 @@ class RuleEnginePacketModel(BaseModel):
     risk_flags: List[str] = Field(default_factory=list)
 
 
+class SourceTracePacketModel(SourcePacketModel):
+    scoring_factors: Dict[str, float] = Field(default_factory=dict)
+
+
+class RetrievalTracePacketModel(BaseModel):
+    queries: List[str] = Field(default_factory=list)
+    sources: List[SourceTracePacketModel] = Field(default_factory=list)
+
+
+class PipelineTraceModel(BaseModel):
+    schema_version: str = "pipeline_trace.v1"
+    normalized_claim: str = ""
+    claim_analysis: ClaimAnalysisPacketModel
+    queries: List[str] = Field(default_factory=list)
+    retrieval: RetrievalTracePacketModel
+    source_classifications: List[Dict[str, Any]] = Field(default_factory=list)
+    scoring: Dict[str, Any] = Field(default_factory=dict)
+    rule_engine: Dict[str, Any] = Field(default_factory=dict)
+    downgrade_rationale: str = ""
+
+
 class PipelineResultModel(BaseModel):
     """Versioned deep-pipeline result boundary.
 
@@ -289,6 +360,7 @@ class PipelineResultModel(BaseModel):
     rule_engine: RuleEnginePacketModel
     provisional_verdict: str = "unverifiable"
     provisional_confidence: int = 0
+    debug_trace: PipelineTraceModel
 
 
 class EvidenceTypeModel(BaseModel):

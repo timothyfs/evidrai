@@ -46,7 +46,7 @@ Date: 2026-05-10
 ## Next after test harness
 
 ### Create typed pipeline result objects
-- Status: In progress
+- Status: Done
 - Priority: High
 - Area: Architecture
 - Description: Replace loose pipeline dictionaries with typed result boundaries for claim analysis, retrieval, scoring, source summaries, verification, and trace output.
@@ -56,7 +56,7 @@ Date: 2026-05-10
   - Stage outputs can be saved as fixtures.
 
 ### Add debug/trace mode
-- Status: Todo
+- Status: Done
 - Priority: High
 - Area: Observability
 - Description: Add an optional developer/debug view showing normalized claim, subclaims, queries, retrieved URLs, scoring factors, source classifications, rule stats, and downgrade rationale.
