@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from prompts import load_json
 from evidrai.config import SCORING_CONFIG, http_error_detail, normalize_openai_base_url, read_config_value
+from evidrai.errors import ConfigurationError, LLMRequestError
 
 class OpenAICompatibleClient:
     def __init__(self) -> None:
@@ -46,7 +47,7 @@ class OpenAICompatibleClient:
 
     def complete_json(self, messages: List[Dict[str, str]], temperature: float = 0.1) -> Dict[str, Any]:
         if not self.configured:
-            raise RuntimeError("OPENAI_API_KEY is not configured in Streamlit secrets or environment variables.")
+            raise ConfigurationError("OPENAI_API_KEY is not configured in app secrets or environment variables.")
         last_exc: Optional[Exception] = None
         for attempt in range(SCORING_CONFIG.max_retries):
             try:
@@ -62,9 +63,9 @@ class OpenAICompatibleClient:
                     timeout=60,
                 )
                 if response.status_code in {401, 403}:
-                    raise RuntimeError(f"OpenAI authentication failed: {http_error_detail(response)}")
+                    raise LLMRequestError("OpenAI authentication failed.", developer_detail=http_error_detail(response), status_code=503)
                 if response.status_code == 429:
-                    last_exc = RuntimeError(f"OpenAI rate limit hit: {http_error_detail(response)}")
+                    last_exc = LLMRequestError("OpenAI rate limit hit.", developer_detail=http_error_detail(response), status_code=429)
                     if attempt == SCORING_CONFIG.max_retries - 1:
                         break
                     retry_after = response.headers.get("Retry-After")
@@ -78,11 +79,11 @@ class OpenAICompatibleClient:
                 if not isinstance(parsed, dict):
                     raise ValueError("Model returned non-object JSON.")
                 return parsed
-            except RuntimeError:
+            except (ConfigurationError, LLMRequestError):
                 raise
             except (requests.RequestException, ValueError, KeyError, ValidationError, TypeError) as exc:
                 last_exc = exc
                 if attempt == SCORING_CONFIG.max_retries - 1:
                     break
                 time.sleep(SCORING_CONFIG.retry_base_sleep * (2 ** attempt))
-        raise RuntimeError(f"LLM request failed after retries: {last_exc}")
+        raise LLMRequestError("LLM request failed after retries.", developer_detail=str(last_exc))

@@ -4,7 +4,15 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from evidrai.enums import (
+    normalize_claim_support_label,
+    normalize_confidence_label,
+    normalize_evidence_category_label,
+    normalize_source_role_label,
+    normalize_verdict_label,
+)
 
 
 class AssessmentRequestRecord(BaseModel):
@@ -17,6 +25,16 @@ class AssessmentRequestRecord(BaseModel):
 class AssessmentVerdict(BaseModel):
     label: str = "Unverified"
     confidence: str = "Low"
+    
+    @field_validator("label", mode="before")
+    @classmethod
+    def normalize_label(cls, value: object) -> str:
+        return normalize_verdict_label(value)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def normalize_confidence(cls, value: object) -> str:
+        return normalize_confidence_label(value)
     summary: str = ""
     key_caveat: str = ""
     evidence_strength_score: Optional[float] = None
@@ -28,6 +46,16 @@ class ClaimBreakdownItem(BaseModel):
     dimension: str = "factual_core"
     assessment: str = "Unverified"
     confidence: str = "Low"
+
+    @field_validator("assessment", mode="before")
+    @classmethod
+    def normalize_assessment(cls, value: object) -> str:
+        return normalize_verdict_label(value)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def normalize_confidence(cls, value: object) -> str:
+        return normalize_confidence_label(value)
     rationale: str = ""
     supporting_source_ids: List[str] = Field(default_factory=list)
     contradicting_source_ids: List[str] = Field(default_factory=list)
@@ -51,6 +79,21 @@ class AssessmentEvidenceSource(BaseModel):
     stance: str = "irrelevant"
     evidence_category: str = "irrelevant"
     source_role: str = "context"
+
+    @field_validator("stance", mode="before")
+    @classmethod
+    def normalize_stance(cls, value: object) -> str:
+        return normalize_claim_support_label(value)
+
+    @field_validator("evidence_category", mode="before")
+    @classmethod
+    def normalize_category(cls, value: object) -> str:
+        return normalize_evidence_category_label(value)
+
+    @field_validator("source_role", mode="before")
+    @classmethod
+    def normalize_role(cls, value: object) -> str:
+        return normalize_source_role_label(value)
     score: float = 0.0
     summary: str = ""
     classification_reason: str = ""
@@ -76,11 +119,13 @@ def _source_id(index: int) -> str:
 
 
 def _source_ids_by_stance(sources: List[Dict[str, Any]], stance: str) -> List[str]:
-    return [_source_id(i) for i, source in enumerate(sources) if source.get("claim_support") == stance]
+    normalized_stance = normalize_claim_support_label(stance)
+    return [_source_id(i) for i, source in enumerate(sources) if normalize_claim_support_label(source.get("claim_support")) == normalized_stance]
 
 
 def _source_ids_by_role(sources: List[Dict[str, Any]], roles: set[str]) -> List[str]:
-    return [_source_id(i) for i, source in enumerate(sources) if source.get("source_role") in roles]
+    normalized_roles = {normalize_source_role_label(role) for role in roles}
+    return [_source_id(i) for i, source in enumerate(sources) if normalize_source_role_label(source.get("source_role")) in normalized_roles]
 
 
 def serialize_assessment_response(
@@ -112,8 +157,8 @@ def serialize_assessment_response(
         for i, source in enumerate(sources)
     ]
 
-    verdict_label = result.get("verified_verdict") or result.get("verdict") or "Unverified"
-    confidence = result.get("verified_confidence") or result.get("confidence") or "Low"
+    verdict_label = normalize_verdict_label(result.get("verified_verdict") or result.get("verdict") or "Unverified")
+    confidence = normalize_confidence_label(result.get("verified_confidence") or result.get("confidence") or "Low")
     pendulum = result.get("pendulum") or {}
     evidence_score = pendulum.get("score") if isinstance(pendulum, dict) else None
     if evidence_score is None:

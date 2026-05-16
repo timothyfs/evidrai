@@ -65,7 +65,7 @@ Date: 2026-05-10
   - Debug view explains why the verdict happened.
 
 ### Strengthen Pydantic validation with enums
-- Status: Todo
+- Status: Done
 - Priority: Medium
 - Area: Validation
 - Description: Add enums for verdicts, confidence labels, source support labels, and evidence categories to reduce schema drift.
@@ -74,7 +74,7 @@ Date: 2026-05-10
   - Verdict/support/category values are constrained.
 
 ### Add saved assessment JSON export
-- Status: Todo
+- Status: Done
 - Priority: Medium
 - Area: Product
 - Description: Allow exporting the full assessment packet for debugging, regression fixtures, and later user history.
@@ -83,7 +83,7 @@ Date: 2026-05-10
   - Does not expose secrets.
 
 ### Improve error handling and diagnostics
-- Status: Todo
+- Status: Done
 - Priority: Medium
 - Area: Reliability
 - Description: Replace broad `except Exception` paths with clearer failure classes/messages where useful, especially for API, JSON, schema, and search failures.

@@ -4,7 +4,8 @@ import time
 from typing import Any, Dict, List, Optional
 
 import requests
-from evidrai.config import SCORING_CONFIG, read_config_value
+from evidrai.config import SCORING_CONFIG, http_error_detail, read_config_value
+from evidrai.errors import SearchRequestError
 
 class TavilySearchClient:
     def __init__(self) -> None:
@@ -38,6 +39,10 @@ class TavilySearchClient:
                     },
                     timeout=60,
                 )
+                if response.status_code in {401, 403}:
+                    raise SearchRequestError("Tavily authentication failed.", developer_detail=http_error_detail(response), status_code=503)
+                if response.status_code == 429:
+                    raise SearchRequestError("Tavily rate limit hit.", developer_detail=http_error_detail(response), status_code=429)
                 response.raise_for_status()
                 data = response.json()
                 out: List[Dict[str, Any]] = []
@@ -52,9 +57,11 @@ class TavilySearchClient:
                         }
                     )
                 return out
+            except SearchRequestError:
+                raise
             except (requests.RequestException, ValueError, TypeError) as exc:
                 last_exc = exc
                 if attempt == SCORING_CONFIG.max_retries - 1:
                     break
                 time.sleep(SCORING_CONFIG.retry_base_sleep * (2 ** attempt))
-        raise RuntimeError(f"Search request failed after retries: {last_exc}")
+        raise SearchRequestError("Search request failed after retries.", developer_detail=str(last_exc))

@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from evidrai.api_models import AssessmentResponse, serialize_assessment_response
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import get_app_build
+from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
 from evidrai.transcripts import clean_pasted_youtube_transcript, extract_youtube_transcript
 from evidrai.utils import build_analysis_input, is_probable_url
@@ -19,6 +21,12 @@ app = FastAPI(
     version="0.1.0",
     description="Phase 1 API wrapper around the Evidrai verification engine.",
 )
+
+
+@app.exception_handler(EvidraiError)
+def evidrai_error_handler(request: Request, exc: EvidraiError) -> JSONResponse:
+    include_debug = (request.query_params.get("include_debug") or "").lower() == "true"
+    return JSONResponse(status_code=exc.status_code, content={"detail": safe_error_payload(exc, include_debug=include_debug)})
 
 
 class ClaimCheckRequest(BaseModel):
@@ -70,12 +78,12 @@ def _run_claim_assessment(
 ) -> Dict[str, Any]:
     llm, search = _clients()
     if not llm.configured:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured")
+        raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "OPENAI_API_KEY is not configured"})
 
     analysis_input = build_analysis_input(claim, source_url)
     if mode == "deep":
         if not search.configured:
-            raise HTTPException(status_code=503, detail="TAVILY_API_KEY is required for deep mode")
+            raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "TAVILY_API_KEY is required for deep mode"})
         return run_claim_pipeline(analysis_input, llm, search)
     return run_quick_pass(analysis_input, category, llm, search)
 
@@ -163,9 +171,9 @@ def speech_audit(request: SpeechAuditRequest) -> ApiEnvelope:
 
     llm, search = _clients()
     if not llm.configured:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured")
+        raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "OPENAI_API_KEY is not configured"})
     if not search.configured:
-        raise HTTPException(status_code=503, detail="TAVILY_API_KEY is required for speech audit")
+        raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "TAVILY_API_KEY is required for speech audit"})
 
     result = run_speech_audit(transcript, source_url, request.max_claims, llm, search)
     result["settings"] = {

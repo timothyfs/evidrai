@@ -10,6 +10,8 @@ import streamlit as st
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import get_app_build
+from evidrai.errors import EvidraiError
+from evidrai.export import assessment_export_json
 from evidrai.feedback import build_feedback_record, feedback_backend_status, save_feedback
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
 from evidrai.rules.verdict import (
@@ -658,6 +660,10 @@ def render_speech_audit_page(
                 cache[cache_key] = saved
                 st.session_state["last_results"] = saved
                 status.update(label="Speech audit complete", state="complete", expanded=False)
+            except EvidraiError as exc:
+                st.error(exc.message)
+                if developer_debug_enabled and exc.developer_detail:
+                    st.caption(exc.developer_detail)
             except requests.HTTPError as exc:
                 try:
                     detail = exc.response.text[:500]
@@ -665,7 +671,9 @@ def render_speech_audit_page(
                     detail = str(exc)
                 st.error(f"API error: {detail}")
             except Exception as exc:
-                st.error(f"Error: {exc}")
+                st.error("Speech audit failed. Enable Developer debug panel for details.")
+                if developer_debug_enabled:
+                    st.exception(exc)
 
     saved = st.session_state.get("last_results")
     if saved and saved.get("speech_result"):
@@ -785,6 +793,22 @@ def render_developer_debug_panel(
         trace = latest_result.get("debug_trace") if isinstance(latest_result, dict) else None
         with st.expander("Structured pipeline trace", expanded=False):
             render_pipeline_trace(trace or {})
+        if isinstance(latest_result, dict) and latest_result:
+            export_settings = latest_result.get("settings") or saved.get("settings") or {}
+            st.download_button(
+                "Download assessment JSON",
+                data=assessment_export_json(
+                    latest_result,
+                    claim=export_settings.get("claim_input", "") or latest_result.get("claim", ""),
+                    source_url=latest_result.get("source_url", "") or saved.get("source_url", ""),
+                    category=export_settings.get("claim_category", "auto-detect"),
+                    mode=export_settings.get("result_mode", "deep"),
+                    include_debug=True,
+                ),
+                file_name=f"evidrai-assessment-{latest_result.get('result_id', 'latest')}.json",
+                mime="application/json",
+                use_container_width=True,
+            )
         with st.expander("Raw latest result payload", expanded=False):
             st.json(saved)
 
@@ -921,6 +945,10 @@ def main() -> None:
                 }
                 cache[cache_key] = saved
                 st.session_state["last_results"] = saved
+            except EvidraiError as exc:
+                st.error(exc.message)
+                if developer_debug_enabled and exc.developer_detail:
+                    st.caption(exc.developer_detail)
             except requests.HTTPError as exc:
                 try:
                     detail = exc.response.text[:500]
@@ -928,7 +956,9 @@ def main() -> None:
                     detail = str(exc)
                 st.error(f"API error: {detail}")
             except Exception as exc:
-                st.error(f"Error: {exc}")
+                st.error("Assessment failed. Enable Developer debug panel for details.")
+                if developer_debug_enabled:
+                    st.exception(exc)
 
     saved = st.session_state.get("last_results")
     if saved:

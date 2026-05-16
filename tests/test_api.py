@@ -106,3 +106,18 @@ def test_claim_check_embeds_assessment_contract(monkeypatch):
     assessment = payload["result"]["assessment"]
     assert assessment["schema_version"] == "assessment_response.v1"
     assert assessment["debug"]["schema_version"] == "pipeline_trace.v1"
+
+
+def test_deep_assessment_missing_tavily_returns_structured_error(monkeypatch):
+    class FakeLLM:
+        configured = True
+
+    class FakeSearch:
+        configured = False
+
+    monkeypatch.setattr(api_main, "_clients", lambda: (FakeLLM(), FakeSearch()))
+
+    response = client.post("/assessments/deep", json={"claim": "Test claim"})
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "configuration_error"
