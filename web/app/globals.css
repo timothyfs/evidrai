@@ -71,6 +71,30 @@ h2 { font-size: 1.35rem; }
 }
 
 .card { padding: 24px; }
+.loginGate {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+  max-width: 620px;
+}
+.userSummary {
+  align-items: center;
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 24px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1.2fr 2fr 0.8fr auto;
+  margin-bottom: 24px;
+  padding: 16px 18px;
+}
+.userSummary div { display: grid; gap: 4px; min-width: 0; }
+.userSummary span { color: var(--muted); font-size: 0.76rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.userSummary code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 form { display: grid; gap: 18px; }
 .loadForm { margin: 14px 0 18px; gap: 10px; }
@@ -246,7 +270,7 @@ summary { cursor: pointer; font-weight: 900; }
 .success { color: var(--good); font-weight: 800; }
 
 @media (max-width: 880px) {
-  .hero, .layout, .sourceGrid, .sourceGrid.compact, .checkedClaim { grid-template-columns: 1fr; }
+  .hero, .layout, .sourceGrid, .sourceGrid.compact, .checkedClaim, .userSummary { grid-template-columns: 1fr; }
   .resultHeader { display: grid; }
   .verdict { text-align: left; min-width: 0; }
 }

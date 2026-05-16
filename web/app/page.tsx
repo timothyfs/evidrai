@@ -275,8 +275,8 @@ function AccountPanel({
   return (
     <section className="accountPanel">
       <div>
-        <strong>{account?.label || 'Anonymous browser'}</strong>
-        <span>{account?.plan || 'Free'} plan preview</span>
+        <strong>{signedIn ? account?.label : 'Sign in required'}</strong>
+        <span>{signedIn ? `${account?.plan || 'Free'} user` : 'Use Google or email magic link to continue'}</span>
       </div>
       {signedIn ? (
         <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
@@ -289,9 +289,73 @@ function AccountPanel({
           </form>
         </div>
       ) : (
-        <small>Auth env vars are not configured yet. Anonymous browser reports still work.</small>
+        <small>Auth env vars are not configured yet.</small>
       )}
       {authMessage && <small>{authMessage}</small>}
+    </section>
+  );
+}
+
+function LoginGate({
+  account,
+  authReady,
+  email,
+  setEmail,
+  authMessage,
+  authBusy,
+  onGoogle,
+  onEmail,
+}: {
+  account: AccountProfile | null;
+  authReady: boolean;
+  email: string;
+  setEmail: (value: string) => void;
+  authMessage: string;
+  authBusy: boolean;
+  onGoogle: () => void;
+  onEmail: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <section className="card loginGate">
+      <p className="eyebrow">Account required</p>
+      <h2>Sign in to use Evidrai</h2>
+      <p className="muted">Reports, feedback, and usage limits are now tied to a user account. Anonymous access is disabled in the product UI.</p>
+      {authReady ? (
+        <div className="authActions">
+          <button disabled={authBusy} onClick={onGoogle} type="button">Continue with Google</button>
+          <form className="emailLogin" onSubmit={onEmail}>
+            <label>
+              Email magic link
+              <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" />
+            </label>
+            <button className="secondary" disabled={authBusy || !email.trim()} type="submit">Send magic link</button>
+          </form>
+        </div>
+      ) : (
+        <p className="error">Authentication is not configured for this deployment.</p>
+      )}
+      {authMessage && <p className="muted">{authMessage}</p>}
+      {account?.owner_id?.startsWith('anon_') && <p className="muted">Browser profile ready, but login is required before checks can run.</p>}
+    </section>
+  );
+}
+
+function UserSummary({ account, onSignOut, authBusy }: { account: AccountProfile; onSignOut: () => void; authBusy: boolean }) {
+  return (
+    <section className="userSummary">
+      <div>
+        <span>User</span>
+        <strong>{account.label}</strong>
+      </div>
+      <div>
+        <span>User ID</span>
+        <code>{account.owner_id}</code>
+      </div>
+      <div>
+        <span>Type</span>
+        <strong>{account.plan}</strong>
+      </div>
+      <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
     </section>
   );
 }
@@ -370,8 +434,9 @@ export default function Home() {
   const [verifyingSpeech, setVerifyingSpeech] = useState(false);
   const [error, setError] = useState('');
 
-  const ready = useMemo(() => claim.trim().length > 0 || sourceUrl.trim().length > 0, [claim, sourceUrl]);
-  const speechReady = useMemo(() => speechTranscript.trim().length > 0 || speechSourceUrl.trim().length > 0, [speechTranscript, speechSourceUrl]);
+  const signedIn = Boolean(account?.owner_id && !account.owner_id.startsWith('anon_'));
+  const ready = useMemo(() => signedIn && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, claim, sourceUrl]);
+  const speechReady = useMemo(() => signedIn && (speechTranscript.trim().length > 0 || speechSourceUrl.trim().length > 0), [signedIn, speechTranscript, speechSourceUrl]);
 
   function rememberReport(result: AssessmentResponse) {
     const summary: ReportSummary = {
@@ -405,7 +470,7 @@ export default function Home() {
       const profile = profileFromSession(session, currentFallback);
       setAccount(profile);
       setAccountProfile(profile);
-      setAuthMessage(session ? 'Signed in.' : 'Signed out. Anonymous reports still work.');
+      setAuthMessage(session ? 'Signed in.' : 'Signed out. Sign in again to use Evidrai.');
     });
     getRuntime().then(setRuntime).catch((err) => setError(err.message));
     try {
@@ -540,12 +605,27 @@ export default function Home() {
           <span>API build: {runtime?.build || 'checking...'}</span>
           <span>Storage: {runtime?.storage_backend || 'checking...'}</span>
           <span>OpenAI: {runtime?.openai_configured ? 'configured' : 'missing'}</span>
-          <span>Auth: {runtime?.auth_configured ? 'server verified' : 'frontend/anonymous'}</span>
-          <span>Account: {account?.owner_id.slice(0, 18) || 'checking...'}</span>
+          <span>Auth: {runtime?.auth_configured ? 'server verified' : 'not configured'}</span>
+          <span>Account: {signedIn ? account?.owner_id.slice(0, 18) : 'sign in required'}</span>
         </div>
       </section>
 
-      <div className="layout">
+      {signedIn && account ? (
+        <UserSummary account={account} onSignOut={handleSignOut} authBusy={authBusy} />
+      ) : (
+        <LoginGate
+          account={account}
+          authReady={authConfigured()}
+          email={authEmail}
+          setEmail={setAuthEmail}
+          authMessage={authMessage}
+          authBusy={authBusy}
+          onGoogle={handleGoogleSignIn}
+          onEmail={handleEmailSignIn}
+        />
+      )}
+
+      {signedIn && <div className="layout">
         <section className="card">
           <div className="segmented modeSwitch" role="tablist" aria-label="Audit type">
             <button className={toolMode === 'claim' ? 'active' : ''} onClick={() => setToolMode('claim')} type="button">Single claim</button>
@@ -626,7 +706,7 @@ export default function Home() {
           <div className="sectionHeader">
             <h2>Your reports</h2>
           </div>
-          <p className="muted">Reports created or loaded by this browser profile. Real login will replace this anonymous profile ID.</p>
+          <p className="muted">Reports created or loaded by this signed-in user.</p>
           <form className="loadForm" onSubmit={(event) => { event.preventDefault(); if (reportIdInput.trim()) loadReport(reportIdInput); }}>
             <label>
               Load by report ID
@@ -642,10 +722,10 @@ export default function Home() {
             </button>
           ))}
         </aside>
-      </div>
+      </div>}
 
-      {assessment && <AssessmentResult assessment={assessment} />}
-      {speechExtraction && (
+      {signedIn && assessment && <AssessmentResult assessment={assessment} />}
+      {signedIn && speechExtraction && (
         <SpeechResult
           extraction={speechExtraction}
           selectedClaims={selectedSpeechClaims}
