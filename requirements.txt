@@ -8,3 +8,4 @@ urllib3>=2.0.0
 pytest>=8.0.0
 yt-dlp>=2025.10.14
 psycopg[binary]>=3.2.0
+PyJWT>=2.8.0

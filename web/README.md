@@ -24,7 +24,20 @@ http://localhost:3000
 NEXT_PUBLIC_API_BASE_URL=https://evidrai.onrender.com
 ```
 
-The variable is public because it is used by the browser frontend. Do not put secrets in `NEXT_PUBLIC_*` variables.
+Optional public Supabase Auth variables for Google OAuth and email magic links:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<public anon key>
+```
+
+These browser variables are public. Do not put private service-role keys, database passwords, or JWT secrets in `NEXT_PUBLIC_*` variables.
+
+For server-side token verification, configure the Render API with private env var:
+
+```text
+SUPABASE_JWT_SECRET=<private Supabase JWT secret>
+```
 
 The UI displays two build labels:
 

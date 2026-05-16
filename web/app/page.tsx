@@ -15,11 +15,15 @@ import {
   createAssessment,
   extractSpeechClaims,
   getAccountProfile,
+  getAnonymousAccountProfile,
   getReport,
   getRuntime,
+  setAccessToken,
+  setAccountProfile,
   submitFeedback,
   verifySpeechClaims,
 } from '../lib/api';
+import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmail, signInWithGoogle, signOut } from '../lib/auth';
 
 const FRONTEND_BUILD = process.env.NEXT_PUBLIC_APP_BUILD || 'local';
 
@@ -246,14 +250,48 @@ function SpeechResult({
   );
 }
 
-function AccountPanel({ account }: { account: AccountProfile | null }) {
+function AccountPanel({
+  account,
+  authReady,
+  email,
+  setEmail,
+  authMessage,
+  authBusy,
+  onGoogle,
+  onEmail,
+  onSignOut,
+}: {
+  account: AccountProfile | null;
+  authReady: boolean;
+  email: string;
+  setEmail: (value: string) => void;
+  authMessage: string;
+  authBusy: boolean;
+  onGoogle: () => void;
+  onEmail: (event: FormEvent<HTMLFormElement>) => void;
+  onSignOut: () => void;
+}) {
+  const signedIn = Boolean(account?.owner_id && !account.owner_id.startsWith('anon_'));
   return (
     <section className="accountPanel">
       <div>
         <strong>{account?.label || 'Anonymous browser'}</strong>
         <span>{account?.plan || 'Free'} plan preview</span>
       </div>
-      <small>Account login is coming next. For now reports are scoped to this browser profile.</small>
+      {signedIn ? (
+        <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
+      ) : authReady ? (
+        <div className="authActions">
+          <button className="secondary" disabled={authBusy} onClick={onGoogle} type="button">Continue with Google</button>
+          <form className="emailLogin" onSubmit={onEmail}>
+            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" />
+            <button className="secondary" disabled={authBusy || !email.trim()} type="submit">Email magic link</button>
+          </form>
+        </div>
+      ) : (
+        <small>Auth env vars are not configured yet. Anonymous browser reports still work.</small>
+      )}
+      {authMessage && <small>{authMessage}</small>}
     </section>
   );
 }
@@ -322,6 +360,9 @@ export default function Home() {
   const [speechVerification, setSpeechVerification] = useState<SpeechVerificationResult | null>(null);
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [account, setAccount] = useState<AccountProfile | null>(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
   const [reportIdInput, setReportIdInput] = useState('');
@@ -348,8 +389,24 @@ export default function Home() {
   }
 
   useEffect(() => {
-    const profile = getAccountProfile();
-    setAccount(profile);
+    const fallback = getAnonymousAccountProfile();
+    setAccount(fallback);
+    getCurrentSession()
+      .then((session) => {
+        setAccessToken(session?.access_token || '');
+        const profile = profileFromSession(session, fallback);
+        setAccount(profile);
+        setAccountProfile(profile);
+      })
+      .catch((err) => setAuthMessage(err.message));
+    const unsubscribe = onAuthStateChange((session) => {
+      const currentFallback = session ? getAccountProfile() : getAnonymousAccountProfile();
+      setAccessToken(session?.access_token || '');
+      const profile = profileFromSession(session, currentFallback);
+      setAccount(profile);
+      setAccountProfile(profile);
+      setAuthMessage(session ? 'Signed in.' : 'Signed out. Anonymous reports still work.');
+    });
     getRuntime().then(setRuntime).catch((err) => setError(err.message));
     try {
       const saved = window.localStorage.getItem('evidrai_recent_reports');
@@ -357,7 +414,45 @@ export default function Home() {
     } catch (err) {
       console.warn(err);
     }
+    return unsubscribe;
   }, []);
+
+  async function handleGoogleSignIn() {
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : 'Google sign-in failed');
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleEmailSignIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      await signInWithEmail(authEmail.trim());
+      setAuthMessage('Magic link sent. Check your email.');
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : 'Email sign-in failed');
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      await signOut();
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : 'Sign-out failed');
+    } finally {
+      setAuthBusy(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -445,6 +540,7 @@ export default function Home() {
           <span>API build: {runtime?.build || 'checking...'}</span>
           <span>Storage: {runtime?.storage_backend || 'checking...'}</span>
           <span>OpenAI: {runtime?.openai_configured ? 'configured' : 'missing'}</span>
+          <span>Auth: {runtime?.auth_configured ? 'server verified' : 'frontend/anonymous'}</span>
           <span>Account: {account?.owner_id.slice(0, 18) || 'checking...'}</span>
         </div>
       </section>
@@ -516,7 +612,17 @@ export default function Home() {
         </section>
 
         <aside className="card reports">
-          <AccountPanel account={account} />
+          <AccountPanel
+            account={account}
+            authReady={authConfigured()}
+            email={authEmail}
+            setEmail={setAuthEmail}
+            authMessage={authMessage}
+            authBusy={authBusy}
+            onGoogle={handleGoogleSignIn}
+            onEmail={handleEmailSignIn}
+            onSignOut={handleSignOut}
+          />
           <div className="sectionHeader">
             <h2>Your reports</h2>
           </div>

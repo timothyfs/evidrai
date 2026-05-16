@@ -119,6 +119,8 @@ button.secondary {
 .accountPanel div { display: grid; gap: 4px; }
 .accountPanel span, .accountPanel small { color: var(--muted); }
 .accountPanel small { line-height: 1.4; }
+.authActions, .emailLogin { display: grid; gap: 8px; }
+.emailLogin input { padding: 10px 12px; }
 .reportItem {
   display: grid;
   width: 100%;

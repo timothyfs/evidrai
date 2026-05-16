@@ -38,6 +38,7 @@ def test_health_endpoint_returns_build_and_config_flags():
     assert "openai_configured" in payload
     assert "tavily_configured" in payload
     assert "storage_backend" in payload
+    assert "auth_configured" in payload
 
 
 def test_runtime_endpoint_matches_health_shape():
@@ -246,6 +247,14 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     assert feedback_list_payload["assessment_id"] == payload["assessment_id"]
     assert feedback_list_payload["feedback_count"] == 1
     assert feedback_list_payload["feedback"][0]["comment"] == "Good enough"
+
+
+def test_bearer_token_owner_overrides_spoofable_owner_header(monkeypatch):
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization, owner_header: api_main.AuthContext(owner_id="jwt-user", auth_method="supabase_jwt", email="user@example.com"))
+
+    request = type("Request", (), {"headers": {"authorization": "Bearer test", "x-evidrai-user-id": "spoof"}})()
+
+    assert api_main._owner_id_from_request(request) == "jwt-user"
 
 
 def test_report_history_can_be_scoped_by_owner_header(monkeypatch, tmp_path):

@@ -69,6 +69,7 @@ export type RuntimeStatus = {
   openai_configured: boolean;
   tavily_configured: boolean;
   storage_backend: string;
+  auth_configured?: boolean;
 };
 
 export type FeedbackRating = 'Useful' | 'Partly useful' | 'Not useful';
@@ -138,17 +139,36 @@ export type SpeechAuditResult = SpeechExtractionResult & SpeechVerificationResul
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://evidrai.onrender.com').replace(/\/$/, '');
 
 const ACCOUNT_KEY = 'evidrai_account_profile';
+const ANONYMOUS_ACCOUNT_KEY = 'evidrai_anonymous_account_profile';
+let accessToken = '';
 
 function randomId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `anon_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
+export function setAccessToken(token: string) {
+  accessToken = token;
+}
+
+export function setAccountProfile(profile: AccountProfile) {
+  if (typeof window !== 'undefined') window.localStorage.setItem(ACCOUNT_KEY, JSON.stringify(profile));
+}
+
+export function getAnonymousAccountProfile(): AccountProfile {
+  if (typeof window === 'undefined') return { owner_id: 'server', label: 'Anonymous browser', plan: 'Free' };
+  const saved = window.localStorage.getItem(ANONYMOUS_ACCOUNT_KEY);
+  if (saved) return JSON.parse(saved) as AccountProfile;
+  const profile: AccountProfile = { owner_id: `anon_${randomId()}`, label: 'Anonymous browser', plan: 'Free' };
+  window.localStorage.setItem(ANONYMOUS_ACCOUNT_KEY, JSON.stringify(profile));
+  return profile;
+}
+
 export function getAccountProfile(): AccountProfile {
   if (typeof window === 'undefined') return { owner_id: 'server', label: 'Anonymous browser', plan: 'Free' };
   const saved = window.localStorage.getItem(ACCOUNT_KEY);
   if (saved) return JSON.parse(saved) as AccountProfile;
-  const profile: AccountProfile = { owner_id: `anon_${randomId()}`, label: 'Anonymous browser', plan: 'Free' };
+  const profile = getAnonymousAccountProfile();
   window.localStorage.setItem(ACCOUNT_KEY, JSON.stringify(profile));
   return profile;
 }
@@ -160,6 +180,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       'Content-Type': 'application/json',
       'X-Evidrai-User-Id': account.owner_id,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(init?.headers || {}),
     },
   });

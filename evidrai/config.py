@@ -73,6 +73,8 @@ DATABASE_URL_SECRET_PATHS = (
     ("SUPABASE_DATABASE_URL",),
 )
 DATABASE_URL_ENV_NAMES = ("DATABASE_URL", "POSTGRES_URL", "SUPABASE_DATABASE_URL")
+SUPABASE_JWT_SECRET_PATHS = (("supabase", "jwt_secret"), ("SUPABASE_JWT_SECRET",))
+SUPABASE_JWT_SECRET_ENV_NAMES = ("SUPABASE_JWT_SECRET",)
 
 
 def api_allowed_origins() -> list[str]:
@@ -100,6 +102,13 @@ def database_url() -> Optional[str]:
     if value and value.startswith("postgres://"):
         value = "postgresql://" + value[len("postgres://") :]
     return value
+
+
+def supabase_jwt_secret() -> Optional[str]:
+    return read_config_value(
+        secret_paths=SUPABASE_JWT_SECRET_PATHS,
+        env_names=SUPABASE_JWT_SECRET_ENV_NAMES,
+    )
 
 
 def config_presence_diagnostics() -> dict[str, Any]:

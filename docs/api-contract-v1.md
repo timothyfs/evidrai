@@ -101,7 +101,7 @@ GET /reports
 GET /reports/{report_id}
 ```
 
-`GET /reports` returns recent persisted report summaries. If `X-Evidrai-User-Id` is supplied, report history is scoped to that owner. `GET /reports/{report_id}` returns the full `AssessmentResponse`.
+`GET /reports` returns recent persisted report summaries. If a valid Supabase Bearer token is supplied, report history is scoped to that authenticated user. Anonymous mode can still use `X-Evidrai-User-Id` as a temporary browser-profile owner. `GET /reports/{report_id}` returns the full `AssessmentResponse`.
 
 ### Speech / video audit
 

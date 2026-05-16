@@ -8,9 +8,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from evidrai.api_models import AssessmentResponse, serialize_assessment_response
+from evidrai.auth import AuthContext, context_from_headers
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import api_allowed_origins, database_url, get_app_build
+from evidrai.config import api_allowed_origins, database_url, get_app_build, supabase_jwt_secret
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, save_feedback
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
@@ -160,11 +161,18 @@ def _run_claim_assessment(
     return run_quick_pass(analysis_input, category, llm, search)
 
 
+def _auth_context_from_request(request: Request) -> AuthContext:
+    context = context_from_headers(
+        authorization=request.headers.get("authorization") or "",
+        owner_header=request.headers.get("x-evidrai-user-id") or "",
+    )
+    if len(context.owner_id) > 128:
+        raise HTTPException(status_code=400, detail="owner id is too long")
+    return context
+
+
 def _owner_id_from_request(request: Request) -> str:
-    owner_id = (request.headers.get("x-evidrai-user-id") or "").strip()
-    if len(owner_id) > 128:
-        raise HTTPException(status_code=400, detail="x-evidrai-user-id is too long")
-    return owner_id
+    return _auth_context_from_request(request).owner_id
 
 
 def _assessment_response_from_request(request: AssessmentCreateRequest, mode: str, owner_id: str = "") -> AssessmentResponse:
@@ -246,6 +254,7 @@ def runtime_status() -> Dict[str, Any]:
         "openai_configured": llm.configured,
         "tavily_configured": search.configured,
         "storage_backend": "postgres" if database_url() else "local_json",
+        "auth_configured": bool(supabase_jwt_secret()),
     }
 
 
