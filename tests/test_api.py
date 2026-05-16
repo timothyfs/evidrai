@@ -78,6 +78,78 @@ def test_speech_audit_rejects_invalid_source_url():
     assert "source_url" in response.json()["detail"]
 
 
+def test_speech_extract_returns_selected_claims(monkeypatch):
+    class FakeLLM:
+        configured = True
+
+    class FakeSearch:
+        configured = False
+
+    monkeypatch.setattr(api_main, "_clients", lambda: (FakeLLM(), FakeSearch()))
+    monkeypatch.setattr(
+        api_main,
+        "extract_speech_audit_claims",
+        lambda transcript, source_url, max_claims, llm: {
+            "title": "Test speech",
+            "speaker": "Speaker",
+            "source_url": source_url,
+            "summary": "Summary",
+            "claims": [{"id": "claim_1", "quote": "Quote", "normalized_claim": "Normalized claim"}],
+            "skipped_rhetoric": [],
+            "extraction_notes": [],
+            "transcript_truncated": False,
+            "transcript_chars_used": len(transcript),
+            "transcript_chars_original": len(transcript),
+        },
+    )
+
+    response = client.post("/speech/extract", json={"transcript": "some speech", "max_claims": 3})
+
+    assert response.status_code == 200
+    payload = response.json()["result"]
+    assert payload["schema_version"] == "speech_extraction.v1"
+    assert payload["claims"][0]["id"] == "claim_1"
+    assert payload["settings"]["result_mode"] == "speech_extract"
+
+
+def test_speech_verify_requires_selected_claims():
+    response = client.post("/speech/verify", json={"claims": []})
+
+    assert response.status_code == 400
+    assert "selected claim" in response.json()["detail"]
+
+
+def test_speech_verify_defaults_to_fast_without_tavily(monkeypatch):
+    class FakeLLM:
+        configured = True
+
+    class FakeSearch:
+        configured = False
+
+    monkeypatch.setattr(api_main, "_clients", lambda: (FakeLLM(), FakeSearch()))
+    monkeypatch.setattr(
+        api_main,
+        "verify_speech_claim",
+        lambda claim, index, source_url, mode, llm, search: {
+            "speech_claim": claim,
+            "audit_index": index,
+            "verification_mode": mode,
+            "verdict": "Unverified",
+        },
+    )
+
+    response = client.post(
+        "/speech/verify",
+        json={"claims": [{"id": "claim_1", "quote": "Quote", "normalized_claim": "Normalized claim"}], "verification_mode": "fast"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["result"]
+    assert payload["schema_version"] == "speech_verification.v1"
+    assert payload["claims_checked_count"] == 1
+    assert payload["claims_checked"][0]["verification_mode"] == "fast"
+
+
 def test_speech_audit_defaults_to_fast_without_tavily(monkeypatch):
     class FakeLLM:
         configured = True

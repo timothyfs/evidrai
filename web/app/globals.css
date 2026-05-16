@@ -174,6 +174,41 @@ summary { cursor: pointer; font-weight: 900; }
   background: var(--accent);
   color: white;
 }
+.modeSwitch { margin-bottom: 18px; }
+.claimPickList, .checkedClaims {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+}
+.claimPick {
+  align-items: flex-start;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  color: var(--ink);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 16px;
+}
+.claimPick input { margin-top: 4px; width: auto; }
+.claimPick span { display: grid; gap: 6px; }
+.claimPick small, .claimPick p, .claimPick em { color: var(--muted); font-style: normal; }
+.claimPick p { margin: 0; line-height: 1.45; }
+.checkedClaim {
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 20px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 210px minmax(0, 1fr);
+  padding: 16px;
+}
+.verdict.mini {
+  min-width: 0;
+  text-align: left;
+}
+.sourceGrid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .reasonGrid {
   display: flex;
   flex-wrap: wrap;
@@ -197,7 +232,7 @@ summary { cursor: pointer; font-weight: 900; }
 .success { color: var(--good); font-weight: 800; }
 
 @media (max-width: 880px) {
-  .hero, .layout, .sourceGrid { grid-template-columns: 1fr; }
+  .hero, .layout, .sourceGrid, .sourceGrid.compact, .checkedClaim { grid-template-columns: 1fr; }
   .resultHeader { display: grid; }
   .verdict { text-align: left; min-width: 0; }
 }

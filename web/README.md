@@ -41,6 +41,7 @@ The UI displays two build labels:
 - current-browser report history using localStorage
 - load report by ID
 - assessment feedback controls linked to the backend feedback API
+- two-stage speech/video audit UI: extract claims, select claims, verify selected claims
 
 ## Deployment
 
@@ -51,6 +52,7 @@ See `../docs/frontend-deployment.md`.
 ## Next frontend slices
 
 - shareable report route `/reports/[id]`
+- auth-gated Free/Pro/Journalist tiers
 - speech/video audit UI
 - better loading/error states
 - deploy to Vercel or Render static web service

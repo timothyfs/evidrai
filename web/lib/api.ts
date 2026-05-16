@@ -73,6 +73,60 @@ export type FeedbackResponse = {
   message: string;
 };
 
+export type SpeechClaim = {
+  id: string;
+  quote: string;
+  normalized_claim: string;
+  timestamp?: string;
+  speaker?: string;
+  topic?: string;
+  claim_type?: string;
+  checkability?: string;
+  priority?: string;
+  why_it_matters?: string;
+  verification_query?: string;
+};
+
+export type SpeechExtractionResult = {
+  schema_version: string;
+  title: string;
+  speaker: string;
+  source_url: string;
+  summary: string;
+  claims: SpeechClaim[];
+  skipped_rhetoric: string[];
+  extraction_notes: string[];
+  transcript_truncated: boolean;
+  transcript_chars_used: number;
+  transcript_chars_original: number;
+};
+
+export type SpeechCheckedClaim = {
+  speech_claim?: SpeechClaim;
+  audit_index?: number;
+  verdict?: string;
+  verified_verdict?: string;
+  confidence?: string;
+  verified_confidence?: string;
+  tldr?: string;
+  summary?: string;
+  pendulum_band?: string;
+  sources?: AssessmentSource[];
+};
+
+export type SpeechVerificationResult = {
+  schema_version: string;
+  source_url: string;
+  claims_checked: SpeechCheckedClaim[];
+  claims_checked_count: number;
+  verification_mode: 'fast' | 'deep';
+};
+
+export type SpeechAuditResult = SpeechExtractionResult & SpeechVerificationResult & {
+  claims_extracted: SpeechClaim[];
+  claims_needing_attention_count: number;
+};
+
 export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://evidrai.onrender.com').replace(/\/$/, '');
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -137,4 +191,58 @@ export function submitFeedback(input: {
       comment: input.comment,
     }),
   });
+}
+
+export async function extractSpeechClaims(input: {
+  transcript: string;
+  source_url?: string;
+  max_claims: number;
+  try_youtube_captions?: boolean;
+}): Promise<SpeechExtractionResult> {
+  const payload = await request<{ ok: boolean; result: SpeechExtractionResult }>('/speech/extract', {
+    method: 'POST',
+    body: JSON.stringify({
+      transcript: input.transcript,
+      source_url: input.source_url || '',
+      max_claims: input.max_claims,
+      try_youtube_captions: input.try_youtube_captions ?? true,
+    }),
+  });
+  return payload.result;
+}
+
+export async function verifySpeechClaims(input: {
+  claims: SpeechClaim[];
+  source_url?: string;
+  verification_mode: 'fast' | 'deep';
+}): Promise<SpeechVerificationResult> {
+  const payload = await request<{ ok: boolean; result: SpeechVerificationResult }>('/speech/verify', {
+    method: 'POST',
+    body: JSON.stringify({
+      claims: input.claims,
+      source_url: input.source_url || '',
+      verification_mode: input.verification_mode,
+    }),
+  });
+  return payload.result;
+}
+
+export async function runSpeechAudit(input: {
+  transcript: string;
+  source_url?: string;
+  max_claims: number;
+  verification_mode: 'fast' | 'deep';
+  try_youtube_captions?: boolean;
+}): Promise<SpeechAuditResult> {
+  const payload = await request<{ ok: boolean; result: SpeechAuditResult }>('/speech/audit', {
+    method: 'POST',
+    body: JSON.stringify({
+      transcript: input.transcript,
+      source_url: input.source_url || '',
+      max_claims: input.max_claims,
+      verification_mode: input.verification_mode,
+      try_youtube_captions: input.try_youtube_captions ?? true,
+    }),
+  });
+  return payload.result;
 }

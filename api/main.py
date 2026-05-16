@@ -14,7 +14,13 @@ from evidrai.config import api_allowed_origins, database_url, get_app_build
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, save_feedback
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
-from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
+from evidrai.pipeline.verification import (
+    extract_speech_audit_claims,
+    run_claim_pipeline,
+    run_quick_pass,
+    run_speech_audit,
+    verify_speech_claim,
+)
 from evidrai.reports import list_reports, load_report, save_report
 from evidrai.transcripts import clean_pasted_youtube_transcript, extract_youtube_transcript
 from evidrai.utils import build_analysis_input, is_probable_url
@@ -67,6 +73,19 @@ class SpeechAuditRequest(BaseModel):
     try_youtube_captions: bool = True
 
 
+class SpeechExtractRequest(BaseModel):
+    transcript: str = ""
+    source_url: str = ""
+    max_claims: int = Field(default=3, ge=1, le=10)
+    try_youtube_captions: bool = True
+
+
+class SpeechVerifyRequest(BaseModel):
+    claims: list[Dict[str, Any]] = Field(default_factory=list)
+    source_url: str = ""
+    verification_mode: str = Field(default="fast", pattern="^(fast|deep)$")
+
+
 class SourceExtractRequest(BaseModel):
     source_url: str
 
@@ -100,6 +119,24 @@ def _validate_claim_request(claim: str, source_url: str) -> None:
         raise HTTPException(status_code=400, detail="claim or source_url is required")
     if source_url and not is_probable_url(source_url):
         raise HTTPException(status_code=400, detail="source_url must start with http:// or https://")
+
+
+def _speech_transcript_from_request(transcript: str, source_url: str, try_youtube_captions: bool) -> str:
+    if source_url and not is_probable_url(source_url):
+        raise HTTPException(status_code=400, detail="source_url must start with http:// or https://")
+
+    cleaned = (transcript or "").strip()
+    if not cleaned and source_url and try_youtube_captions:
+        transcript_result = extract_youtube_transcript(source_url)
+        if transcript_result.get("ok"):
+            cleaned = transcript_result.get("transcript", "").strip()
+        else:
+            raise HTTPException(status_code=422, detail=transcript_result.get("error") or "Could not extract transcript")
+
+    cleaned = clean_pasted_youtube_transcript(cleaned)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="transcript is required, or provide a YouTube URL with accessible captions")
+    return cleaned
 
 
 def _run_claim_assessment(
@@ -271,23 +308,65 @@ def create_deep_assessment(request: AssessmentCreateRequest) -> AssessmentRespon
     return _assessment_response_from_request(request, "deep")
 
 
-@app.post("/speech/audit", response_model=ApiEnvelope)
-def speech_audit(request: SpeechAuditRequest) -> ApiEnvelope:
-    transcript = (request.transcript or "").strip()
+@app.post("/speech/extract", response_model=ApiEnvelope)
+def speech_extract(request: SpeechExtractRequest) -> ApiEnvelope:
+    source_url = (request.source_url or "").strip()
+    transcript = _speech_transcript_from_request(request.transcript, source_url, request.try_youtube_captions)
+
+    llm, _search = _clients()
+    if not llm.configured:
+        raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "OPENAI_API_KEY is not configured"})
+
+    extraction = extract_speech_audit_claims(transcript, source_url, request.max_claims, llm)
+    extraction["schema_version"] = "speech_extraction.v1"
+    extraction["settings"] = {
+        "result_mode": "speech_extract",
+        "source_url": source_url,
+        "max_claims": request.max_claims,
+        "build": get_app_build(),
+    }
+    return ApiEnvelope(ok=True, build=get_app_build(), result=extraction)
+
+
+@app.post("/speech/verify", response_model=ApiEnvelope)
+def speech_verify(request: SpeechVerifyRequest) -> ApiEnvelope:
     source_url = (request.source_url or "").strip()
     if source_url and not is_probable_url(source_url):
         raise HTTPException(status_code=400, detail="source_url must start with http:// or https://")
+    if not request.claims:
+        raise HTTPException(status_code=400, detail="at least one selected claim is required")
 
-    if not transcript and source_url and request.try_youtube_captions:
-        transcript_result = extract_youtube_transcript(source_url)
-        if transcript_result.get("ok"):
-            transcript = transcript_result.get("transcript", "").strip()
-        else:
-            raise HTTPException(status_code=422, detail=transcript_result.get("error") or "Could not extract transcript")
+    llm, search = _clients()
+    if not llm.configured:
+        raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "OPENAI_API_KEY is not configured"})
+    if request.verification_mode == "deep" and not search.configured:
+        raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "TAVILY_API_KEY is required for deep speech audit"})
 
-    transcript = clean_pasted_youtube_transcript(transcript)
-    if not transcript:
-        raise HTTPException(status_code=400, detail="transcript is required, or provide a YouTube URL with accessible captions")
+    mode = "deep" if request.verification_mode == "deep" else "fast"
+    checked_claims = [
+        verify_speech_claim(claim, index=idx, source_url=source_url, mode=mode, llm=llm, search=search)
+        for idx, claim in enumerate(request.claims, start=1)
+    ]
+    result = {
+        "schema_version": "speech_verification.v1",
+        "source_url": source_url,
+        "claims_checked": checked_claims,
+        "claims_checked_count": len(checked_claims),
+        "verification_mode": mode,
+        "settings": {
+            "result_mode": "speech_verify",
+            "source_url": source_url,
+            "verification_mode": mode,
+            "build": get_app_build(),
+        },
+    }
+    return ApiEnvelope(ok=True, build=get_app_build(), result=result)
+
+
+@app.post("/speech/audit", response_model=ApiEnvelope)
+def speech_audit(request: SpeechAuditRequest) -> ApiEnvelope:
+    source_url = (request.source_url or "").strip()
+    transcript = _speech_transcript_from_request(request.transcript, source_url, request.try_youtube_captions)
 
     llm, search = _clients()
     if not llm.configured:

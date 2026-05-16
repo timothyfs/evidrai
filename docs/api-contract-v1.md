@@ -103,6 +103,23 @@ GET /reports/{report_id}
 
 `GET /reports` returns recent persisted report summaries. `GET /reports/{report_id}` returns the full `AssessmentResponse`.
 
+### Speech / video audit
+
+One-shot endpoint:
+
+```http
+POST /speech/audit
+```
+
+Two-stage endpoint for product UI and token control:
+
+```http
+POST /speech/extract
+POST /speech/verify
+```
+
+`POST /speech/extract` extracts and ranks checkable claims from a transcript or accessible YouTube/source URL. `POST /speech/verify` verifies only the selected extracted claims. Default max claims should remain low, currently 3, unless the user explicitly chooses more.
+
 ### Submit feedback
 
 ```http
