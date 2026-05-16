@@ -75,6 +75,8 @@ DATABASE_URL_SECRET_PATHS = (
 DATABASE_URL_ENV_NAMES = ("DATABASE_URL", "POSTGRES_URL", "SUPABASE_DATABASE_URL")
 SUPABASE_JWT_SECRET_PATHS = (("supabase", "jwt_secret"), ("SUPABASE_JWT_SECRET",))
 SUPABASE_JWT_SECRET_ENV_NAMES = ("SUPABASE_JWT_SECRET",)
+SUPABASE_URL_SECRET_PATHS = (("supabase", "url"), ("SUPABASE_URL",), ("NEXT_PUBLIC_SUPABASE_URL",))
+SUPABASE_URL_ENV_NAMES = ("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
 
 
 def api_allowed_origins() -> list[str]:
@@ -109,6 +111,18 @@ def supabase_jwt_secret() -> Optional[str]:
         secret_paths=SUPABASE_JWT_SECRET_PATHS,
         env_names=SUPABASE_JWT_SECRET_ENV_NAMES,
     )
+
+
+def supabase_url() -> Optional[str]:
+    value = read_config_value(
+        secret_paths=SUPABASE_URL_SECRET_PATHS,
+        env_names=SUPABASE_URL_ENV_NAMES,
+    )
+    return value.rstrip("/") if value else None
+
+
+def supabase_auth_configured() -> bool:
+    return bool(supabase_url() or supabase_jwt_secret())
 
 
 def config_presence_diagnostics() -> dict[str, Any]:

@@ -11,7 +11,7 @@ from evidrai.api_models import AssessmentResponse, serialize_assessment_response
 from evidrai.auth import AuthContext, context_from_headers
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import api_allowed_origins, database_url, get_app_build, supabase_jwt_secret
+from evidrai.config import api_allowed_origins, database_url, get_app_build, supabase_auth_configured
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, save_feedback
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
@@ -254,7 +254,7 @@ def runtime_status() -> Dict[str, Any]:
         "openai_configured": llm.configured,
         "tavily_configured": search.configured,
         "storage_backend": "postgres" if database_url() else "local_json",
-        "auth_configured": bool(supabase_jwt_secret()),
+        "auth_configured": supabase_auth_configured(),
     }
 
 

@@ -101,7 +101,7 @@ GET /reports
 GET /reports/{report_id}
 ```
 
-`GET /reports` returns recent persisted report summaries. If a valid Supabase Bearer token is supplied, report history is scoped to that authenticated user. Anonymous mode can still use `X-Evidrai-User-Id` as a temporary browser-profile owner. `GET /reports/{report_id}` returns the full `AssessmentResponse`.
+`GET /reports` returns recent persisted report summaries. If a valid Supabase Bearer token is supplied, report history is scoped to that authenticated user. Modern Supabase ECC/RSA JWT signing keys are verified via the project JWKS endpoint configured with `SUPABASE_URL`; legacy HS256 projects can use `SUPABASE_JWT_SECRET`. Anonymous mode can still use `X-Evidrai-User-Id` as a temporary browser-profile owner. `GET /reports/{report_id}` returns the full `AssessmentResponse`.
 
 ### Speech / video audit
 

@@ -33,11 +33,13 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<public anon key>
 
 These browser variables are public. Do not put private service-role keys, database passwords, or JWT secrets in `NEXT_PUBLIC_*` variables.
 
-For server-side token verification, configure the Render API with private env var:
+For server-side token verification on modern Supabase projects using ECC/RSA JWT signing keys, configure the Render API with:
 
 ```text
-SUPABASE_JWT_SECRET=<private Supabase JWT secret>
+SUPABASE_URL=https://<project-ref>.supabase.co
 ```
+
+Legacy HS256 projects may instead use private `SUPABASE_JWT_SECRET`, but do not use a JWT Key ID, `sb_secret_*`, service-role key, or database password.
 
 The UI displays two build labels:
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 import jwt
+from jwt import PyJWKClient
 
-from evidrai.config import supabase_jwt_secret
+from evidrai.config import supabase_jwt_secret, supabase_url
 from evidrai.errors import EvidraiError
 
 
@@ -25,19 +27,37 @@ class AuthContext:
         return self.auth_method == "supabase_jwt" and bool(self.owner_id)
 
 
+@lru_cache(maxsize=1)
+def _jwks_client() -> PyJWKClient:
+    url = supabase_url()
+    if not url:
+        raise AuthError("Server auth is not configured.", developer_detail="SUPABASE_URL is missing")
+    return PyJWKClient(f"{url.rstrip('/')}/auth/v1/.well-known/jwks.json")
+
+
 def decode_supabase_access_token(token: str) -> dict[str, Any]:
     secret = supabase_jwt_secret()
-    if not secret:
-        raise AuthError("Server auth is not configured.", developer_detail="SUPABASE_JWT_SECRET is missing")
     try:
+        if secret:
+            return jwt.decode(
+                token,
+                secret,
+                algorithms=["HS256"],
+                options={"verify_aud": False},
+            )
+        signing_key = _jwks_client().get_signing_key_from_jwt(token)
         return jwt.decode(
             token,
-            secret,
-            algorithms=["HS256"],
+            signing_key.key,
+            algorithms=["ES256", "RS256"],
             options={"verify_aud": False},
         )
+    except AuthError:
+        raise
     except jwt.PyJWTError as exc:
         raise AuthError("Invalid or expired authentication token.", developer_detail=str(exc))
+    except Exception as exc:
+        raise AuthError("Could not verify authentication token.", developer_detail=str(exc))
 
 
 def context_from_headers(*, authorization: str = "", owner_header: str = "") -> AuthContext:
