@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from evidrai.db import MIGRATIONS_TABLE, Migration, load_migrations, run_migrations
+from evidrai.db import MIGRATIONS_TABLE, Migration, load_migrations, run_migrations, split_sql_statements
 
 
 class FakeCursor:
@@ -47,6 +47,18 @@ def test_load_migrations_finds_initial_schema_file():
     assert migrations[0].version == "001"
     assert "CREATE TABLE IF NOT EXISTS assessments" in migrations[0].sql
     assert "CREATE TABLE IF NOT EXISTS feedback" in migrations[0].sql
+
+
+def test_split_sql_statements_handles_migration_file():
+    sql = """
+    CREATE TABLE example (id text);
+    CREATE INDEX example_idx ON example (id);
+    """
+
+    assert split_sql_statements(sql) == [
+        "CREATE TABLE example (id text)",
+        "CREATE INDEX example_idx ON example (id)",
+    ]
 
 
 def test_run_migrations_records_unapplied_versions():

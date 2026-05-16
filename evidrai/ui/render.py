@@ -282,10 +282,16 @@ def render_saved_assessment(assessment: AssessmentResponse) -> None:
 
 
 def render_saved_assessment_history() -> None:
-    reports = list_reports(limit=10)
+    try:
+        reports = list_reports(limit=10)
+    except Exception as exc:
+        with st.expander("Saved assessments", expanded=False):
+            st.warning("Saved assessment history is temporarily unavailable. You can still run new checks.")
+            st.caption(str(exc))
+        return
     with st.expander("Saved assessments", expanded=False):
         if not reports:
-            st.caption("No saved assessments yet. Run a check to create the first local report.")
+            st.caption("No saved assessments yet. Run a check to create the first saved report.")
             return
         options = [item.get("assessment_id") for item in reports if item.get("assessment_id")]
         labels = {

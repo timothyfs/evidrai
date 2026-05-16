@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Protocol
+from typing import Iterable, Protocol
 
 from evidrai.errors import EvidraiError
 
@@ -65,6 +65,37 @@ def applied_versions(cur) -> set[str]:
     return versions
 
 
+def split_sql_statements(sql: str) -> list[str]:
+    """Split simple migration SQL into individual statements.
+
+    Evidrai migrations are plain DDL files. Executing one statement at a time is
+    more compatible with hosted Postgres poolers than sending a whole file in a
+    single execute call.
+    """
+    statements: list[str] = []
+    current: list[str] = []
+    in_single_quote = False
+    in_double_quote = False
+    previous = ""
+    for char in sql:
+        if char == "'" and not in_double_quote and previous != "\\":
+            in_single_quote = not in_single_quote
+        elif char == '"' and not in_single_quote and previous != "\\":
+            in_double_quote = not in_double_quote
+        if char == ";" and not in_single_quote and not in_double_quote:
+            statement = "".join(current).strip()
+            if statement:
+                statements.append(statement)
+            current = []
+        else:
+            current.append(char)
+        previous = char
+    statement = "".join(current).strip()
+    if statement:
+        statements.append(statement)
+    return statements
+
+
 def run_migrations(connect: ConnectionFactory, migrations: Iterable[Migration] | None = None) -> list[str]:
     """Apply unapplied SQL migrations using the supplied connection factory.
 
@@ -85,7 +116,8 @@ def run_migrations(connect: ConnectionFactory, migrations: Iterable[Migration] |
                 for migration in migration_list:
                     if migration.version in existing:
                         continue
-                    cur.execute(migration.sql)
+                    for statement in split_sql_statements(migration.sql):
+                        cur.execute(statement)
                     cur.execute(
                         f"INSERT INTO {MIGRATIONS_TABLE} (version, name) VALUES (%s, %s)",
                         (migration.version, migration.name),
