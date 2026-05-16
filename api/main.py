@@ -11,6 +11,7 @@ from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import get_app_build
 from evidrai.errors import EvidraiError, safe_error_payload
+from evidrai.feedback import build_feedback_record, save_feedback
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
 from evidrai.reports import list_reports, load_report, save_report
@@ -55,6 +56,12 @@ class SpeechAuditRequest(BaseModel):
 
 class SourceExtractRequest(BaseModel):
     source_url: str
+
+
+class FeedbackCreateRequest(BaseModel):
+    rating: str = Field(default="Useful", pattern="^(Useful|Partly useful|Not useful)$")
+    reasons: list[str] = Field(default_factory=list)
+    comment: str = ""
 
 
 class ApiEnvelope(BaseModel):
@@ -134,6 +141,29 @@ def reports_index(limit: int = 50) -> Dict[str, Any]:
 @app.get("/reports/{report_id}", response_model=AssessmentResponse)
 def get_report(report_id: str) -> AssessmentResponse:
     return load_report(report_id)
+
+
+@app.post("/assessments/{assessment_id}/feedback", response_model=Dict[str, Any])
+def create_assessment_feedback(assessment_id: str, request: FeedbackCreateRequest) -> Dict[str, Any]:
+    assessment = load_report(assessment_id)
+    payload = assessment.model_dump(mode="json")
+    record = build_feedback_record(
+        result_key=assessment.assessment_id,
+        rating=request.rating,
+        reasons=request.reasons,
+        comment=request.comment,
+        result=payload,
+        source_url=assessment.request.source_url or "",
+        settings=assessment.request.settings,
+    )
+    saved = save_feedback(record)
+    return {
+        "ok": saved.ok,
+        "feedback_id": saved.feedback_id,
+        "assessment_id": assessment.assessment_id,
+        "destination": saved.destination,
+        "message": saved.message,
+    }
 
 
 @app.get("/health")

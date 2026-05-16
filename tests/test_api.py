@@ -73,7 +73,8 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
             "rule_engine": {"rationale": "Direct support found."},
         }
 
-    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path))
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
+    monkeypatch.setenv("FEEDBACK_LOG_PATH", str(tmp_path / "feedback.jsonl"))
     monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
 
     response = client.post("/assessments/fast", json={"claim": "Paris is the capital of France."})
@@ -95,6 +96,16 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     list_response = client.get("/reports")
     assert list_response.status_code == 200
     assert list_response.json()["reports"][0]["assessment_id"] == payload["assessment_id"]
+
+    feedback_response = client.post(
+        f"/assessments/{payload['assessment_id']}/feedback",
+        json={"rating": "Useful", "reasons": ["Verdict clarity"], "comment": "Good enough"},
+    )
+    assert feedback_response.status_code == 200
+    feedback_payload = feedback_response.json()
+    assert feedback_payload["ok"] is True
+    assert feedback_payload["assessment_id"] == payload["assessment_id"]
+    assert feedback_payload["feedback_id"]
 
 
 def test_claim_check_embeds_assessment_contract(monkeypatch):

@@ -10,8 +10,9 @@ __pycache__/
 # Streamlit local secrets
 .streamlit/secrets.toml
 
-# Local persisted report store
+# Local persisted report and feedback stores
 .evidrai/
+.evidrai_feedback/
 
 # Local/private test coordination notes
 /docs/nicholas-user-test.md

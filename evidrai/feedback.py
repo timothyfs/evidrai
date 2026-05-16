@@ -68,7 +68,8 @@ def build_feedback_record(
 ) -> Dict[str, Any]:
     result = result or {}
     settings = settings or {}
-    claim = result.get("claim") or result.get("normalized_claim") or settings.get("claim") or settings.get("analysis_input") or ""
+    request = result.get("request") if isinstance(result.get("request"), dict) else {}
+    claim = result.get("claim") or result.get("normalized_claim") or request.get("claim") or settings.get("claim") or settings.get("analysis_input") or ""
     return {
         "feedback_id": str(uuid4()),
         "captured_at": datetime.now(timezone.utc).isoformat(),

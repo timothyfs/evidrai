@@ -118,16 +118,16 @@ Date: 2026-05-10
 - Description: Persist AssessmentResponse packets locally and expose saved reports by ID.
 
 ### Persist user feedback
-- Status: Backlog
+- Status: Done
 - Priority: Low
 - Area: Product
-- Description: Store feedback beyond current Streamlit session state so it can guide improvements.
+- Description: Store feedback beyond current Streamlit session state and link feedback to assessment IDs.
 
 ### Add saved assessment history
-- Status: Backlog
+- Status: Done
 - Priority: Low
 - Area: Product
-- Description: Persist previous assessments for review and comparison.
+- Description: Persist previous assessments for review and comparison, with a Streamlit recent-report loader.
 
 ### Explore browser extension/API backend path
 - Status: Backlog

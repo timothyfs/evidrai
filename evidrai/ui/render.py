@@ -11,10 +11,12 @@ from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import get_app_build
 from evidrai.errors import EvidraiError
+from evidrai.api_models import AssessmentResponse, serialize_assessment_response
 from evidrai.export import assessment_export_json
 from evidrai.feedback import build_feedback_record, feedback_backend_status, save_feedback
 from evidrai.ingestion.url import fetch_source_url
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
+from evidrai.reports import list_reports, load_report, save_report
 from evidrai.rules.verdict import (
     map_confidence_label,
     map_pipeline_verdict,
@@ -220,6 +222,76 @@ def render_assessment_metrics(result: Dict[str, Any]) -> None:
 
     if elapsed is not None:
         st.caption(f"Completed in {elapsed:.1f}s")
+
+
+def persist_ui_assessment(
+    result: Dict[str, Any],
+    *,
+    claim: str,
+    source_url: str,
+    category: str,
+    mode: str,
+    include_debug: bool = True,
+) -> AssessmentResponse:
+    assessment = serialize_assessment_response(
+        result,
+        claim=claim,
+        source_url=source_url,
+        category=category,
+        mode=mode,
+        build=get_app_build(),
+        include_debug=include_debug,
+    )
+    save_report(assessment)
+    result["assessment_id"] = assessment.assessment_id
+    result["assessment"] = assessment.model_dump(mode="json")
+    return assessment
+
+
+def render_saved_assessment(assessment: AssessmentResponse) -> None:
+    st.markdown("## Saved assessment")
+    st.caption(f"Report ID: `{assessment.assessment_id}` · {assessment.created_at} · {assessment.mode}")
+    render_topline_block(
+        "Saved report",
+        assessment.verdict.label,
+        assessment.verdict.confidence,
+        assessment.verdict.summary,
+        assessment.verdict.key_caveat,
+        badge="Loaded from local evidence ledger.",
+    )
+    if assessment.request.claim:
+        st.markdown("### Claim")
+        st.write(assessment.request.claim)
+    if assessment.sources:
+        st.markdown("### Sources reviewed")
+        for source in assessment.sources[:8]:
+            if source.url:
+                st.markdown(f"**[{source.title}]({source.url})**")
+            else:
+                st.markdown(f"**{source.title}**")
+            st.caption(f"{source.source_type} · {source.stance} · {source.evidence_category} · score {source.score:.1f}")
+            if source.summary:
+                st.write(source.summary)
+
+
+def render_saved_assessment_history() -> None:
+    reports = list_reports(limit=10)
+    with st.expander("Saved assessments", expanded=False):
+        if not reports:
+            st.caption("No saved assessments yet. Run a check to create the first local report.")
+            return
+        options = [item.get("assessment_id") for item in reports if item.get("assessment_id")]
+        labels = {
+            item.get("assessment_id"): f"{(item.get('created_at') or '')[:16]} · {item.get('mode', '')} · {item.get('verdict', 'Unverified')} · {(item.get('claim') or 'Untitled')[:70]}"
+            for item in reports
+            if item.get("assessment_id")
+        }
+        selected = st.selectbox("Recent reports", options, format_func=lambda value: labels.get(value, value), key="saved_report_select")
+        if st.button("Load selected report", use_container_width=True, key="load_saved_report"):
+            try:
+                st.session_state["loaded_report"] = load_report(selected).model_dump(mode="json")
+            except Exception as exc:
+                st.error(f"Could not load report: {exc}")
 
 
 def render_feedback_controls(
@@ -855,6 +927,17 @@ def main() -> None:
         st.caption(f"OpenAI: {'configured' if llm.configured else 'missing'} • Model: {llm.model} • Base URL: {llm.base_url}")
         st.caption(f"Tavily: {'configured' if search.configured else 'missing'}")
 
+    render_saved_assessment_history()
+    loaded_report = st.session_state.get("loaded_report")
+    if loaded_report:
+        try:
+            render_saved_assessment(AssessmentResponse.model_validate(loaded_report))
+        except Exception as exc:
+            st.error(f"Could not render saved report: {exc}")
+        if st.button("Clear loaded report", use_container_width=True):
+            st.session_state["loaded_report"] = None
+        st.markdown("---")
+
     if app_mode == "Speech / Video Audit":
         render_speech_audit_page(llm, search, developer_debug_enabled)
         return
@@ -932,6 +1015,14 @@ def main() -> None:
                 quick_result["result_id"] = f"quick_{cache_key}"
                 quick_result["settings"] = request_settings | {"result_mode": "fast"}
                 quick_result["source_url"] = cleaned_source_url
+                persist_ui_assessment(
+                    quick_result,
+                    claim=cleaned_claim,
+                    source_url=cleaned_source_url,
+                    category=category,
+                    mode="fast",
+                    include_debug=developer_debug_enabled,
+                )
                 if extracted_source:
                     quick_result["extracted_source"] = extracted_source.model_dump(mode="json")
 
@@ -947,6 +1038,14 @@ def main() -> None:
                     full_result["result_id"] = f"deep_{cache_key}"
                     full_result["settings"] = request_settings | {"result_mode": "deep"}
                     full_result["source_url"] = cleaned_source_url
+                    persist_ui_assessment(
+                        full_result,
+                        claim=cleaned_claim,
+                        source_url=cleaned_source_url,
+                        category=category,
+                        mode="deep",
+                        include_debug=developer_debug_enabled,
+                    )
                     if extracted_source:
                         full_result["extracted_source"] = extracted_source.model_dump(mode="json")
                     status.update(label="Assessment complete", state="complete", expanded=False)
