@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { API_BASE_URL, AssessmentResponse, FeedbackRating, ReportSummary, RuntimeStatus, createAssessment, getReport, getRuntime, submitFeedback } from '../lib/api';
 
+const FRONTEND_BUILD = process.env.NEXT_PUBLIC_APP_BUILD || 'local';
+
 const verdictClass: Record<string, string> = {
   Supported: 'good',
   'Likely supported': 'good',
@@ -245,7 +247,8 @@ export default function Home() {
         </div>
         <div className="statusPanel">
           <span>API: {API_BASE_URL}</span>
-          <span>Build: {runtime?.build || 'checking...'}</span>
+          <span>Frontend build: {FRONTEND_BUILD}</span>
+          <span>API build: {runtime?.build || 'checking...'}</span>
           <span>Storage: {runtime?.storage_backend || 'checking...'}</span>
           <span>OpenAI: {runtime?.openai_configured ? 'configured' : 'missing'}</span>
         </div>

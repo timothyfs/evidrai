@@ -26,6 +26,11 @@ NEXT_PUBLIC_API_BASE_URL=https://evidrai.onrender.com
 
 The variable is public because it is used by the browser frontend. Do not put secrets in `NEXT_PUBLIC_*` variables.
 
+The UI displays two build labels:
+
+- `Frontend build`: Vercel commit short SHA, via `VERCEL_GIT_COMMIT_SHA` at build time
+- `API build`: backend build reported by `/runtime`
+
 ## Current features
 
 - runtime status from `/runtime`
