@@ -82,6 +82,7 @@ def build_feedback_record(
         "confidence": result.get("verified_confidence") or result.get("confidence") or "",
         "source_url": source_url or settings.get("source_url", ""),
         "result_id": result.get("result_id") or result_key,
+        "assessment_id": result.get("assessment_id") or (result.get("assessment") or {}).get("assessment_id") or result.get("report_id") or "",
         "request": {
             "claim": claim,
             "source_url": source_url or settings.get("source_url", ""),

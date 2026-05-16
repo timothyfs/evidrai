@@ -14,6 +14,7 @@ def test_build_feedback_record_contains_result_context():
             "verified_verdict": "Likely supported",
             "verified_confidence": "Medium",
             "result_id": "deep_123",
+            "assessment_id": "assess_123",
         },
         source_url="https://example.com/source",
         settings={"verification_depth": "Deep", "output_mode": "Detailed"},
@@ -27,6 +28,7 @@ def test_build_feedback_record_contains_result_context():
     assert record["reasons"] == ["Verdict clarity"]
     assert record["comment"] == "Too cautious"
     assert record["source_url"] == "https://example.com/source"
+    assert record["assessment_id"] == "assess_123"
     assert record["request"]["settings"]["verification_depth"] == "Deep"
     assert record["assessment_output"]["claim"] == "Test claim"
 
