@@ -1026,7 +1026,10 @@ def main() -> None:
         st.markdown("---")
         st.caption("The product is optimized around claim → evidence → verdict. Fast mode gives a quick first pass. Deep mode shows the evidence pipeline.")
         st.markdown("---")
+        backend = feedback_backend_status()
+        storage_label = "Postgres" if backend.get("postgres_configured") else "Local JSON"
         st.caption(f"Build: {get_app_build()}")
+        st.caption(f"Storage: {storage_label}")
         st.caption(f"OpenAI: {'configured' if llm.configured else 'missing'} • Model: {llm.model} • Base URL: {llm.base_url}")
         st.caption(f"Tavily: {'configured' if search.configured else 'missing'}")
 
