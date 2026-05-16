@@ -11,6 +11,7 @@ from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import get_app_build
 from evidrai.errors import EvidraiError, safe_error_payload
+from evidrai.ingestion.url import ExtractedSource, fetch_source_url
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
 from evidrai.transcripts import clean_pasted_youtube_transcript, extract_youtube_transcript
 from evidrai.utils import build_analysis_input, is_probable_url
@@ -51,6 +52,10 @@ class SpeechAuditRequest(BaseModel):
     try_youtube_captions: bool = True
 
 
+class SourceExtractRequest(BaseModel):
+    source_url: str
+
+
 class ApiEnvelope(BaseModel):
     ok: bool
     build: str
@@ -60,6 +65,13 @@ class ApiEnvelope(BaseModel):
 
 def _clients() -> tuple[OpenAICompatibleClient, TavilySearchClient]:
     return OpenAICompatibleClient(), TavilySearchClient()
+
+
+def _source_claim_from_url(source_url: str) -> str:
+    extracted = fetch_source_url(source_url)
+    if extracted.candidate_claims:
+        return extracted.candidate_claims[0]
+    return extracted.description or extracted.title or extracted.excerpt[:500]
 
 
 def _validate_claim_request(claim: str, source_url: str) -> None:
@@ -80,6 +92,8 @@ def _run_claim_assessment(
     if not llm.configured:
         raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "OPENAI_API_KEY is not configured"})
 
+    if not claim and source_url:
+        claim = _source_claim_from_url(source_url)
     analysis_input = build_analysis_input(claim, source_url)
     if mode == "deep":
         if not search.configured:
@@ -102,6 +116,12 @@ def _assessment_response_from_request(request: AssessmentCreateRequest, mode: st
         build=get_app_build(),
         include_debug=request.include_debug,
     )
+
+
+@app.post("/sources/extract", response_model=ExtractedSource)
+def extract_source(request: SourceExtractRequest) -> ExtractedSource:
+    source_url = (request.source_url or "").strip()
+    return fetch_source_url(source_url)
 
 
 @app.get("/health")

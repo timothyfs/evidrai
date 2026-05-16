@@ -13,6 +13,7 @@ from evidrai.config import get_app_build
 from evidrai.errors import EvidraiError
 from evidrai.export import assessment_export_json
 from evidrai.feedback import build_feedback_record, feedback_backend_status, save_feedback
+from evidrai.ingestion.url import fetch_source_url
 from evidrai.pipeline.verification import run_claim_pipeline, run_quick_pass, run_speech_audit
 from evidrai.rules.verdict import (
     map_confidence_label,
@@ -886,6 +887,17 @@ def main() -> None:
             st.error("OPENAI_API_KEY is not configured in your app secrets or environment.")
             return
 
+        extracted_source = None
+        if not cleaned_claim and cleaned_source_url:
+            with st.spinner("Extracting readable article text and candidate claim..."):
+                extracted_source = fetch_source_url(cleaned_source_url)
+            if extracted_source.candidate_claims:
+                cleaned_claim = extracted_source.candidate_claims[0]
+                st.info(f"Using extracted candidate claim: {cleaned_claim}")
+            else:
+                cleaned_claim = extracted_source.description or extracted_source.title or extracted_source.excerpt[:500]
+                st.info("Using extracted article text because no explicit claim was provided.")
+
         analysis_input = build_analysis_input(cleaned_claim, cleaned_source_url)
         effective_verification_mode = "Deep" if verification_mode == "Auto" and detail_mode == "Detailed" else verification_mode
         use_search = effective_verification_mode == "Deep"
@@ -900,6 +912,7 @@ def main() -> None:
             "lightweight_fast_search_enabled": search.configured,
             "deep_search_enabled": use_search,
             "build": get_app_build(),
+            "source_extraction_enabled": bool(cleaned_source_url),
         }
         if effective_verification_mode == "Deep" and not search.configured:
             st.error("Deep mode requires TAVILY_API_KEY to be configured.")
@@ -919,6 +932,8 @@ def main() -> None:
                 quick_result["result_id"] = f"quick_{cache_key}"
                 quick_result["settings"] = request_settings | {"result_mode": "fast"}
                 quick_result["source_url"] = cleaned_source_url
+                if extracted_source:
+                    quick_result["extracted_source"] = extracted_source.model_dump(mode="json")
 
                 full_result = None
                 if use_search:
@@ -932,6 +947,8 @@ def main() -> None:
                     full_result["result_id"] = f"deep_{cache_key}"
                     full_result["settings"] = request_settings | {"result_mode": "deep"}
                     full_result["source_url"] = cleaned_source_url
+                    if extracted_source:
+                        full_result["extracted_source"] = extracted_source.model_dump(mode="json")
                     status.update(label="Assessment complete", state="complete", expanded=False)
                 else:
                     quick_result["elapsed_seconds"] = time.time() - started_at

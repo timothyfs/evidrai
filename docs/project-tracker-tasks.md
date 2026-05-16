@@ -35,7 +35,7 @@ Date: 2026-05-10
   - Deep mode works when Tavily is configured.
 
 ### Commit/push tracker and docs cleanup
-- Status: Todo
+- Status: Done
 - Priority: Medium
 - Area: Repo hygiene
 - Description: Commit the project docs and any tracker-related planning files once reviewed.
@@ -94,7 +94,7 @@ Date: 2026-05-10
 ## Expansion backlog
 
 ### Add URL/article extraction module
-- Status: Backlog
+- Status: Done
 - Priority: Medium
 - Area: Ingestion
 - Description: Add a separate ingestion layer for article/page URLs instead of relying on pasted claims plus optional URL context.

@@ -108,6 +108,62 @@ def test_claim_check_embeds_assessment_contract(monkeypatch):
     assert assessment["debug"]["schema_version"] == "pipeline_trace.v1"
 
 
+def test_sources_extract_endpoint_uses_ingestion(monkeypatch):
+    from evidrai.ingestion.url import ExtractedSource
+
+    monkeypatch.setattr(
+        api_main,
+        "fetch_source_url",
+        lambda url: ExtractedSource(
+            url="https://example.com/story",
+            final_url="https://example.com/story",
+            domain="example.com",
+            title="Story title",
+            description="Description",
+            text="Article text",
+            excerpt="Article text",
+            candidate_claims=["The article says something happened."],
+            word_count=5,
+        ),
+    )
+
+    response = client.post("/sources/extract", json={"source_url": "https://example.com/story"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "source_extract.v1"
+    assert payload["candidate_claims"] == ["The article says something happened."]
+
+
+def test_url_only_assessment_extracts_candidate_claim(monkeypatch):
+    class FakeLLM:
+        configured = True
+
+    class FakeSearch:
+        configured = True
+
+    class FakeExtracted:
+        candidate_claims = ["Extracted claim from article."]
+        description = ""
+        title = ""
+        excerpt = ""
+
+    captured = {}
+
+    def fake_pipeline(analysis_input, llm, search):
+        captured["analysis_input"] = analysis_input
+        return {"verified_verdict": "Unverified", "verified_confidence": "Low"}
+
+    monkeypatch.setattr(api_main, "_clients", lambda: (FakeLLM(), FakeSearch()))
+    monkeypatch.setattr(api_main, "fetch_source_url", lambda url: FakeExtracted())
+    monkeypatch.setattr(api_main, "run_claim_pipeline", fake_pipeline)
+
+    response = client.post("/assessments/deep", json={"source_url": "https://example.com/story"})
+
+    assert response.status_code == 200
+    assert "Extracted claim from article." in captured["analysis_input"]
+
+
 def test_deep_assessment_missing_tavily_returns_structured_error(monkeypatch):
     class FakeLLM:
         configured = True
