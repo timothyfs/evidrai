@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 @dataclass
@@ -172,7 +172,7 @@ class VerificationResult:
     provisional_confidence: int = 0
     schema_version: str = "pipeline_result.v1"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_payload(self) -> Dict[str, Any]:
         payload = dict(self.reasoning)
         payload.update(
             {
@@ -192,6 +192,103 @@ class VerificationResult:
             }
         )
         return payload
+
+    def to_model(self) -> "PipelineResultModel":
+        return PipelineResultModel.model_validate(self.to_payload())
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.to_model().model_dump(mode="json")
+
+
+class SubClaimPacketModel(BaseModel):
+    """Stable serialized boundary for a parsed subclaim."""
+
+    id: str = "sc_1"
+    text: str
+    claim_type: str = "other"
+    entities: List[str] = Field(default_factory=list)
+    jurisdiction: Optional[str] = None
+    time_sensitivity: str = "medium"
+    verification_requirements: List[str] = Field(default_factory=list)
+    risk_flags: List[str] = Field(default_factory=list)
+
+
+class ClaimAnalysisPacketModel(BaseModel):
+    """Stable serialized boundary for claim extraction output."""
+
+    normalized_claim: str = ""
+    subclaims: List[SubClaimPacketModel] = Field(default_factory=list)
+    overall_notes: List[str] = Field(default_factory=list)
+
+
+class SourcePacketModel(BaseModel):
+    """Public source packet used by UI/API/debug exports.
+
+    Raw fetched page content is intentionally excluded from this boundary.
+    """
+
+    title: str = "Untitled"
+    url: str = ""
+    domain: str = ""
+    source_type: str = "contextual"
+    published_date: Optional[str] = None
+    summary: str = ""
+    claim_support: str = "irrelevant"
+    evidence_category: str = "irrelevant"
+    source_role: str = "context"
+    narrative_cluster: str = ""
+    weighted_score: float = 0.0
+
+
+class RetrievalPacketModel(BaseModel):
+    """Stable serialized boundary for retrieval output."""
+
+    queries: List[str] = Field(default_factory=list)
+    sources: List[SourcePacketModel] = Field(default_factory=list)
+
+
+class EvidencePacketModel(BaseModel):
+    claim: str
+    subclaims: List[str] = Field(default_factory=list)
+    sources: List[SourcePacketModel] = Field(default_factory=list)
+
+
+class PendulumPacketModel(BaseModel):
+    band: str = "Mixed / uncertain"
+    score: float = 0.0
+    explanation: str = ""
+
+
+class RuleEnginePacketModel(BaseModel):
+    verdict: str = "Unverified"
+    confidence: str = "Low"
+    rationale: str = ""
+    stats: Dict[str, Any] = Field(default_factory=dict)
+    risk_flags: List[str] = Field(default_factory=list)
+
+
+class PipelineResultModel(BaseModel):
+    """Versioned deep-pipeline result boundary.
+
+    `extra="allow"` keeps the current UI-compatible fields while the project
+    migrates from loose dictionaries to fully typed response contracts.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    schema_version: str = "pipeline_result.v1"
+    claim: str
+    claim_analysis: ClaimAnalysisPacketModel
+    subclaims: List[str] = Field(default_factory=list)
+    retrieval: RetrievalPacketModel
+    sources: List[SourcePacketModel] = Field(default_factory=list)
+    queries: List[str] = Field(default_factory=list)
+    evidence_packet: EvidencePacketModel
+    pendulum: PendulumPacketModel
+    risk_flags: List[str] = Field(default_factory=list)
+    rule_engine: RuleEnginePacketModel
+    provisional_verdict: str = "unverifiable"
+    provisional_confidence: int = 0
 
 
 class EvidenceTypeModel(BaseModel):

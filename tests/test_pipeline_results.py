@@ -7,6 +7,7 @@ from evidrai.models import (
     RuleEngineResult,
     SubClaim,
     VerificationResult,
+    PipelineResultModel,
 )
 from evidrai.pipeline.verification import parse_claim_analysis
 
@@ -82,8 +83,10 @@ def test_verification_result_serializes_ui_compatibility_and_trace_boundaries():
         provisional_confidence=77,
     )
 
+    model = result.to_model()
     payload = result.to_dict()
 
+    assert isinstance(model, PipelineResultModel)
     assert payload["schema_version"] == "pipeline_result.v1"
     assert payload["claim"] == "Typed claim"
     assert payload["subclaims"] == ["Typed claim"]
@@ -95,3 +98,5 @@ def test_verification_result_serializes_ui_compatibility_and_trace_boundaries():
     assert payload["pendulum"]["band"] == "Strongly evidenced"
     assert payload["rule_engine"]["verdict"] == "Supported"
     assert payload["provisional_confidence"] == 77
+    assert "content" not in payload["sources"][0]
+    assert payload["retrieval"]["sources"][0]["domain"] == "example.com"

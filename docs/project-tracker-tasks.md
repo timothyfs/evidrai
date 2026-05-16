@@ -46,7 +46,7 @@ Date: 2026-05-10
 ## Next after test harness
 
 ### Create typed pipeline result objects
-- Status: Todo
+- Status: In progress
 - Priority: High
 - Area: Architecture
 - Description: Replace loose pipeline dictionaries with typed result boundaries for claim analysis, retrieval, scoring, source summaries, verification, and trace output.
