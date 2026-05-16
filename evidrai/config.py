@@ -75,6 +75,16 @@ DATABASE_URL_SECRET_PATHS = (
 DATABASE_URL_ENV_NAMES = ("DATABASE_URL", "POSTGRES_URL", "SUPABASE_DATABASE_URL")
 
 
+def api_allowed_origins() -> list[str]:
+    raw = read_config_value(
+        secret_paths=(("api", "allowed_origins"), ("API_ALLOWED_ORIGINS",)),
+        env_names=("API_ALLOWED_ORIGINS",),
+        default="",
+    )
+    origins = [item.strip() for item in (raw or "").split(",") if item.strip()]
+    return origins or ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
 def database_url() -> Optional[str]:
     value = read_config_value(
         secret_paths=DATABASE_URL_SECRET_PATHS,

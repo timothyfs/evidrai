@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from evidrai.api_models import AssessmentResponse, serialize_assessment_response
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import database_url, get_app_build
+from evidrai.config import api_allowed_origins, database_url, get_app_build
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, save_feedback
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
@@ -19,10 +20,21 @@ from evidrai.transcripts import clean_pasted_youtube_transcript, extract_youtube
 from evidrai.utils import build_analysis_input, is_probable_url
 
 
+API_VERSION = "api.v1"
+
+
 app = FastAPI(
     title="Evidrai API",
     version="0.1.0",
-    description="Phase 1 API wrapper around the Evidrai verification engine.",
+    description="Independent API wrapper around the Evidrai verification engine.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=api_allowed_origins(),
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 
@@ -179,16 +191,48 @@ def get_assessment_feedback(assessment_id: str, limit: int = 100) -> Dict[str, A
     }
 
 
-@app.get("/health")
-def health() -> Dict[str, Any]:
+def runtime_status() -> Dict[str, Any]:
     llm, search = _clients()
     return {
         "ok": True,
+        "api_version": API_VERSION,
         "build": get_app_build(),
         "openai_configured": llm.configured,
         "tavily_configured": search.configured,
         "storage_backend": "postgres" if database_url() else "local_json",
     }
+
+
+@app.get("/", response_model=Dict[str, Any])
+def root() -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "service": "evidrai-api",
+        "api_version": API_VERSION,
+        "build": get_app_build(),
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
+@app.get("/version", response_model=Dict[str, Any])
+def version() -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "service": "evidrai-api",
+        "api_version": API_VERSION,
+        "build": get_app_build(),
+    }
+
+
+@app.get("/health")
+def health() -> Dict[str, Any]:
+    return runtime_status()
+
+
+@app.get("/runtime", response_model=Dict[str, Any])
+def runtime() -> Dict[str, Any]:
+    return runtime_status()
 
 
 @app.post("/claims/check", response_model=ApiEnvelope)

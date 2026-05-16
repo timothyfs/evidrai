@@ -174,6 +174,15 @@ Initial API endpoints:
 
 API docs are available locally at `http://127.0.0.1:8000/docs` when Uvicorn is running.
 
+Backend runtime endpoints:
+
+- `GET /`
+- `GET /version`
+- `GET /health`
+- `GET /runtime`
+
+See `docs/fastapi-backend-hardening.md` for the first independent-backend hardening slice.
+
 ## Storage backend
 
 Evidrai uses local JSON persistence by default. If `DATABASE_URL` is configured, it switches to Postgres-backed assessment and feedback stores.

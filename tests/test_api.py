@@ -7,15 +7,46 @@ from api.main import app
 client = TestClient(app)
 
 
+def test_root_endpoint_returns_service_metadata():
+    response = client.get("/")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["service"] == "evidrai-api"
+    assert payload["api_version"] == "api.v1"
+    assert payload["docs"] == "/docs"
+
+
+def test_version_endpoint_returns_build_metadata():
+    response = client.get("/version")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["service"] == "evidrai-api"
+    assert payload["api_version"] == "api.v1"
+    assert "build" in payload
+
+
 def test_health_endpoint_returns_build_and_config_flags():
     response = client.get("/health")
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["ok"] is True
+    assert payload["api_version"] == "api.v1"
     assert "build" in payload
     assert "openai_configured" in payload
     assert "tavily_configured" in payload
+    assert "storage_backend" in payload
+
+
+def test_runtime_endpoint_matches_health_shape():
+    response = client.get("/runtime")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["api_version"] == "api.v1"
     assert "storage_backend" in payload
 
 
