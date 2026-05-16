@@ -295,7 +295,7 @@ def render_saved_assessment_history() -> None:
             return
         options = [item.get("assessment_id") for item in reports if item.get("assessment_id")]
         labels = {
-            item.get("assessment_id"): f"{(item.get('created_at') or '')[:16]} · {item.get('mode', '')} · {item.get('verdict', 'Unverified')} · {(item.get('claim') or 'Untitled')[:70]}"
+            item.get("assessment_id"): f"{str(item.get('created_at') or '')[:16]} · {item.get('mode', '')} · {item.get('verdict', 'Unverified')} · {str(item.get('claim') or 'Untitled')[:70]}"
             for item in reports
             if item.get("assessment_id")
         }

@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from evidrai.api_models import AssessmentRequestRecord, AssessmentResponse, AssessmentVerdict
 from evidrai.reports import LocalReportStore, PostgresReportStore, get_report_store, list_reports, load_report, save_report
 
@@ -19,6 +21,48 @@ def test_save_load_and_list_report(tmp_path, monkeypatch):
     assert loaded.request.claim == "A test claim"
     assert reports[0]["assessment_id"] == assessment.assessment_id
     assert reports[0]["verdict"] == "Supported"
+
+
+def test_postgres_report_store_list_serializes_datetime(monkeypatch):
+    store = PostgresReportStore("postgresql://example")
+    store._schema_ready = True
+
+    class FakeCursor:
+        def execute(self, *_args):
+            pass
+
+        def fetchall(self):
+            return [
+                {
+                    "assessment_id": "assess_1",
+                    "created_at": datetime(2026, 5, 16, 12, 0, tzinfo=timezone.utc),
+                    "mode": "fast",
+                    "claim": "Claim",
+                    "verdict": "Supported",
+                }
+            ]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(store, "_connect", lambda: FakeConnection())
+
+    reports = store.list()
+
+    assert reports[0]["created_at"] == "2026-05-16T12:00:00+00:00"
 
 
 def test_get_report_store_uses_postgres_when_database_url_is_configured(monkeypatch):

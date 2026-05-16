@@ -189,7 +189,14 @@ class PostgresReportStore:
                         (limit,),
                     )
                     rows = cur.fetchall()
-            return [dict(row) for row in rows]
+            items: List[Dict[str, Any]] = []
+            for row in rows:
+                item = dict(row)
+                created_at = item.get("created_at")
+                if hasattr(created_at, "isoformat"):
+                    item["created_at"] = created_at.isoformat()
+                items.append(item)
+            return items
         except Exception as exc:
             raise ReportStoreError("Could not list reports.", developer_detail=str(exc))
 
