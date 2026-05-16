@@ -56,10 +56,36 @@ export type ReportSummary = {
   owner_id?: string | null;
 };
 
+export type TierName = 'free' | 'pro' | 'journalist';
+
 export type AccountProfile = {
   owner_id: string;
   label: string;
   plan: 'Free' | 'Pro' | 'Journalist';
+};
+
+export type TierDefinition = {
+  tier: TierName;
+  label: string;
+  description: string;
+  features: Record<string, boolean>;
+  limits: Record<string, number>;
+};
+
+export type UserProfile = {
+  owner_id: string;
+  email: string;
+  tier: TierName;
+  tier_label: 'Free' | 'Pro' | 'Journalist';
+  features: Record<string, boolean>;
+  limits: Record<string, number>;
+};
+
+export type MeResponse = {
+  ok: boolean;
+  authenticated: boolean;
+  user: UserProfile;
+  feature_matrix: { schema_version: string; tiers: TierDefinition[] };
 };
 
 export type RuntimeStatus = {
@@ -70,6 +96,7 @@ export type RuntimeStatus = {
   tavily_configured: boolean;
   storage_backend: string;
   auth_configured?: boolean;
+  admin_configured?: boolean;
 };
 
 export type FeedbackRating = 'Useful' | 'Partly useful' | 'Not useful';
@@ -203,6 +230,14 @@ export function getRuntime(): Promise<RuntimeStatus> {
   return request<RuntimeStatus>('/runtime');
 }
 
+export function getMe(): Promise<MeResponse> {
+  return request<MeResponse>('/me');
+}
+
+export function getTiers(): Promise<{ ok: boolean; schema_version: string; tiers: TierDefinition[] }> {
+  return request<{ ok: boolean; schema_version: string; tiers: TierDefinition[] }>('/tiers');
+}
+
 export function createAssessment(input: { claim: string; source_url?: string; category: string; mode: 'fast' | 'deep' }): Promise<AssessmentResponse> {
   const path = input.mode === 'deep' ? '/assessments/deep' : '/assessments/fast';
   return request<AssessmentResponse>(path, {
@@ -222,6 +257,20 @@ export async function listReports(): Promise<ReportSummary[]> {
 
 export function getReport(id: string): Promise<AssessmentResponse> {
   return request<AssessmentResponse>(`/reports/${encodeURIComponent(id)}`);
+}
+
+export function listAdminUsers(adminToken: string): Promise<{ ok: boolean; users: UserProfile[]; feature_matrix: { schema_version: string; tiers: TierDefinition[] } }> {
+  return request<{ ok: boolean; users: UserProfile[]; feature_matrix: { schema_version: string; tiers: TierDefinition[] } }>('/admin/users', {
+    headers: { 'X-Evidrai-Admin-Token': adminToken },
+  });
+}
+
+export function setAdminUserTier(input: { adminToken: string; owner_id: string; tier: TierName; email?: string }): Promise<{ ok: boolean; user: UserProfile }> {
+  return request<{ ok: boolean; user: UserProfile }>('/admin/users/tier', {
+    method: 'PATCH',
+    headers: { 'X-Evidrai-Admin-Token': input.adminToken },
+    body: JSON.stringify({ owner_id: input.owner_id, tier: input.tier, email: input.email || '' }),
+  });
 }
 
 export function submitFeedback(input: {

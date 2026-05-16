@@ -2,9 +2,21 @@ from fastapi.testclient import TestClient
 
 import api.main as api_main
 from api.main import app
+from evidrai.entitlements import UserProfile
 
 
 client = TestClient(app)
+
+
+def grant_tier(monkeypatch, tier="pro", owner_id="test-user", email="user@example.com"):
+    monkeypatch.setattr(
+        api_main,
+        "_profile_from_request",
+        lambda request: (
+            api_main.AuthContext(owner_id=owner_id, auth_method="supabase_jwt", email=email),
+            UserProfile(owner_id=owner_id, email=email, tier=tier),
+        ),
+    )
 
 
 def test_root_endpoint_returns_service_metadata():
@@ -51,6 +63,64 @@ def test_runtime_endpoint_matches_health_shape():
     assert "storage_backend" in payload
 
 
+def test_tiers_endpoint_returns_feature_matrix():
+    response = client.get("/tiers")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "feature_matrix.v1"
+    assert [tier["tier"] for tier in payload["tiers"]] == ["free", "pro", "journalist"]
+    assert payload["tiers"][0]["features"]["deep_claims"] is False
+    assert payload["tiers"][1]["features"]["speech_audit"] is True
+
+
+def test_me_endpoint_returns_current_profile(monkeypatch):
+    grant_tier(monkeypatch, "journalist", owner_id="jwt-user", email="user@example.com")
+
+    response = client.get("/me")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["authenticated"] is True
+    assert payload["user"]["owner_id"] == "jwt-user"
+    assert payload["user"]["tier_label"] == "Journalist"
+    assert payload["user"]["features"]["evidence_ledger"] is True
+
+
+def test_free_tier_cannot_run_deep_assessment(monkeypatch):
+    grant_tier(monkeypatch, "free")
+
+    response = client.post("/assessments/deep", json={"claim": "Test claim"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "feature_not_available"
+
+
+def test_admin_user_tier_update_requires_token(monkeypatch):
+    monkeypatch.setattr(api_main, "admin_token", lambda: "secret-token")
+
+    response = client.patch("/admin/users/tier", json={"owner_id": "user-1", "tier": "pro"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "admin_forbidden"
+
+
+def test_admin_user_tier_update_sets_profile(monkeypatch):
+    monkeypatch.setattr(api_main, "admin_token", lambda: "secret-token")
+    monkeypatch.setattr(api_main, "set_user_tier", lambda owner_id, tier, email="": UserProfile(owner_id=owner_id, email=email, tier=tier))
+
+    response = client.patch(
+        "/admin/users/tier",
+        json={"owner_id": "user-1", "email": "user@example.com", "tier": "pro"},
+        headers={"X-Evidrai-Admin-Token": "secret-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["user"]["owner_id"] == "user-1"
+    assert payload["user"]["tier_label"] == "Pro"
+
+
 def test_claim_check_requires_input():
     response = client.post("/claims/check", json={"claim": "", "source_url": ""})
 
@@ -65,14 +135,16 @@ def test_claim_check_rejects_invalid_source_url():
     assert "source_url" in response.json()["detail"]
 
 
-def test_speech_audit_requires_transcript_or_accessible_url():
+def test_speech_audit_requires_transcript_or_accessible_url(monkeypatch):
+    grant_tier(monkeypatch, "pro")
     response = client.post("/speech/audit", json={"transcript": "", "source_url": ""})
 
     assert response.status_code == 400
     assert "transcript" in response.json()["detail"]
 
 
-def test_speech_audit_rejects_invalid_source_url():
+def test_speech_audit_rejects_invalid_source_url(monkeypatch):
+    grant_tier(monkeypatch, "pro")
     response = client.post("/speech/audit", json={"transcript": "some speech", "source_url": "not-a-url"})
 
     assert response.status_code == 400
@@ -80,6 +152,8 @@ def test_speech_audit_rejects_invalid_source_url():
 
 
 def test_speech_extract_returns_selected_claims(monkeypatch):
+    grant_tier(monkeypatch, "pro")
+
     class FakeLLM:
         configured = True
 
@@ -113,7 +187,8 @@ def test_speech_extract_returns_selected_claims(monkeypatch):
     assert payload["settings"]["result_mode"] == "speech_extract"
 
 
-def test_speech_verify_requires_selected_claims():
+def test_speech_verify_requires_selected_claims(monkeypatch):
+    grant_tier(monkeypatch, "pro")
     response = client.post("/speech/verify", json={"claims": []})
 
     assert response.status_code == 400
@@ -121,6 +196,8 @@ def test_speech_verify_requires_selected_claims():
 
 
 def test_speech_verify_defaults_to_fast_without_tavily(monkeypatch):
+    grant_tier(monkeypatch, "pro")
+
     class FakeLLM:
         configured = True
 
@@ -152,6 +229,8 @@ def test_speech_verify_defaults_to_fast_without_tavily(monkeypatch):
 
 
 def test_speech_audit_defaults_to_fast_without_tavily(monkeypatch):
+    grant_tier(monkeypatch, "pro")
+
     class FakeLLM:
         configured = True
 
@@ -325,6 +404,8 @@ def test_sources_extract_endpoint_uses_ingestion(monkeypatch):
 
 
 def test_url_only_assessment_extracts_candidate_claim(monkeypatch):
+    grant_tier(monkeypatch, "pro")
+
     class FakeLLM:
         configured = True
 
@@ -354,6 +435,8 @@ def test_url_only_assessment_extracts_candidate_claim(monkeypatch):
 
 
 def test_deep_assessment_missing_tavily_returns_structured_error(monkeypatch):
+    grant_tier(monkeypatch, "pro")
+
     class FakeLLM:
         configured = True
 

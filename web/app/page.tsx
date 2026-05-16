@@ -6,6 +6,7 @@ import {
   AccountProfile,
   AssessmentResponse,
   FeedbackRating,
+  MeResponse,
   ReportSummary,
   RuntimeStatus,
   SpeechCheckedClaim,
@@ -14,14 +15,19 @@ import {
   SpeechVerificationResult,
   createAssessment,
   extractSpeechClaims,
+  getMe,
   getAccountProfile,
   getAnonymousAccountProfile,
   getReport,
   getRuntime,
   setAccessToken,
+  listAdminUsers,
   setAccountProfile,
+  setAdminUserTier,
   submitFeedback,
   verifySpeechClaims,
+  TierName,
+  UserProfile,
 } from '../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmail, signInWithGoogle, signOut } from '../lib/auth';
 
@@ -340,7 +346,119 @@ function LoginGate({
   );
 }
 
-function UserSummary({ account, onSignOut, authBusy }: { account: AccountProfile; onSignOut: () => void; authBusy: boolean }) {
+function FeatureMatrix({ me }: { me: MeResponse | null }) {
+  if (!me?.feature_matrix?.tiers?.length) return null;
+  const featureLabels: Record<string, string> = {
+    fast_claims: 'Fast claim checks',
+    deep_claims: 'Deep claim checks',
+    speech_audit: 'Speech/video audit',
+    feedback: 'Feedback',
+    share_reports: 'Shareable reports',
+    exports: 'Exports',
+    evidence_ledger: 'Evidence ledger',
+    source_snapshots: 'Source snapshots',
+    api_access: 'API access',
+  };
+  const featureKeys = Object.keys(me.feature_matrix.tiers[0].features);
+  return (
+    <section className="card matrixCard">
+      <h2>Feature matrix</h2>
+      <div className="matrixGrid">
+        <strong>Feature</strong>
+        {me.feature_matrix.tiers.map((tier) => <strong key={tier.tier}>{tier.label}</strong>)}
+        {featureKeys.map((feature) => [
+          <span key={`${feature}-label`}>{featureLabels[feature] || feature}</span>,
+          ...me.feature_matrix.tiers.map((tier) => <span key={`${feature}-${tier.tier}`}>{tier.features[feature] ? 'Yes' : 'No'}</span>),
+        ])}
+      </div>
+    </section>
+  );
+}
+
+function AdminPanel({ currentUser, onRefreshMe }: { currentUser: UserProfile | null; onRefreshMe: () => void }) {
+  const [adminToken, setAdminToken] = useState('');
+  const [ownerId, setOwnerId] = useState(currentUser?.owner_id || '');
+  const [email, setEmail] = useState(currentUser?.email || '');
+  const [tier, setTier] = useState<TierName>(currentUser?.tier || 'free');
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function loadUsers() {
+    setBusy(true);
+    setStatus('');
+    try {
+      const payload = await listAdminUsers(adminToken);
+      setUsers(payload.users || []);
+      setStatus('Loaded users.');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Could not load users');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveTier(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setStatus('');
+    try {
+      const payload = await setAdminUserTier({ adminToken, owner_id: ownerId, tier, email });
+      setStatus(`Updated ${payload.user.owner_id} to ${payload.user.tier_label}.`);
+      await loadUsers();
+      onRefreshMe();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Could not update tier');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <details className="adminPanel">
+      <summary>Admin: set user tier</summary>
+      <p className="muted">Requires the Render-only admin token. Do not share it with users.</p>
+      <form onSubmit={saveTier}>
+        <label>
+          Admin token
+          <input value={adminToken} onChange={(event) => setAdminToken(event.target.value)} placeholder="EVIDRAI_ADMIN_TOKEN" type="password" />
+        </label>
+        <label>
+          User ID
+          <input value={ownerId} onChange={(event) => setOwnerId(event.target.value)} placeholder="Supabase user id" />
+        </label>
+        <label>
+          Email
+          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="optional email" />
+        </label>
+        <label>
+          Tier
+          <select value={tier} onChange={(event) => setTier(event.target.value as TierName)}>
+            <option value="free">Free</option>
+            <option value="pro">Pro</option>
+            <option value="journalist">Journalist</option>
+          </select>
+        </label>
+        <div className="formRow">
+          <button disabled={busy || !adminToken || !ownerId} type="submit">Set tier</button>
+          <button className="secondary" disabled={busy || !adminToken} onClick={loadUsers} type="button">Load users</button>
+        </div>
+      </form>
+      {status && <p className="muted">{status}</p>}
+      {users.length > 0 && <div className="adminUsers">
+        {users.map((user) => (
+          <button key={user.owner_id} className="reportItem" type="button" onClick={() => { setOwnerId(user.owner_id); setEmail(user.email || ''); setTier(user.tier); }}>
+            <strong>{user.tier_label}</strong>
+            <span>{user.email || user.owner_id}</span>
+            <small>{user.owner_id}</small>
+          </button>
+        ))}
+      </div>}
+    </details>
+  );
+}
+
+function UserSummary({ account, me, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; onSignOut: () => void; authBusy: boolean }) {
   return (
     <section className="userSummary">
       <div>
@@ -353,7 +471,7 @@ function UserSummary({ account, onSignOut, authBusy }: { account: AccountProfile
       </div>
       <div>
         <span>Type</span>
-        <strong>{account.plan}</strong>
+        <strong>{me?.user?.tier_label || account.plan}</strong>
       </div>
       <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
     </section>
@@ -424,6 +542,7 @@ export default function Home() {
   const [speechVerification, setSpeechVerification] = useState<SpeechVerificationResult | null>(null);
   const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [account, setAccount] = useState<AccountProfile | null>(null);
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authMessage, setAuthMessage] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
@@ -435,8 +554,12 @@ export default function Home() {
   const [error, setError] = useState('');
 
   const signedIn = Boolean(account?.owner_id && !account.owner_id.startsWith('anon_'));
+  const userFeatures = me?.user?.features || {};
+  const userLimits = me?.user?.limits || {};
+  const canUseDeep = Boolean(userFeatures.deep_claims);
+  const canUseSpeech = Boolean(userFeatures.speech_audit);
   const ready = useMemo(() => signedIn && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, claim, sourceUrl]);
-  const speechReady = useMemo(() => signedIn && (speechTranscript.trim().length > 0 || speechSourceUrl.trim().length > 0), [signedIn, speechTranscript, speechSourceUrl]);
+  const speechReady = useMemo(() => signedIn && canUseSpeech && (speechTranscript.trim().length > 0 || speechSourceUrl.trim().length > 0), [signedIn, canUseSpeech, speechTranscript, speechSourceUrl]);
 
   function rememberReport(result: AssessmentResponse) {
     const summary: ReportSummary = {
@@ -453,6 +576,18 @@ export default function Home() {
     });
   }
 
+  async function refreshMe() {
+    try {
+      const payload = await getMe();
+      setMe(payload);
+      if (payload.user) {
+        setAccount((current) => current ? { ...current, plan: payload.user.tier_label } : current);
+      }
+    } catch (err) {
+      console.warn(err);
+    }
+  }
+
   useEffect(() => {
     const fallback = getAnonymousAccountProfile();
     setAccount(fallback);
@@ -462,6 +597,7 @@ export default function Home() {
         const profile = profileFromSession(session, fallback);
         setAccount(profile);
         setAccountProfile(profile);
+        if (session) refreshMe();
       })
       .catch((err) => setAuthMessage(err.message));
     const unsubscribe = onAuthStateChange((session) => {
@@ -471,6 +607,8 @@ export default function Home() {
       setAccount(profile);
       setAccountProfile(profile);
       setAuthMessage(session ? 'Signed in.' : 'Signed out. Sign in again to use Evidrai.');
+      if (session) refreshMe();
+      else setMe(null);
     });
     getRuntime().then(setRuntime).catch((err) => setError(err.message));
     try {
@@ -525,7 +663,8 @@ export default function Home() {
     setLoading(true);
     setError('');
     try {
-      const result = await createAssessment({ claim, source_url: sourceUrl, category, mode });
+      const requestedMode = canUseDeep ? mode : 'fast';
+      const result = await createAssessment({ claim, source_url: sourceUrl, category, mode: requestedMode });
       setAssessment(result);
       setSpeechExtraction(null);
       setSpeechVerification(null);
@@ -548,7 +687,7 @@ export default function Home() {
       const result = await extractSpeechClaims({
         transcript: speechTranscript,
         source_url: speechSourceUrl,
-        max_claims: maxClaims,
+        max_claims: Math.min(maxClaims, Number(userLimits.max_speech_claims || maxClaims)),
       });
       setSpeechExtraction(result);
       setSelectedSpeechClaims(result.claims.map((item) => item.id));
@@ -566,7 +705,7 @@ export default function Home() {
     setVerifyingSpeech(true);
     setError('');
     try {
-      const result = await verifySpeechClaims({ claims, source_url: speechSourceUrl || speechExtraction.source_url, verification_mode: speechMode });
+      const result = await verifySpeechClaims({ claims, source_url: speechSourceUrl || speechExtraction.source_url, verification_mode: canUseDeep ? speechMode : 'fast' });
       setSpeechVerification(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Speech verification failed');
@@ -611,7 +750,11 @@ export default function Home() {
       </section>
 
       {signedIn && account ? (
-        <UserSummary account={account} onSignOut={handleSignOut} authBusy={authBusy} />
+        <>
+          <UserSummary account={account} me={me} onSignOut={handleSignOut} authBusy={authBusy} />
+          <FeatureMatrix me={me} />
+          <AdminPanel currentUser={me?.user || null} onRefreshMe={refreshMe} />
+        </>
       ) : (
         <LoginGate
           account={account}
@@ -629,7 +772,7 @@ export default function Home() {
         <section className="card">
           <div className="segmented modeSwitch" role="tablist" aria-label="Audit type">
             <button className={toolMode === 'claim' ? 'active' : ''} onClick={() => setToolMode('claim')} type="button">Single claim</button>
-            <button className={toolMode === 'speech' ? 'active' : ''} onClick={() => setToolMode('speech')} type="button">Speech / video audit</button>
+            <button className={toolMode === 'speech' ? 'active' : ''} disabled={!canUseSpeech} onClick={() => setToolMode('speech')} type="button">Speech / video audit</button>
           </div>
 
           {toolMode === 'claim' ? (
@@ -653,7 +796,7 @@ export default function Home() {
                   Mode
                   <select value={mode} onChange={(event) => setMode(event.target.value as 'fast' | 'deep')}>
                     <option value="fast">Fast</option>
-                    <option value="deep">Deep</option>
+                    <option disabled={!canUseDeep} value="deep">Deep{canUseDeep ? '' : ' · Pro+'}</option>
                   </select>
                 </label>
               </div>
@@ -673,19 +816,19 @@ export default function Home() {
                 <label>
                   Claims to extract
                   <select value={maxClaims} onChange={(event) => setMaxClaims(Number(event.target.value))}>
-                    {[1, 2, 3, 4, 5, 6].map((item) => <option key={item} value={item}>{item}</option>)}
+                    {Array.from({ length: Math.max(1, Math.min(20, Number(userLimits.max_speech_claims || 0))) }, (_, index) => index + 1).map((item) => <option key={item} value={item}>{item}</option>)}
                   </select>
                 </label>
                 <label>
                   Verification mode
                   <select value={speechMode} onChange={(event) => setSpeechMode(event.target.value as 'fast' | 'deep')}>
                     <option value="fast">Fast</option>
-                    <option value="deep">Deep</option>
+                    <option disabled={!canUseDeep} value="deep">Deep{canUseDeep ? '' : ' · Pro+'}</option>
                   </select>
                 </label>
               </div>
               <button disabled={!speechReady || loading}>{loading ? 'Extracting claims…' : 'Extract claims'}</button>
-              <p className="muted">Two-stage flow: extract/rank first, then choose which claims to verify. Default max claims is 3 to keep token use controlled.</p>
+              <p className="muted">Two-stage flow: extract/rank first, then choose claims to verify. Your tier allows up to {userLimits.max_speech_claims || 0} claims per audit.</p>
             </form>
           )}
           {error && <p className="error">{error}</p>}

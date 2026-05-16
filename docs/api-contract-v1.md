@@ -103,6 +103,25 @@ GET /reports/{report_id}
 
 `GET /reports` returns recent persisted report summaries. If a valid Supabase Bearer token is supplied, report history is scoped to that authenticated user. Modern Supabase ECC/RSA JWT signing keys are verified via the project JWKS endpoint configured with `SUPABASE_URL`; legacy HS256 projects can use `SUPABASE_JWT_SECRET`. Anonymous mode can still use `X-Evidrai-User-Id` as a temporary browser-profile owner. `GET /reports/{report_id}` returns the full `AssessmentResponse`.
 
+### User tiers and entitlements
+
+```http
+GET /tiers
+GET /me
+GET /admin/users
+PATCH /admin/users/tier
+```
+
+`GET /tiers` returns the server-owned feature matrix for `free`, `pro`, and `journalist` tiers. `GET /me` returns the current auth-backed user profile, resolved from the verified Supabase Bearer token when present.
+
+Server gates:
+
+- Free: fast claim checks only, limited saved reports, feedback.
+- Pro: fast + deep checks, speech/video audit, share/export capabilities.
+- Journalist: Pro plus higher limits, evidence ledger, source snapshots, API access.
+
+Admin endpoints require `X-Evidrai-Admin-Token`, matched against backend-only `EVIDRAI_ADMIN_TOKEN`. This token must only be configured on the API host, not as a `NEXT_PUBLIC_*` frontend variable.
+
 ### Speech / video audit
 
 One-shot endpoint:

@@ -11,7 +11,15 @@ from evidrai.api_models import AssessmentResponse, serialize_assessment_response
 from evidrai.auth import AuthContext, context_from_headers
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import api_allowed_origins, database_url, get_app_build, supabase_auth_configured
+from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, supabase_auth_configured
+from evidrai.entitlements import (
+    enforce_speech_claim_limit,
+    feature_matrix,
+    get_or_create_profile,
+    list_user_profiles,
+    require_feature,
+    set_user_tier,
+)
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, save_feedback
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
@@ -69,7 +77,7 @@ class AssessmentCreateRequest(BaseModel):
 class SpeechAuditRequest(BaseModel):
     transcript: str = ""
     source_url: str = ""
-    max_claims: int = Field(default=3, ge=1, le=10)
+    max_claims: int = Field(default=3, ge=1, le=20)
     verification_mode: str = Field(default="fast", pattern="^(fast|deep)$")
     try_youtube_captions: bool = True
 
@@ -77,7 +85,7 @@ class SpeechAuditRequest(BaseModel):
 class SpeechExtractRequest(BaseModel):
     transcript: str = ""
     source_url: str = ""
-    max_claims: int = Field(default=3, ge=1, le=10)
+    max_claims: int = Field(default=3, ge=1, le=20)
     try_youtube_captions: bool = True
 
 
@@ -95,6 +103,12 @@ class FeedbackCreateRequest(BaseModel):
     rating: str = Field(default="Useful", pattern="^(Useful|Partly useful|Not useful)$")
     reasons: list[str] = Field(default_factory=list)
     comment: str = ""
+
+
+class AdminSetTierRequest(BaseModel):
+    owner_id: str
+    tier: str = Field(pattern="^(free|pro|journalist)$")
+    email: str = ""
 
 
 class ApiEnvelope(BaseModel):
@@ -175,6 +189,20 @@ def _owner_id_from_request(request: Request) -> str:
     return _auth_context_from_request(request).owner_id
 
 
+def _profile_from_request(request: Request):
+    context = _auth_context_from_request(request)
+    return context, get_or_create_profile(context.owner_id, email=context.email)
+
+
+def _require_admin(request: Request) -> None:
+    configured = admin_token()
+    supplied = (request.headers.get("x-evidrai-admin-token") or "").strip()
+    if not configured:
+        raise HTTPException(status_code=503, detail={"code": "admin_not_configured", "message": "EVIDRAI_ADMIN_TOKEN is not configured"})
+    if supplied != configured:
+        raise HTTPException(status_code=403, detail={"code": "admin_forbidden", "message": "Invalid admin token"})
+
+
 def _assessment_response_from_request(request: AssessmentCreateRequest, mode: str, owner_id: str = "") -> AssessmentResponse:
     claim = (request.claim or "").strip()
     source_url = (request.source_url or "").strip()
@@ -203,6 +231,30 @@ def extract_source(request: SourceExtractRequest) -> ExtractedSource:
 def reports_index(http_request: Request, limit: int = 50) -> Dict[str, Any]:
     owner_id = _owner_id_from_request(http_request)
     return {"ok": True, "owner_id": owner_id or None, "reports": list_reports(limit=limit, owner_id=owner_id)}
+
+
+@app.get("/tiers", response_model=Dict[str, Any])
+def tiers() -> Dict[str, Any]:
+    return {"ok": True, **feature_matrix()}
+
+
+@app.get("/me", response_model=Dict[str, Any])
+def me(http_request: Request) -> Dict[str, Any]:
+    context, profile = _profile_from_request(http_request)
+    return {"ok": True, "authenticated": context.authenticated, "user": profile.to_dict(), "feature_matrix": feature_matrix()}
+
+
+@app.get("/admin/users", response_model=Dict[str, Any])
+def admin_users(http_request: Request, limit: int = 100) -> Dict[str, Any]:
+    _require_admin(http_request)
+    return {"ok": True, "users": [profile.to_dict() for profile in list_user_profiles(limit=limit)], "feature_matrix": feature_matrix()}
+
+
+@app.patch("/admin/users/tier", response_model=Dict[str, Any])
+def admin_set_user_tier(request: AdminSetTierRequest, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    profile = set_user_tier(request.owner_id, request.tier, email=request.email)
+    return {"ok": True, "user": profile.to_dict()}
 
 
 @app.get("/reports/{report_id}", response_model=AssessmentResponse)
@@ -255,6 +307,7 @@ def runtime_status() -> Dict[str, Any]:
         "tavily_configured": search.configured,
         "storage_backend": "postgres" if database_url() else "local_json",
         "auth_configured": supabase_auth_configured(),
+        "admin_configured": bool(admin_token()),
     }
 
 
@@ -296,6 +349,8 @@ def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelop
     source_url = (request.source_url or "").strip()
     _validate_claim_request(claim, source_url)
 
+    context, profile = _profile_from_request(http_request)
+    require_feature(profile, "deep_claims" if request.mode == "deep" else "fast_claims", authenticated=context.authenticated)
     result = _run_claim_assessment(claim=claim, source_url=source_url, category=request.category, mode=request.mode)
     assessment = serialize_assessment_response(
         result,
@@ -305,7 +360,7 @@ def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelop
         mode=request.mode,
         build=get_app_build(),
         include_debug=request.include_debug,
-        owner_id=_owner_id_from_request(http_request),
+        owner_id=context.owner_id,
     ).model_dump(mode="json")
     result["settings"] = {
         "result_mode": request.mode,
@@ -319,16 +374,23 @@ def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelop
 
 @app.post("/assessments/fast", response_model=AssessmentResponse)
 def create_fast_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
-    return _assessment_response_from_request(request, "fast", owner_id=_owner_id_from_request(http_request))
+    context, profile = _profile_from_request(http_request)
+    require_feature(profile, "fast_claims", authenticated=context.authenticated)
+    return _assessment_response_from_request(request, "fast", owner_id=context.owner_id)
 
 
 @app.post("/assessments/deep", response_model=AssessmentResponse)
 def create_deep_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
-    return _assessment_response_from_request(request, "deep", owner_id=_owner_id_from_request(http_request))
+    context, profile = _profile_from_request(http_request)
+    require_feature(profile, "deep_claims", authenticated=context.authenticated)
+    return _assessment_response_from_request(request, "deep", owner_id=context.owner_id)
 
 
 @app.post("/speech/extract", response_model=ApiEnvelope)
-def speech_extract(request: SpeechExtractRequest) -> ApiEnvelope:
+def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiEnvelope:
+    context, profile = _profile_from_request(http_request)
+    require_feature(profile, "speech_audit", authenticated=context.authenticated)
+    enforce_speech_claim_limit(profile, request.max_claims)
     source_url = (request.source_url or "").strip()
     transcript = _speech_transcript_from_request(request.transcript, source_url, request.try_youtube_captions)
 
@@ -348,7 +410,10 @@ def speech_extract(request: SpeechExtractRequest) -> ApiEnvelope:
 
 
 @app.post("/speech/verify", response_model=ApiEnvelope)
-def speech_verify(request: SpeechVerifyRequest) -> ApiEnvelope:
+def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnvelope:
+    context, profile = _profile_from_request(http_request)
+    require_feature(profile, "speech_audit", authenticated=context.authenticated)
+    enforce_speech_claim_limit(profile, len(request.claims))
     source_url = (request.source_url or "").strip()
     if source_url and not is_probable_url(source_url):
         raise HTTPException(status_code=400, detail="source_url must start with http:// or https://")
@@ -383,7 +448,10 @@ def speech_verify(request: SpeechVerifyRequest) -> ApiEnvelope:
 
 
 @app.post("/speech/audit", response_model=ApiEnvelope)
-def speech_audit(request: SpeechAuditRequest) -> ApiEnvelope:
+def speech_audit(request: SpeechAuditRequest, http_request: Request) -> ApiEnvelope:
+    context, profile = _profile_from_request(http_request)
+    require_feature(profile, "speech_audit", authenticated=context.authenticated)
+    enforce_speech_claim_limit(profile, request.max_claims)
     source_url = (request.source_url or "").strip()
     transcript = _speech_transcript_from_request(request.transcript, source_url, request.try_youtube_captions)
 
