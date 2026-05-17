@@ -71,13 +71,19 @@ export async function signUpWithEmailPassword(email: string, password: string) {
   return data.session;
 }
 
-export async function signInWithEmail(email: string) {
+export async function sendPasswordReset(email: string) {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase Auth is not configured.');
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.origin },
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
   });
+  if (error) throw error;
+}
+
+export async function updatePassword(password: string) {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Supabase Auth is not configured.');
+  const { error } = await supabase.auth.updateUser({ password });
   if (error) throw error;
 }
 

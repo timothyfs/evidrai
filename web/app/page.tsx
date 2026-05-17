@@ -25,7 +25,7 @@ import {
   submitFeedback,
   verifySpeechClaims,
 } from '../lib/api';
-import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut, signUpWithEmailPassword } from '../lib/auth';
+import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, sendPasswordReset, signInWithEmailPassword, signInWithGoogle, signOut, signUpWithEmailPassword, updatePassword } from '../lib/auth';
 
 const FRONTEND_BUILD = process.env.NEXT_PUBLIC_APP_BUILD || 'local';
 
@@ -264,6 +264,7 @@ function AccountPanel({
   onGoogle,
   onEmailPassword,
   onSignUp,
+  onPasswordReset,
   onSignOut,
 }: {
   account: AccountProfile | null;
@@ -277,6 +278,7 @@ function AccountPanel({
   onGoogle: () => void;
   onEmailPassword: (event: FormEvent<HTMLFormElement>) => void;
   onSignUp: () => void;
+  onPasswordReset: () => void;
   onSignOut: () => void;
 }) {
   const signedIn = Boolean(account?.owner_id && !account.owner_id.startsWith('anon_'));
@@ -296,6 +298,7 @@ function AccountPanel({
             <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" type="password" />
             <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} type="submit">Sign in</button>
             <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} onClick={onSignUp} type="button">Create free account</button>
+            <button className="linkButton" disabled={authBusy || !email.trim()} onClick={onPasswordReset} type="button">Set/reset password</button>
           </form>
         </div>
       ) : (
@@ -318,6 +321,7 @@ function LoginGate({
   setPassword,
   onEmailPassword,
   onSignUp,
+  onPasswordReset,
 }: {
   account: AccountProfile | null;
   authReady: boolean;
@@ -330,6 +334,7 @@ function LoginGate({
   onGoogle: () => void;
   onEmailPassword: (event: FormEvent<HTMLFormElement>) => void;
   onSignUp: () => void;
+  onPasswordReset: () => void;
 }) {
   return (
     <section className="card loginGate">
@@ -351,6 +356,7 @@ function LoginGate({
             <div className="formRow">
               <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} type="submit">Sign in</button>
               <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} onClick={onSignUp} type="button">Create free account</button>
+              <button className="linkButton" disabled={authBusy || !email.trim()} onClick={onPasswordReset} type="button">Set/reset password</button>
             </div>
           </form>
         </div>
@@ -480,6 +486,8 @@ export default function Home() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
@@ -546,6 +554,7 @@ export default function Home() {
       if (session) refreshMe();
       else setMe(null);
     });
+    if (typeof window !== 'undefined' && window.location.href.includes('type=recovery')) setPasswordRecovery(true);
     getRuntime().then(setRuntime).catch((err) => setError(err.message));
     try {
       const saved = window.localStorage.getItem('evidrai_recent_reports');
@@ -593,6 +602,37 @@ export default function Home() {
       await refreshMe();
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-up failed');
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+
+  async function handlePasswordReset() {
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      await sendPasswordReset(authEmail.trim());
+      setAuthMessage('Password reset email sent. Open the newest email, then set a new password here.');
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : 'Password reset failed');
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleUpdatePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      await updatePassword(newPassword);
+      setPasswordRecovery(false);
+      setNewPassword('');
+      setAuthMessage('Password updated.');
+      await refreshMe();
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : 'Could not update password');
     } finally {
       setAuthBusy(false);
     }
@@ -702,6 +742,17 @@ export default function Home() {
         </div>
       </section>
 
+      {passwordRecovery && signedIn && (
+        <section className="card loginGate">
+          <h2>Set a new password</h2>
+          <p className="muted">You opened a password reset link. Set your new password, then continue normally.</p>
+          <form onSubmit={handleUpdatePassword}>
+            <label>New password<input value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Minimum 6 characters" type="password" /></label>
+            <button disabled={authBusy || newPassword.length < 6} type="submit">Update password</button>
+          </form>
+        </section>
+      )}
+
       {signedIn && account ? (
         <>
           <UserSummary account={account} me={me} onSignOut={handleSignOut} authBusy={authBusy} />
@@ -720,6 +771,7 @@ export default function Home() {
           onGoogle={handleGoogleSignIn}
           onEmailPassword={handleEmailPasswordSignIn}
           onSignUp={handleEmailPasswordSignUp}
+          onPasswordReset={handlePasswordReset}
         />
       )}
 
@@ -802,6 +854,7 @@ export default function Home() {
             onGoogle={handleGoogleSignIn}
             onEmailPassword={handleEmailPasswordSignIn}
             onSignUp={handleEmailPasswordSignUp}
+            onPasswordReset={handlePasswordReset}
             onSignOut={handleSignOut}
           />
           <div className="sectionHeader">
