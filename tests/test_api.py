@@ -178,7 +178,9 @@ def test_speech_audit_requires_transcript_or_accessible_url(monkeypatch):
     response = client.post("/speech/audit", json={"transcript": "", "source_url": ""})
 
     assert response.status_code == 400
-    assert "transcript" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail["code"] == "transcript_required"
+    assert "transcript" in detail["message"]
 
 
 def test_speech_audit_rejects_invalid_source_url(monkeypatch):
@@ -528,3 +530,18 @@ def test_speech_extract_youtube_bot_check_returns_safe_fallback(monkeypatch):
     assert payload["code"] == "youtube_bot_check"
     assert "Paste the transcript" in payload["message"]
     assert "cookies" not in payload["message"]
+
+
+def test_speech_extract_requires_transcript_unless_youtube_opt_in(monkeypatch):
+    grant_tier(monkeypatch, "pro")
+    called = []
+    monkeypatch.setattr(api_main, "extract_youtube_transcript", lambda url: called.append(url) or {"ok": False})
+
+    response = client.post(
+        "/speech/extract",
+        json={"transcript": "", "source_url": "https://youtube.com/watch?v=WVOvmHUu8Vw", "try_youtube_captions": False},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "transcript_required"
+    assert called == []

@@ -48,6 +48,11 @@ function applyTheme(theme: ThemeMode) {
   window.localStorage.setItem('evidrai_theme', theme);
 }
 
+function isYouTubeUrl(value: string) {
+  const text = value.toLowerCase();
+  return text.includes('youtube.com') || text.includes('youtu.be');
+}
+
 function formatDate(value?: string) {
   if (!value) return '';
   const date = new Date(value);
@@ -551,6 +556,7 @@ export default function Home() {
   const [mode, setMode] = useState<'fast' | 'deep'>('fast');
   const [speechTranscript, setSpeechTranscript] = useState('');
   const [speechSourceUrl, setSpeechSourceUrl] = useState('');
+  const [tryYouTubeCaptions, setTryYouTubeCaptions] = useState(false);
   const [maxClaims, setMaxClaims] = useState(3);
   const [speechMode, setSpeechMode] = useState<'fast' | 'deep'>('fast');
   const [speechExtraction, setSpeechExtraction] = useState<SpeechExtractionResult | null>(null);
@@ -580,7 +586,7 @@ export default function Home() {
   const canUseDeep = Boolean(userFeatures.deep_claims);
   const canUseSpeech = Boolean(userFeatures.speech_audit);
   const ready = useMemo(() => signedIn && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, claim, sourceUrl]);
-  const speechReady = useMemo(() => signedIn && canUseSpeech && (speechTranscript.trim().length > 0 || speechSourceUrl.trim().length > 0), [signedIn, canUseSpeech, speechTranscript, speechSourceUrl]);
+  const speechReady = useMemo(() => signedIn && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
 
   function rememberReport(result: AssessmentResponse) {
     const summary: ReportSummary = {
@@ -767,6 +773,7 @@ export default function Home() {
         transcript: speechTranscript,
         source_url: speechSourceUrl,
         max_claims: Math.min(maxClaims, Number(userLimits.max_speech_claims || maxClaims)),
+        try_youtube_captions: tryYouTubeCaptions,
       });
       setSpeechExtraction(result);
       setSelectedSpeechClaims(result.claims.map((item) => item.id));
@@ -926,7 +933,7 @@ export default function Home() {
               </div>
               <div className="secondaryInputs">
                 <label>
-                  Video/source URL <span>optional</span>
+                  Video/source URL <span>optional context</span>
                   <input value={speechSourceUrl} onChange={(event) => setSpeechSourceUrl(event.target.value)} placeholder="https://youtube.com/watch?v=..." />
                 </label>
                 <label>
@@ -943,8 +950,13 @@ export default function Home() {
                   </select>
                 </label>
               </div>
+              <div className="youtubeFallbackBox">
+                <label className="checkPill"><input checked={tryYouTubeCaptions} onChange={(event) => setTryYouTubeCaptions(event.target.checked)} type="checkbox" /> Try automatic YouTube captions</label>
+                <p className="muted">Recommended: paste the transcript. YouTube often blocks server-side caption access, so URL-only audits are best-effort.</p>
+              </div>
               <VerifyGuide mode="speech" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
+              {!speechTranscript.trim() && speechSourceUrl.trim() && !tryYouTubeCaptions && <p className="fieldHint">Paste the transcript above, or tick “Try automatic YouTube captions” for a best-effort URL-only attempt.</p>}
               <p className="muted">Your tier allows up to {userLimits.max_speech_claims || 0} claims per audit.</p>
             </form>
           )}

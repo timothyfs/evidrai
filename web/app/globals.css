@@ -1083,3 +1083,21 @@ html[data-theme="light"] .loadingState {
   .modeSwitch { justify-self: start; }
   .primaryAction { justify-self: stretch; }
 }
+
+.youtubeFallbackBox {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(196,154,80,0.06);
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+.youtubeFallbackBox .checkPill {
+  justify-self: start;
+}
+.youtubeFallbackBox p {
+  margin: 0;
+}
+html[data-theme="light"] .youtubeFallbackBox {
+  background: rgba(255,255,255,0.7);
+}

@@ -189,12 +189,17 @@ def _validate_claim_request(claim: str, source_url: str) -> None:
         raise HTTPException(status_code=400, detail="source_url must start with http:// or https://")
 
 
+
+def _is_youtube_url(url: str) -> bool:
+    lowered = (url or "").lower()
+    return "youtube.com" in lowered or "youtu.be" in lowered
+
 def _speech_transcript_from_request(transcript: str, source_url: str, try_youtube_captions: bool) -> str:
     if source_url and not is_probable_url(source_url):
         raise HTTPException(status_code=400, detail="source_url must start with http:// or https://")
 
     cleaned = (transcript or "").strip()
-    if not cleaned and source_url and try_youtube_captions:
+    if not cleaned and source_url and try_youtube_captions and _is_youtube_url(source_url):
         transcript_result = extract_youtube_transcript(source_url)
         if transcript_result.get("ok"):
             cleaned = transcript_result.get("transcript", "").strip()
@@ -210,7 +215,10 @@ def _speech_transcript_from_request(transcript: str, source_url: str, try_youtub
 
     cleaned = clean_pasted_youtube_transcript(cleaned)
     if not cleaned:
-        raise HTTPException(status_code=400, detail="transcript is required, or provide a YouTube URL with accessible captions")
+        raise HTTPException(status_code=400, detail={
+            "code": "transcript_required",
+            "message": "Paste a transcript to run a reliable speech/video audit. Automatic YouTube captions are optional and may be blocked by YouTube.",
+        })
     return cleaned
 
 
