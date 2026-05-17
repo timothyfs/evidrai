@@ -552,3 +552,10 @@ def test_youtube_video_id_extracts_watch_url():
 
     assert youtube_video_id("https://www.youtube.com/watch?v=cR5Dmj6GK88") == "cR5Dmj6GK88"
     assert youtube_video_id("https://youtu.be/WVOvmHUu8Vw") == "WVOvmHUu8Vw"
+
+
+def test_transcript_diagnostics_rejects_non_youtube_url():
+    response = client.post("/transcripts/diagnose", json={"source_url": "https://example.com/video"})
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "unsupported_source"

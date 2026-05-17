@@ -33,7 +33,7 @@ from evidrai.pipeline.verification import (
     verify_speech_claim,
 )
 from evidrai.reports import list_reports, load_report, save_report
-from evidrai.transcripts import clean_pasted_youtube_transcript, extract_youtube_transcript, transcript_backend_status
+from evidrai.transcripts import clean_pasted_youtube_transcript, diagnose_youtube_transcript, extract_youtube_transcript, transcript_backend_status
 from evidrai.utils import build_analysis_input, is_probable_url
 
 
@@ -207,7 +207,6 @@ def _speech_transcript_from_request(transcript: str, source_url: str, try_youtub
             detail = {
                 "code": transcript_result.get("code") or "youtube_transcript_unavailable",
                 "message": transcript_result.get("error") or "Could not extract transcript",
-                "fallback": "Paste the YouTube transcript manually, then run the speech/video audit again.",
             }
             if transcript_result.get("title"):
                 detail["title"] = transcript_result.get("title")
@@ -330,6 +329,17 @@ def auth_diagnostics(http_request: Request) -> Dict[str, Any]:
             "error": str(exc),
             "verifier_detail": detail,
         }
+
+
+
+
+@app.post("/transcripts/diagnose", response_model=Dict[str, Any])
+def diagnose_transcript_source(request: SourceExtractRequest) -> Dict[str, Any]:
+    if not request.source_url or not is_probable_url(request.source_url):
+        raise HTTPException(status_code=400, detail={"code": "invalid_source_url", "message": "source_url must start with http:// or https://"})
+    if not _is_youtube_url(request.source_url):
+        raise HTTPException(status_code=400, detail={"code": "unsupported_source", "message": "Transcript diagnostics currently support YouTube URLs only."})
+    return diagnose_youtube_transcript(request.source_url)
 
 
 @app.get("/reports", response_model=Dict[str, Any])

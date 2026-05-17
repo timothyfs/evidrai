@@ -151,6 +151,34 @@ def _extract_with_youtube_transcript_api(url: str, preferred_langs: Tuple[str, .
         return {"ok": False, "code": "youtube_transcript_empty", "error": "YouTube transcript API returned an empty transcript."}
     return {"ok": True, "language": "YouTube transcript", "transcript": transcript}
 
+
+def diagnose_youtube_transcript(url: str, preferred_langs: Tuple[str, ...] = ("en", "en-US", "en-GB")) -> Dict[str, Any]:
+    """Return non-secret transcript extraction diagnostics without full transcript text."""
+    api_result = _extract_with_youtube_transcript_api(url, preferred_langs)
+    combined = extract_youtube_transcript(url, preferred_langs)
+
+    def safe_result(result: Dict[str, Any]) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "ok": bool(result.get("ok")),
+            "code": result.get("code") or "",
+            "title": result.get("title") or "",
+            "language": result.get("language") or "",
+            "transcript_chars": len(result.get("transcript") or ""),
+        }
+        if result.get("error"):
+            payload["error"] = str(result.get("error"))[:1000]
+        if result.get("developer_detail"):
+            payload["developer_detail"] = str(result.get("developer_detail"))[:1500]
+        return payload
+
+    return {
+        "ok": bool(combined.get("ok")),
+        "video_id": youtube_video_id(url),
+        "backends": transcript_backend_status(),
+        "youtube_transcript_api": safe_result(api_result),
+        "combined_extraction": safe_result(combined),
+    }
+
 def extract_youtube_transcript(url: str, preferred_langs: Tuple[str, ...] = ("en", "en-US", "en-GB")) -> Dict[str, Any]:
     """Try to extract YouTube captions without downloading the video.
 

@@ -187,7 +187,7 @@ let accessToken = '';
 
 function userFacingError(message: string): string {
   const lower = message.toLowerCase();
-  if ((lower.includes('youtube') && lower.includes('not a bot')) || lower.includes('cookies-from-browser') || lower.includes('use --cookies')) {
+  if (lower.includes('youtube blocked automatic transcript access') || (lower.includes('youtube') && lower.includes('not a bot')) || lower.includes('cookies-from-browser') || lower.includes('use --cookies')) {
     return 'YouTube blocked automatic transcript access for this video. Paste the transcript into the Transcript box and run the speech/video audit again.';
   }
   return message;
