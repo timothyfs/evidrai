@@ -1205,3 +1205,86 @@ html[data-theme="light"] .planCard { background: rgba(255,255,255,0.72); }
 @media (max-width: 900px) {
   .planCards { grid-template-columns: 1fr; }
 }
+
+/* Assessment result hierarchy polish */
+.assessmentSnapshot {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+.assessmentSnapshot div {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.035);
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+}
+.assessmentSnapshot span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+.assessmentSnapshot strong {
+  color: var(--ink);
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+}
+.resultSection summary span {
+  display: grid;
+  gap: 3px;
+}
+.resultSection summary small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.miniEvidenceMap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.miniEvidenceMap span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 6px 9px;
+}
+.sourceReason {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  display: block;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  padding-top: 9px;
+}
+.reasoningGrid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.reasoningBlock {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.03);
+  padding: 14px;
+}
+.reasoningBlock > strong {
+  display: block;
+  margin-bottom: 8px;
+  text-transform: capitalize;
+}
+.reasoningBlock pre {
+  margin: 0;
+}
+@media (max-width: 780px) {
+  .assessmentSnapshot { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .assessmentSnapshot { grid-template-columns: 1fr; }
+}
