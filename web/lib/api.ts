@@ -184,6 +184,15 @@ const ACCOUNT_KEY = 'evidrai_account_profile';
 const ANONYMOUS_ACCOUNT_KEY = 'evidrai_anonymous_account_profile';
 let accessToken = '';
 
+
+function userFacingError(message: string): string {
+  const lower = message.toLowerCase();
+  if ((lower.includes('youtube') && lower.includes('not a bot')) || lower.includes('cookies-from-browser') || lower.includes('use --cookies')) {
+    return 'YouTube blocked automatic transcript access for this video. Paste the transcript into the Transcript box and run the speech/video audit again.';
+  }
+  return message;
+}
+
 function randomId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `anon_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -237,7 +246,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Keep HTTP status fallback.
     }
-    throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+    throw new Error(userFacingError(typeof message === 'string' ? message : JSON.stringify(message)));
   }
 
   return response.json() as Promise<T>;
