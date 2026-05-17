@@ -250,6 +250,7 @@ def auth_diagnostics(http_request: Request) -> Dict[str, Any]:
             "claims": {"subject_present": bool(claims.get("sub")), "email_present": bool(claims.get("email"))},
         }
     except Exception as exc:
+        detail = getattr(exc, "developer_detail", "")
         return {
             "ok": True,
             "has_bearer": True,
@@ -257,6 +258,7 @@ def auth_diagnostics(http_request: Request) -> Dict[str, Any]:
             "diagnostics": diagnostics,
             "error_type": type(exc).__name__,
             "error": str(exc),
+            "verifier_detail": detail,
         }
 
 
