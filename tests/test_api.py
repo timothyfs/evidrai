@@ -506,3 +506,25 @@ def test_admin_invite_user_creates_profile(monkeypatch):
     assert payload["sent_invite"] is True
     assert payload["owner_id"] == "new-user"
     assert payload["user"]["tier_label"] == "Pro"
+
+
+def test_speech_extract_youtube_bot_check_returns_safe_fallback(monkeypatch):
+    grant_tier(monkeypatch, "pro")
+    monkeypatch.setattr(
+        api_main,
+        "extract_youtube_transcript",
+        lambda url: {
+            "ok": False,
+            "code": "youtube_bot_check",
+            "error": "YouTube blocked automatic transcript access for this video. Paste the transcript into the Transcript box and run the speech/video audit again.",
+            "developer_detail": "Sign in to confirm you’re not a bot. Use --cookies-from-browser",
+        },
+    )
+
+    response = client.post("/speech/extract", json={"transcript": "", "source_url": "https://youtube.com/watch?v=WVOvmHUu8Vw"})
+
+    assert response.status_code == 422
+    payload = response.json()["detail"]
+    assert payload["code"] == "youtube_bot_check"
+    assert "Paste the transcript" in payload["message"]
+    assert "cookies" not in payload["message"]

@@ -109,7 +109,20 @@ def extract_youtube_transcript(url: str, preferred_langs: Tuple[str, ...] = ("en
         with YoutubeDL({"skip_download": True, "quiet": True, "no_warnings": True}) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as exc:
-        return {"ok": False, "error": f"Could not inspect this YouTube URL: {exc}"}
+        raw_error = str(exc)
+        if "Sign in to confirm" in raw_error or "not a bot" in raw_error or "cookies" in raw_error:
+            return {
+                "ok": False,
+                "code": "youtube_bot_check",
+                "error": "YouTube blocked automatic transcript access for this video. Paste the transcript into the Transcript box and run the speech/video audit again.",
+                "developer_detail": raw_error,
+            }
+        return {
+            "ok": False,
+            "code": "youtube_inspection_failed",
+            "error": "Evidrai could not inspect this YouTube URL automatically. Paste the transcript manually, or try another video with accessible captions.",
+            "developer_detail": raw_error,
+        }
 
     subtitles = info.get("subtitles") or {}
     automatic = info.get("automatic_captions") or {}

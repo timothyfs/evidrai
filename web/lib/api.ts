@@ -231,7 +231,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let message = `${response.status} ${response.statusText}`;
     try {
       const payload = await response.json();
-      message = payload?.detail?.message || payload?.detail || payload?.error || message;
+      const detail = payload?.detail;
+      const fallback = typeof detail === 'object' && detail?.fallback ? ` ${detail.fallback}` : '';
+      message = typeof detail === 'string' ? detail : `${detail?.message || payload?.error || message}${fallback}`;
     } catch {
       // Keep HTTP status fallback.
     }

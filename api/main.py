@@ -199,7 +199,14 @@ def _speech_transcript_from_request(transcript: str, source_url: str, try_youtub
         if transcript_result.get("ok"):
             cleaned = transcript_result.get("transcript", "").strip()
         else:
-            raise HTTPException(status_code=422, detail=transcript_result.get("error") or "Could not extract transcript")
+            detail = {
+                "code": transcript_result.get("code") or "youtube_transcript_unavailable",
+                "message": transcript_result.get("error") or "Could not extract transcript",
+                "fallback": "Paste the YouTube transcript manually, then run the speech/video audit again.",
+            }
+            if transcript_result.get("title"):
+                detail["title"] = transcript_result.get("title")
+            raise HTTPException(status_code=422, detail=detail)
 
     cleaned = clean_pasted_youtube_transcript(cleaned)
     if not cleaned:
