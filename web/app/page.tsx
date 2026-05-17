@@ -96,7 +96,7 @@ function sourceStats(sources: AssessmentSource[]) {
 }
 
 function evidenceStrengthLabel(score?: number | null) {
-  if (typeof score !== 'number' || !Number.isFinite(score)) return 'Evidence strength not scored';
+  if (typeof score !== 'number' || !Number.isFinite(score)) return '';
   if (score >= 8) return 'Strong evidence base';
   if (score >= 5.5) return 'Moderate evidence base';
   if (score >= 3) return 'Limited evidence base';
@@ -531,6 +531,7 @@ function SiteHeader({ account, me, signedIn, theme, onToggleTheme, onSignOut, au
 function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
   const tone = verdictTone(assessment.verdict.label);
   const confidence = confidencePercent(assessment.verdict.confidence, assessment.verdict.evidence_strength_score);
+  const evidenceStrength = evidenceStrengthLabel(assessment.verdict.evidence_strength_score);
   const stats = sourceStats(assessment.sources || []);
   const reasoning = assessment.reasoning ? reasoningEntries(assessment.reasoning) : [];
   return (
@@ -545,7 +546,7 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
           <span>Verdict</span>
           <strong>{assessment.verdict.label}</strong>
           <div className="confidenceMeter" aria-label={`${assessment.verdict.confidence} confidence`}><span style={{ width: `${confidence}%` }} /></div>
-          <small>{assessment.verdict.confidence} confidence · {evidenceStrengthLabel(assessment.verdict.evidence_strength_score)}</small>
+          <small>{assessment.verdict.confidence} confidence{evidenceStrength ? ` · ${evidenceStrength}` : ''}</small>
         </div>
       </div>
 
