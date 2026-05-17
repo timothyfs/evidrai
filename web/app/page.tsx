@@ -248,6 +248,35 @@ function SpeechResult({
   );
 }
 
+function HeroPreview() {
+  return (
+    <aside className="heroPreview" aria-label="Evidence assessment preview">
+      <div className="trustRing"><span></span></div>
+      <div className="previewCard">
+        <p className="eyebrow">Evidence-based assessment</p>
+        <h2>Claim credibility preview</h2>
+        <div className="confidenceBar"><span style={{ width: '72%' }} /></div>
+        <p className="muted">Confidence reflects available evidence, corroboration, source quality, and transparency.</p>
+        <div className="previewSources">
+          <span>3 corroborating sources</span>
+          <span>1 context caveat</span>
+          <span>Reasoning inspectable</span>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function TrustSignals() {
+  return (
+    <div className="trustSignals">
+      <span>AI-assisted, source-grounded analysis</span>
+      <span>Reasoning is inspectable</span>
+      <span>Confidence reflects available evidence</span>
+    </div>
+  );
+}
+
 function LoginGate({
   account,
   authReady,
@@ -277,9 +306,9 @@ function LoginGate({
 }) {
   return (
     <section className="card loginGate">
-      <p className="eyebrow">Account required</p>
-      <h2>Sign in to use Evidrai</h2>
-      <p className="muted">Reports, feedback, and usage limits are now tied to a user account. Anonymous access is disabled in the product UI.</p>
+      <p className="eyebrow">Because trust needs evidence</p>
+      <h2>Start verifying with Evidrai</h2>
+      <p className="muted">Sign in to save assessments, inspect evidence trails, and access the verification tools included in your plan.</p>
       {authReady ? (
         <div className="authActions">
           <button disabled={authBusy} onClick={onGoogle} type="button">Continue with Google</button>
@@ -335,12 +364,11 @@ function SiteHeader({ account, me, signedIn, onSignOut, authBusy }: { account: A
       <details className="navMenu">
         <summary aria-label="Open navigation"><span></span><span></span><span></span></summary>
         <nav>
-          <a href="/">Claim check</a>
-          <a href="/product">Product</a>
-          <a href="/plans">Plans</a>
-          <a href="/about">About us</a>
-          <a href="/team">Team</a>
-          <a href="/contact">Contact us</a>
+          <a href="/">Verify</a>
+          <a href="/product">Investigations</a>
+          <a href="/plans">Evidence</a>
+          <a href="/about">About</a>
+          <a href="/contact">Account</a>
           {me?.is_admin && <a href="/admin">Admin</a>}
         </nav>
       </details>
@@ -665,12 +693,14 @@ export default function Home() {
   return (
     <main>
       <SiteHeader account={account} me={me} signedIn={signedIn} onSignOut={handleSignOut} authBusy={authBusy} />
-      <section className="hero appHero">
+      <section className={`hero appHero ${signedIn ? 'compactHero' : 'landingHero'}`}>
         <div>
-          <p className="eyebrow">Evidrai</p>
-          <h1>Check claims against evidence, not repetition.</h1>
-          <p className="lead">Run fast claim checks and deeper evidence reviews from one focused workspace.</p>
+          <p className="eyebrow">Because trust needs evidence</p>
+          <h1>Check claims against evidence — not repetition.</h1>
+          <p className="lead">Evidrai analyzes claims, posts, articles, and videos using source credibility, corroboration, transparency, and AI-assisted evidence analysis.</p>
+          {!signedIn && <TrustSignals />}
         </div>
+        {!signedIn && <HeroPreview />}
       </section>
 
       {authDiagnostics && (
@@ -708,6 +738,8 @@ export default function Home() {
           onPasswordReset={handlePasswordReset}
         />
       )}
+
+      {signedIn && <section className="workspaceIntro"><p>Evidence-based assessment · AI-assisted, source-grounded analysis · Reasoning is inspectable</p></section>}
 
       {signedIn && <div className="layout">
         <section className="card">
