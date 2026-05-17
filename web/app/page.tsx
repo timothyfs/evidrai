@@ -329,6 +329,50 @@ function TrustSignals() {
   );
 }
 
+function LoadingState({ type }: { type: 'claim' | 'speech' | 'report' | 'speech-verify' }) {
+  const copy = {
+    claim: { title: 'Checking the claim', steps: ['Normalizing the factual claim', 'Finding relevant evidence', 'Comparing source roles', 'Preparing assessment'] },
+    speech: { title: 'Extracting checkable claims', steps: ['Reading transcript', 'Separating claims from rhetoric', 'Ranking by checkability', 'Preparing selection list'] },
+    report: { title: 'Loading report', steps: ['Retrieving assessment', 'Restoring evidence trail', 'Preparing result card'] },
+    'speech-verify': { title: 'Verifying selected claims', steps: ['Checking selected claims', 'Grouping sources', 'Preparing claim assessments'] },
+  }[type];
+  return (
+    <section className="loadingState" aria-live="polite">
+      <div className="loadingOrb"><span></span></div>
+      <div>
+        <p className="eyebrow">Analysis in progress</p>
+        <h3>{copy.title}</h3>
+        <div className="loadingSteps">
+          {copy.steps.map((step) => <span key={step}>{step}</span>)}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function VerifyGuide({ mode, canUseDeep, canUseSpeech }: { mode: 'claim' | 'speech'; canUseDeep: boolean; canUseSpeech: boolean }) {
+  return (
+    <aside className="verifyGuide">
+      <p className="eyebrow">What happens next</p>
+      {mode === 'claim' ? (
+        <ul>
+          <li>We isolate the checkable factual claim.</li>
+          <li>Evidence is grouped by source role, not raw volume.</li>
+          <li>You get a verdict, confidence level, caveats, and inspectable reasoning.</li>
+          {!canUseDeep && <li>Deep evidence checks unlock on Pro and Researcher tiers.</li>}
+        </ul>
+      ) : (
+        <ul>
+          <li>We extract candidate claims from the transcript first.</li>
+          <li>You choose which claims deserve verification.</li>
+          <li>Selected claims are checked individually with their own evidence trail.</li>
+          {!canUseSpeech && <li>Speech/video audit is available on paid tiers.</li>}
+        </ul>
+      )}
+    </aside>
+  );
+}
+
 function LoginGate({
   account,
   authReady,
@@ -526,6 +570,7 @@ export default function Home() {
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
   const [reportIdInput, setReportIdInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingKind, setLoadingKind] = useState<'claim' | 'speech' | 'report' | 'speech-verify'>('claim');
   const [verifyingSpeech, setVerifyingSpeech] = useState(false);
   const [error, setError] = useState('');
 
@@ -692,6 +737,7 @@ export default function Home() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!ready) return;
+    setLoadingKind('claim');
     setLoading(true);
     setError('');
     try {
@@ -711,6 +757,7 @@ export default function Home() {
   async function extractSpeech(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!speechReady) return;
+    setLoadingKind('speech');
     setLoading(true);
     setError('');
     setAssessment(null);
@@ -734,6 +781,7 @@ export default function Home() {
     if (!speechExtraction) return;
     const claims: SpeechClaim[] = speechExtraction.claims.filter((item) => selectedSpeechClaims.includes(item.id));
     if (!claims.length) return;
+    setLoadingKind('speech-verify');
     setVerifyingSpeech(true);
     setError('');
     try {
@@ -747,6 +795,7 @@ export default function Home() {
   }
 
   async function loadReport(id: string) {
+    setLoadingKind('report');
     setLoading(true);
     setError('');
     try {
@@ -822,23 +871,33 @@ export default function Home() {
       {signedIn && <section className="workspaceIntro"><p>Evidence-based assessment · AI-assisted, source-grounded analysis · Reasoning is inspectable</p></section>}
 
       {signedIn && <div className="layout">
-        <section className="card">
-          <div className="segmented modeSwitch" role="tablist" aria-label="Audit type">
-            <button className={toolMode === 'claim' ? 'active' : ''} onClick={() => setToolMode('claim')} type="button">Single claim</button>
-            <button className={toolMode === 'speech' ? 'active' : ''} disabled={!canUseSpeech} onClick={() => setToolMode('speech')} type="button">Speech / video audit</button>
+        <section className="card verifyCard">
+          <div className="verifyHeader">
+            <div>
+              <p className="eyebrow">Verify</p>
+              <h2>{toolMode === 'claim' ? 'Assess a claim' : 'Extract claims from speech or video'}</h2>
+              <p className="muted">Start with a specific claim or source. Evidrai will show the evidence trail and uncertainty, not just a score.</p>
+            </div>
+            <div className="segmented modeSwitch" role="tablist" aria-label="Audit type">
+              <button className={toolMode === 'claim' ? 'active' : ''} onClick={() => setToolMode('claim')} type="button">Claim</button>
+              <button className={toolMode === 'speech' ? 'active' : ''} disabled={!canUseSpeech} onClick={() => setToolMode('speech')} type="button">Speech / video</button>
+            </div>
           </div>
 
           {toolMode === 'claim' ? (
-            <form onSubmit={submit}>
-              <label>
-                Claim to assess
-                <textarea value={claim} onChange={(event) => setClaim(event.target.value)} placeholder="Paste a claim, quote, headline, rumour, or factual assertion..." />
-              </label>
-              <label>
-                Optional source URL
-                <input value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://example.com/story" />
-              </label>
-              <div className="formRow">
+            <form className="verifyForm" onSubmit={submit}>
+              <div className="primaryInput">
+                <label>
+                  Claim to assess
+                  <textarea value={claim} onChange={(event) => setClaim(event.target.value)} placeholder="Paste a claim, quote, headline, rumour, or factual assertion..." />
+                </label>
+                <p className="fieldHint">Best results come from one clear, checkable factual claim. If you only have an article URL, add it below.</p>
+              </div>
+              <div className="secondaryInputs">
+                <label>
+                  Source URL <span>optional</span>
+                  <input value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://example.com/story" />
+                </label>
                 <label>
                   Category
                   <select value={category} onChange={(event) => setCategory(event.target.value)}>
@@ -848,24 +907,28 @@ export default function Home() {
                 <label>
                   Mode
                   <select value={mode} onChange={(event) => setMode(event.target.value as 'fast' | 'deep')}>
-                    <option value="fast">Fast</option>
-                    <option disabled={!canUseDeep} value="deep">Deep{canUseDeep ? '' : ' · Pro+'}</option>
+                    <option value="fast">Fast assessment</option>
+                    <option disabled={!canUseDeep} value="deep">Deep evidence review{canUseDeep ? '' : ' · Pro+'}</option>
                   </select>
                 </label>
               </div>
-              <button disabled={!ready || loading}>{loading ? 'Checking…' : 'Check claim'}</button>
+              <VerifyGuide mode="claim" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
+              <button className="primaryAction" disabled={!ready || loading}>{loading && loadingKind === 'claim' ? 'Checking evidence…' : 'Check claim'}</button>
             </form>
           ) : (
-            <form onSubmit={extractSpeech}>
-              <label>
-                Transcript
-                <textarea value={speechTranscript} onChange={(event) => setSpeechTranscript(event.target.value)} placeholder="Paste a speech, interview, podcast transcript, debate excerpt, or video transcript..." />
-              </label>
-              <label>
-                Optional video/source URL
-                <input value={speechSourceUrl} onChange={(event) => setSpeechSourceUrl(event.target.value)} placeholder="https://youtube.com/watch?v=..." />
-              </label>
-              <div className="formRow">
+            <form className="verifyForm" onSubmit={extractSpeech}>
+              <div className="primaryInput">
+                <label>
+                  Transcript
+                  <textarea value={speechTranscript} onChange={(event) => setSpeechTranscript(event.target.value)} placeholder="Paste a speech, interview, podcast transcript, debate excerpt, or video transcript..." />
+                </label>
+                <p className="fieldHint">Evidrai first extracts checkable claims, then lets you choose which ones to verify.</p>
+              </div>
+              <div className="secondaryInputs">
+                <label>
+                  Video/source URL <span>optional</span>
+                  <input value={speechSourceUrl} onChange={(event) => setSpeechSourceUrl(event.target.value)} placeholder="https://youtube.com/watch?v=..." />
+                </label>
                 <label>
                   Claims to extract
                   <select value={maxClaims} onChange={(event) => setMaxClaims(Number(event.target.value))}>
@@ -875,15 +938,17 @@ export default function Home() {
                 <label>
                   Verification mode
                   <select value={speechMode} onChange={(event) => setSpeechMode(event.target.value as 'fast' | 'deep')}>
-                    <option value="fast">Fast</option>
-                    <option disabled={!canUseDeep} value="deep">Deep{canUseDeep ? '' : ' · Pro+'}</option>
+                    <option value="fast">Fast assessment</option>
+                    <option disabled={!canUseDeep} value="deep">Deep evidence review{canUseDeep ? '' : ' · Pro+'}</option>
                   </select>
                 </label>
               </div>
-              <button disabled={!speechReady || loading}>{loading ? 'Extracting claims…' : 'Extract claims'}</button>
-              <p className="muted">Two-stage flow: extract/rank first, then choose claims to verify. Your tier allows up to {userLimits.max_speech_claims || 0} claims per audit.</p>
+              <VerifyGuide mode="speech" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
+              <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
+              <p className="muted">Your tier allows up to {userLimits.max_speech_claims || 0} claims per audit.</p>
             </form>
           )}
+          {(loading || verifyingSpeech) && <LoadingState type={verifyingSpeech ? 'speech-verify' : loadingKind} />}
           {error && <p className="error">{error}</p>}
         </section>
 
