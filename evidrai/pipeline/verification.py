@@ -168,12 +168,49 @@ def parse_claim_analysis(payload: Dict[str, Any], user_input: str) -> ClaimAnaly
     )
 
 
-ABSOLUTE_CLAIM_TERMS = {"never", "always", "none", "no", "only", "first", "last", "all", "every"}
+STRONG_ABSOLUTE_CLAIM_TERMS = {"never", "always", "none", "nobody", "nothing", "everyone", "everything"}
+TITLE_OR_IDIOM_FALSE_POSITIVES = {
+    "first lady",
+    "first gentleman",
+    "first minister",
+    "first class",
+    "first name",
+    "last name",
+    "last week",
+    "last month",
+    "last year",
+}
 
 
 def has_absolute_claim_language(text: str) -> bool:
-    tokens = set(re.findall(r"[a-z]+", (text or "").lower()))
-    return bool(tokens & ABSOLUTE_CLAIM_TERMS)
+    """Detect claim-level absolutes without flagging titles/ordinary phrases.
+
+    Strong terms like "never" and "always" are usually absolute. Softer words
+    such as "first", "last", "only", "all", "every", and "no" need context so
+    we do not treat phrases like "First Lady" or "last week" as counterexample
+    claims.
+    """
+    lowered = re.sub(r"\s+", " ", (text or "").lower()).strip()
+    if not lowered:
+        return False
+    if any(phrase in lowered for phrase in TITLE_OR_IDIOM_FALSE_POSITIVES):
+        return False
+    tokens = set(re.findall(r"[a-z]+", lowered))
+    if tokens & STRONG_ABSOLUTE_CLAIM_TERMS:
+        return True
+    contextual_patterns = [
+        r"\bno\s+(evidence|proof|record|case|cases|example|examples|support|credible|known|documented)\b",
+        r"\bno\s+[a-z]+(?:\s+[a-z]+){0,4}\s+(has|have|had|is|are|was|were|can|could|will|would|did|does)\b",
+        r"\b(the\s+)?only\s+(time|person|country|state|case|example|way|reason|source|evidence|one)\b",
+        r"\bonly\s+.*\b(to|that|who|which|ever)\b",
+        r"\b(the\s+)?first\s+(time|person|country|state|case|example|recorded|documented|known)\b",
+        r"\bfirst\s+.*\b(to|that|who|which|ever|in history)\b",
+        r"\b(the\s+)?last\s+(time|person|country|state|case|example|recorded|documented|known)\b",
+        r"\blast\s+.*\b(to|that|who|which|ever|in history)\b",
+        r"\ball\s+(people|countries|states|cases|examples|sources|evidence|claims)\b",
+        r"\bevery\s+(person|country|state|case|example|source|claim|time)\b",
+    ]
+    return any(re.search(pattern, lowered) for pattern in contextual_patterns)
 
 
 def absolute_counterexample_queries(text: str) -> List[str]:

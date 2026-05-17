@@ -627,3 +627,21 @@ def test_rule_engine_single_strong_counterexample_defeats_absolute_claim():
     assert result["verdict"] == "False / contradicted"
     assert result["confidence"] == "High"
     assert result["absolute_claim"] is True
+
+
+def test_absolute_claim_detector_ignores_titles_and_dates():
+    from evidrai.pipeline.verification import has_absolute_claim_language
+
+    assert has_absolute_claim_language("The First Lady attended the summit") is False
+    assert has_absolute_claim_language("The first minister gave a speech") is False
+    assert has_absolute_claim_language("Sales improved last week") is False
+    assert has_absolute_claim_language("What is her last name?") is False
+
+
+def test_absolute_claim_detector_keeps_claim_level_absolutes():
+    from evidrai.pipeline.verification import has_absolute_claim_language
+
+    assert has_absolute_claim_language("NATO never supported America") is True
+    assert has_absolute_claim_language("This was the first time Article 5 was invoked") is True
+    assert has_absolute_claim_language("She was the only person to vote against it") is True
+    assert has_absolute_claim_language("No credible evidence supports the claim") is True
