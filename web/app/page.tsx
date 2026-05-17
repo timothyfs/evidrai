@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   AccountProfile,
   AssessmentResponse,
+  AssessmentSource,
   FeedbackRating,
   MeResponse,
   ReportSummary,
@@ -50,20 +51,67 @@ function sourceHref(source: { url?: string }) {
   return source.url || '';
 }
 
+function confidencePercent(confidence?: string | null, fallbackScore?: number | null) {
+  const text = (confidence || '').toLowerCase();
+  if (text.includes('high')) return 86;
+  if (text.includes('medium')) return 62;
+  if (text.includes('low')) return 34;
+  if (typeof fallbackScore === 'number' && Number.isFinite(fallbackScore)) return Math.max(8, Math.min(100, Math.round(fallbackScore * 10)));
+  return 50;
+}
+
+function sourceGroup(source: AssessmentSource) {
+  const stance = (source.stance || source.evidence_category || source.source_role || '').toLowerCase();
+  if (stance.includes('support') || stance.includes('corrobor')) return 'Corroborating';
+  if (stance.includes('contradict') || stance.includes('refut') || stance.includes('against')) return 'Contradicting';
+  if (stance.includes('context') || stance.includes('background')) return 'Context';
+  return 'Relevant';
+}
+
+function groupSources(sources: AssessmentSource[]) {
+  const groups = new Map<string, AssessmentSource[]>();
+  sources.forEach((source) => {
+    const group = sourceGroup(source);
+    groups.set(group, [...(groups.get(group) || []), source]);
+  });
+  const order = ['Corroborating', 'Contradicting', 'Context', 'Relevant'];
+  return order.filter((group) => groups.has(group)).map((group) => ({ group, sources: groups.get(group) || [] }));
+}
+
+function SourceCard({ source, compact = false }: { source: AssessmentSource; compact?: boolean }) {
+  const score = Number(source.score || 0);
+  return (
+    <article className={`source sourceCard ${compact ? 'compactSource' : ''}`}>
+      <div className="sourceTopline">
+        <span>{source.source_type || 'Source'}</span>
+        {(source.stance || source.evidence_category) && <strong>{source.stance || source.evidence_category}</strong>}
+        {score > 0 && <em>{score.toFixed(1)}</em>}
+      </div>
+      {source.url ? (
+        <a href={sourceHref(source)} target="_blank" rel="noreferrer" className="sourceTitle">{source.title || source.domain || source.url}</a>
+      ) : (
+        <strong className="sourceTitle">{source.title || 'Untitled source'}</strong>
+      )}
+      {source.domain && <div className="sourceDomain">{source.domain}</div>}
+      <p>{source.summary || source.classification_reason || 'No summary available.'}</p>
+    </article>
+  );
+}
+
 function SourceList({ assessment }: { assessment: AssessmentResponse }) {
   if (!assessment.sources?.length) return <p className="muted">No sources returned for this assessment.</p>;
   return (
-    <div className="sourceGrid">
-      {assessment.sources.slice(0, 8).map((source) => (
-        <article className="source" key={source.id}>
-          <div className="sourceMeta">{source.source_type} · {source.stance} · score {Number(source.score || 0).toFixed(1)}</div>
-          {source.url ? (
-            <a href={sourceHref(source)} target="_blank" rel="noreferrer" className="sourceTitle">{source.title || source.domain || source.url}</a>
-          ) : (
-            <strong className="sourceTitle">{source.title || 'Untitled source'}</strong>
-          )}
-          <p>{source.summary || source.classification_reason || 'No summary available.'}</p>
-        </article>
+    <div className="evidenceGroups">
+      {groupSources(assessment.sources.slice(0, 10)).map(({ group, sources }) => (
+        <section className="evidenceGroup" key={group}>
+          <div className="evidenceGroupHeader">
+            <h3>{group}</h3>
+            <span>{sources.length} source{sources.length === 1 ? '' : 's'}</span>
+          </div>
+          <div className="sourceGrid">
+            {sources.map((source, index) => <SourceCard source={source} key={`${source.id || source.url}-${index}`} />)}
+          </div>
+        </section>
       ))}
     </div>
   );
@@ -229,11 +277,7 @@ function SpeechResult({
                     {item.sources?.length ? (
                       <div className="sourceGrid compact">
                         {item.sources.slice(0, 4).map((source, sourceIndex) => (
-                          <article className="source" key={`${source.id || source.url}-${sourceIndex}`}>
-                            <div className="sourceMeta">{source.source_type} · {source.stance || source.evidence_category}</div>
-                            {source.url ? <a href={sourceHref(source)} target="_blank" rel="noreferrer" className="sourceTitle">{source.title || source.domain || source.url}</a> : <strong>{source.title || 'Source'}</strong>}
-                            <p>{source.summary || source.classification_reason || 'No summary available.'}</p>
-                          </article>
+                          <SourceCard source={source} compact key={`${source.id || source.url}-${sourceIndex}`} />
                         ))}
                       </div>
                     ) : <p className="muted">No sources returned for this checked claim.</p>}
@@ -381,36 +425,47 @@ function SiteHeader({ account, me, signedIn, onSignOut, authBusy }: { account: A
 
 function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
   const tone = verdictTone(assessment.verdict.label);
+  const confidence = confidencePercent(assessment.verdict.confidence, assessment.verdict.evidence_strength_score);
   return (
-    <section className="card resultCard">
-      <div className="resultHeader">
+    <section className="card resultCard assessmentCard">
+      <div className="resultHeader assessmentHeader">
         <div>
-          <p className="eyebrow">Assessment</p>
+          <p className="eyebrow">Evidence-based assessment</p>
           <h2>{assessment.request.claim || 'Untitled claim'}</h2>
+          <p className="resultSubcopy">Transparent, source-grounded analysis. Confidence reflects available evidence, not certainty.</p>
         </div>
-        <div className={`verdict ${tone}`}>
+        <div className={`verdict verdictPanel ${tone}`}>
+          <span>Verdict</span>
           <strong>{assessment.verdict.label}</strong>
-          <span>{assessment.verdict.confidence} confidence</span>
+          <div className="confidenceMeter" aria-label={`${assessment.verdict.confidence} confidence`}><span style={{ width: `${confidence}%` }} /></div>
+          <small>{assessment.verdict.confidence} confidence</small>
         </div>
       </div>
 
-      {assessment.verdict.summary && <p className="summary">{assessment.verdict.summary}</p>}
-      {assessment.verdict.key_caveat && <p className="caveat">Caveat: {assessment.verdict.key_caveat}</p>}
+      {(assessment.verdict.summary || assessment.verdict.key_caveat) && (
+        <div className="assessmentNarrative">
+          {assessment.verdict.summary && <p className="summary">{assessment.verdict.summary}</p>}
+          {assessment.verdict.key_caveat && <p className="caveat"><strong>Key caveat</strong>{assessment.verdict.key_caveat}</p>}
+        </div>
+      )}
 
-      <div className="facts">
-        <span>ID: {assessment.assessment_id}</span>
-        <span>Mode: {assessment.mode}</span>
-        <span>Created: {formatDate(assessment.created_at)}</span>
+      <div className="facts assessmentFacts">
+        <span>Assessment ID: {assessment.assessment_id}</span>
+        <span>{assessment.mode} mode</span>
+        <span>{formatDate(assessment.created_at)}</span>
+        <span>{assessment.sources?.length || 0} evidence sources</span>
       </div>
 
       {assessment.claim_breakdown?.length > 0 && (
-        <details open>
+        <details open className="resultSection">
           <summary>Claim breakdown</summary>
           <div className="breakdown">
             {assessment.claim_breakdown.map((item) => (
-              <div key={item.id} className="breakdownItem">
-                <strong>{item.text}</strong>
-                <span>{item.dimension} · {item.assessment} · {item.confidence}</span>
+              <div key={item.id} className="breakdownItem reasoningItem">
+                <div>
+                  <strong>{item.text}</strong>
+                  <span>{item.dimension} · {item.assessment} · {item.confidence}</span>
+                </div>
                 {item.rationale && <p>{item.rationale}</p>}
               </div>
             ))}
@@ -418,10 +473,17 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
         </details>
       )}
 
-      <details open>
+      <details open className="resultSection">
         <summary>Evidence sources</summary>
         <SourceList assessment={assessment} />
       </details>
+
+      {assessment.reasoning && Object.keys(assessment.reasoning).length > 0 && (
+        <details className="resultSection reasoningDetails">
+          <summary>Inspectable reasoning</summary>
+          <pre>{JSON.stringify(assessment.reasoning, null, 2)}</pre>
+        </details>
+      )}
 
       <FeedbackControls assessment={assessment} />
     </section>

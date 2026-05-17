@@ -629,3 +629,171 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
   .landingHero { grid-template-columns: 1fr; min-height: auto; }
   .heroPreview { min-height: 330px; }
 }
+
+/* Phase 2 assessment card refinement */
+.assessmentCard {
+  overflow: hidden;
+  position: relative;
+}
+.assessmentCard::before {
+  background: linear-gradient(90deg, rgba(157, 183, 213, 0.38), transparent 62%);
+  content: "";
+  height: 1px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+.assessmentHeader {
+  align-items: stretch;
+  gap: 28px;
+}
+.resultSubcopy {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 12px 0 0;
+  max-width: 680px;
+}
+.verdictPanel {
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.035));
+  border: 1px solid rgba(255,255,255,0.14);
+  color: var(--ink);
+  min-width: 260px;
+  padding: 18px;
+  text-align: left;
+}
+.verdictPanel.good { box-shadow: inset 4px 0 0 var(--good), 0 18px 45px rgba(79, 159, 120, 0.08); }
+.verdictPanel.mixed { box-shadow: inset 4px 0 0 var(--mixed), 0 18px 45px rgba(196, 154, 80, 0.08); }
+.verdictPanel.weak { box-shadow: inset 4px 0 0 var(--weak), 0 18px 45px rgba(113, 131, 154, 0.08); }
+.verdictPanel.bad { box-shadow: inset 4px 0 0 var(--bad), 0 18px 45px rgba(184, 106, 102, 0.08); }
+.verdictPanel > span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  opacity: 1;
+  text-transform: uppercase;
+}
+.verdictPanel strong { font-size: 1.25rem; letter-spacing: -0.02em; }
+.verdictPanel small { color: var(--muted); font-weight: 850; }
+.confidenceMeter {
+  background: rgba(255,255,255,0.08);
+  border-radius: 999px;
+  height: 10px;
+  margin: 8px 0 2px;
+  overflow: hidden;
+}
+.confidenceMeter span {
+  background: linear-gradient(90deg, rgba(157,183,213,0.72), rgba(224,233,244,0.98));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+.assessmentNarrative {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255,255,255,0.035);
+  display: grid;
+  gap: 12px;
+  margin: 22px 0 0;
+  padding: 18px;
+}
+.assessmentNarrative .summary { margin: 0; }
+.assessmentNarrative .caveat {
+  align-items: start;
+  border: 1px solid rgba(196,154,80,0.22);
+  border-left: 4px solid var(--mixed);
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 12px 14px;
+}
+.assessmentNarrative .caveat strong { color: var(--ink); }
+.assessmentFacts span { background: rgba(255,255,255,0.045); }
+.resultSection summary {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+}
+.resultSection summary::-webkit-details-marker { display: none; }
+.resultSection summary::after {
+  color: var(--muted);
+  content: "Inspect";
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.resultSection[open] summary::after { content: "Hide"; }
+.reasoningItem {
+  grid-template-columns: minmax(0, 1fr);
+}
+.reasoningItem > div {
+  display: grid;
+  gap: 5px;
+}
+.evidenceGroups {
+  display: grid;
+  gap: 18px;
+  margin-top: 16px;
+}
+.evidenceGroup {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255,255,255,0.025);
+  padding: 14px;
+}
+.evidenceGroupHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.evidenceGroupHeader h3 { font-size: 1rem; margin: 0; }
+.evidenceGroupHeader span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+.sourceCard {
+  display: grid;
+  gap: 8px;
+}
+.sourceTopline {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.sourceTopline span, .sourceTopline strong, .sourceTopline em, .sourceDomain {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 850;
+  padding: 5px 8px;
+}
+.sourceTopline strong { color: var(--accent-strong); }
+.sourceTopline em { margin-left: auto; }
+.sourceDomain {
+  border: 0;
+  padding: 0;
+}
+.reasoningDetails pre {
+  background: rgba(0,0,0,0.22);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  max-height: 340px;
+  overflow: auto;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+@media (max-width: 780px) {
+  .assessmentHeader { display: grid; }
+  .verdictPanel { min-width: 0; }
+  .sourceTopline em { margin-left: 0; }
+}
