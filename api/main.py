@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from evidrai.api_models import AssessmentResponse, serialize_assessment_response
-from evidrai.auth import AuthContext, context_from_headers
+from evidrai.auth import AuthContext, context_from_headers, decode_supabase_access_token, unverified_token_diagnostics
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, supabase_auth_configured
@@ -231,6 +231,33 @@ def _assessment_response_from_request(request: AssessmentCreateRequest, mode: st
 def extract_source(request: SourceExtractRequest) -> ExtractedSource:
     source_url = (request.source_url or "").strip()
     return fetch_source_url(source_url)
+
+
+@app.get("/auth/diagnostics", response_model=Dict[str, Any])
+def auth_diagnostics(http_request: Request) -> Dict[str, Any]:
+    authorization = http_request.headers.get("authorization") or ""
+    if not authorization.lower().startswith("bearer "):
+        return {"ok": True, "has_bearer": False, "diagnostics": {}}
+    token = authorization.split(" ", 1)[1].strip()
+    diagnostics = unverified_token_diagnostics(token)
+    try:
+        claims = decode_supabase_access_token(token)
+        return {
+            "ok": True,
+            "has_bearer": True,
+            "verified": True,
+            "diagnostics": diagnostics,
+            "claims": {"subject_present": bool(claims.get("sub")), "email_present": bool(claims.get("email"))},
+        }
+    except Exception as exc:
+        return {
+            "ok": True,
+            "has_bearer": True,
+            "verified": False,
+            "diagnostics": diagnostics,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
 
 
 @app.get("/reports", response_model=Dict[str, Any])

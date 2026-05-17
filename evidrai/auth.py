@@ -79,6 +79,27 @@ def decode_supabase_access_token(token: str) -> dict[str, Any]:
         raise AuthError("Could not verify authentication token.", developer_detail=detail)
 
 
+def unverified_token_diagnostics(token: str) -> dict[str, Any]:
+    try:
+        header = jwt.get_unverified_header(token)
+    except Exception as exc:
+        header = {"error": str(exc)}
+    try:
+        claims = jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
+    except Exception as exc:
+        claims = {"error": str(exc)}
+    configured_url = supabase_url() or ""
+    return {
+        "token_alg": header.get("alg") if isinstance(header, dict) else None,
+        "token_kid_present": bool(header.get("kid")) if isinstance(header, dict) else False,
+        "token_issuer": claims.get("iss") if isinstance(claims, dict) else None,
+        "token_subject_present": bool(claims.get("sub")) if isinstance(claims, dict) else False,
+        "token_email_present": bool(claims.get("email")) if isinstance(claims, dict) else False,
+        "configured_supabase_url": configured_url,
+        "jwt_secret_configured": bool(supabase_jwt_secret()),
+    }
+
+
 def context_from_headers(*, authorization: str = "", owner_header: str = "") -> AuthContext:
     if authorization.lower().startswith("bearer "):
         token = authorization.split(" ", 1)[1].strip()
