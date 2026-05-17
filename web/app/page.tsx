@@ -556,7 +556,7 @@ export default function Home() {
   const [mode, setMode] = useState<'fast' | 'deep'>('fast');
   const [speechTranscript, setSpeechTranscript] = useState('');
   const [speechSourceUrl, setSpeechSourceUrl] = useState('');
-  const [tryYouTubeCaptions, setTryYouTubeCaptions] = useState(false);
+  const [tryYouTubeCaptions, setTryYouTubeCaptions] = useState(true);
   const [maxClaims, setMaxClaims] = useState(3);
   const [speechMode, setSpeechMode] = useState<'fast' | 'deep'>('fast');
   const [speechExtraction, setSpeechExtraction] = useState<SpeechExtractionResult | null>(null);
@@ -951,12 +951,13 @@ export default function Home() {
                 </label>
               </div>
               <div className="youtubeFallbackBox">
-                <label className="checkPill"><input checked={tryYouTubeCaptions} onChange={(event) => setTryYouTubeCaptions(event.target.checked)} type="checkbox" /> Try automatic YouTube captions</label>
-                <p className="muted">Recommended: paste the transcript. YouTube often blocks server-side caption access, so URL-only audits are best-effort.</p>
+                <label className="checkPill"><input checked={tryYouTubeCaptions} onChange={(event) => setTryYouTubeCaptions(event.target.checked)} type="checkbox" /> Try automatic YouTube captions when transcript is empty</label>
+                <p className="muted">URL-only audits are best-effort. If YouTube blocks caption access, paste the transcript above and run again.</p>
               </div>
               <VerifyGuide mode="speech" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
-              {!speechTranscript.trim() && speechSourceUrl.trim() && !tryYouTubeCaptions && <p className="fieldHint">Paste the transcript above, or tick “Try automatic YouTube captions” for a best-effort URL-only attempt.</p>}
+              {!speechTranscript.trim() && speechSourceUrl.trim() && tryYouTubeCaptions && <p className="fieldHint">No transcript pasted, so Evidrai will try to extract captions from the URL first.</p>}
+              {!speechTranscript.trim() && speechSourceUrl.trim() && !tryYouTubeCaptions && <p className="fieldHint">Paste the transcript above, or enable automatic YouTube captions for a best-effort URL-only attempt.</p>}
               <p className="muted">Your tier allows up to {userLimits.max_speech_claims || 0} claims per audit.</p>
             </form>
           )}
