@@ -411,10 +411,14 @@ function UserSummary({ account, me, onSignOut, authBusy }: { account: AccountPro
         <code>{account.owner_id}</code>
       </div>
       <div>
-        <span>Type</span>
+        <span>Plan</span>
         <strong>{me?.user?.tier_label || account.plan}</strong>
       </div>
-      {me?.is_admin && <a className="button secondary" href="/admin">Admin</a>}
+      <div>
+        <span>Admin</span>
+        <strong>{me?.is_admin ? 'Yes' : 'No'}</strong>
+      </div>
+      {me?.is_admin && <a className="button secondary" href="/admin">Admin UI</a>}
       <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
     </section>
   );
