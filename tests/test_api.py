@@ -545,3 +545,10 @@ def test_speech_extract_requires_transcript_unless_youtube_opt_in(monkeypatch):
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "transcript_required"
     assert called == []
+
+
+def test_youtube_video_id_extracts_watch_url():
+    from evidrai.transcripts import youtube_video_id
+
+    assert youtube_video_id("https://www.youtube.com/watch?v=cR5Dmj6GK88") == "cR5Dmj6GK88"
+    assert youtube_video_id("https://youtu.be/WVOvmHUu8Vw") == "WVOvmHUu8Vw"

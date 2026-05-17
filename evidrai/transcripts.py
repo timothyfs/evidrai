@@ -94,16 +94,58 @@ def _caption_candidates(tracks: Dict[str, List[Dict[str, Any]]], preferred_langs
     return candidates
 
 
+
+def youtube_video_id(url: str) -> str:
+    patterns = [
+        r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{6,})",
+        r"[?&]v=([A-Za-z0-9_-]{6,})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url or "")
+        if match:
+            return match.group(1)
+    return ""
+
+
+def _extract_with_youtube_transcript_api(url: str, preferred_langs: Tuple[str, ...]) -> Dict[str, Any]:
+    video_id = youtube_video_id(url)
+    if not video_id:
+        return {"ok": False, "code": "youtube_video_id_missing", "error": "Could not identify the YouTube video ID."}
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+    except Exception:
+        return {"ok": False, "code": "youtube_transcript_api_missing", "error": "youtube-transcript-api is not installed."}
+
+    try:
+        fetched = YouTubeTranscriptApi().fetch(video_id, languages=list(preferred_langs))
+    except Exception as exc:
+        return {"ok": False, "code": "youtube_transcript_api_failed", "error": str(exc)}
+
+    lines: List[str] = []
+    for item in fetched:
+        text = getattr(item, "text", "") or ""
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            lines.append(text)
+    transcript = "\n".join(lines).strip()
+    if not transcript:
+        return {"ok": False, "code": "youtube_transcript_empty", "error": "YouTube transcript API returned an empty transcript."}
+    return {"ok": True, "language": "YouTube transcript", "transcript": transcript}
+
 def extract_youtube_transcript(url: str, preferred_langs: Tuple[str, ...] = ("en", "en-US", "en-GB")) -> Dict[str, Any]:
     """Try to extract YouTube captions without downloading the video.
 
     Returns a stable payload with ok/error rather than raising so the UI can fall
     back cleanly to manual transcript paste.
     """
+    transcript_api_result = _extract_with_youtube_transcript_api(url, preferred_langs)
+    if transcript_api_result.get("ok"):
+        return transcript_api_result
+
     try:
         from yt_dlp import YoutubeDL
     except Exception:
-        return {"ok": False, "error": "yt-dlp is not installed, so automatic transcript extraction is unavailable."}
+        return {"ok": False, "error": "Automatic transcript extraction is unavailable. Paste the transcript manually and run the speech/video audit again.", "developer_detail": transcript_api_result.get("error", "yt-dlp is not installed")}
 
     try:
         with YoutubeDL({"skip_download": True, "quiet": True, "no_warnings": True}) as ydl:
@@ -131,7 +173,9 @@ def extract_youtube_transcript(url: str, preferred_langs: Tuple[str, ...] = ("en
         return {
             "ok": False,
             "title": info.get("title", ""),
+            "code": transcript_api_result.get("code") or "youtube_no_accessible_captions",
             "error": "No accessible YouTube captions were found for this video. Paste a transcript manually, or use audio transcription outside the app.",
+            "developer_detail": transcript_api_result.get("error", ""),
         }
 
     candidates = _caption_candidates(tracks, preferred_langs)
