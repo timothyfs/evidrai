@@ -797,3 +797,31 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
   .verdictPanel { min-width: 0; }
   .sourceTopline em { margin-left: 0; }
 }
+
+.methodologyGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+.methodologyCard {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255,255,255,0.035);
+  padding: 18px;
+}
+.methodologyCard h2 {
+  font-size: 1.05rem;
+  margin-bottom: 10px;
+}
+.methodologyCard p {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0;
+}
+.methodologySignals {
+  margin-top: 18px;
+}
+@media (max-width: 780px) {
+  .methodologyGrid { grid-template-columns: 1fr; }
+}
