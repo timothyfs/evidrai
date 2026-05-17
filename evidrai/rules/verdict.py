@@ -266,6 +266,7 @@ def rule_based_verdict_from_evidence(
     soft_claim = is_soft_or_hard_to_verify_claim(subclaims)
     serious_allegation = any((sub.claim_type or "").lower() in SERIOUS_ALLEGATION_TYPES for sub in (subclaims or []))
     concrete_factual_claim = not soft_claim and "motive_attribution" not in flags
+    absolute_claim = "absolute_claim" in flags
 
     supportive = stats["supportive_evidence"]
     contradictory = stats["contradictory_evidence"]
@@ -296,6 +297,10 @@ def rule_based_verdict_from_evidence(
         verdict = "Likely supported"
         confidence = "Medium"
         rationale = "The balance of credible evidence leans supportive, but it is not fully closed."
+    elif absolute_claim and contradictory >= 1 and supportive == 0 and (primary_contradictory >= 1 or high_quality_contradictory >= 1):
+        verdict = "False / contradicted"
+        confidence = "High" if primary_contradictory >= 1 else "Medium"
+        rationale = "The claim uses absolute language, and a credible counterexample directly contradicts it. One strong counterexample is enough to defeat a 'never', 'always', 'only', or similarly absolute claim."
     elif contradictory >= 2 and supportive == 0:
         verdict = "False / contradicted" if high_quality_contradictory >= 1 else "Not supported by credible evidence"
         confidence = "High" if primary_contradictory >= 1 or high_quality_contradictory >= 1 else "Medium"
@@ -366,6 +371,7 @@ def rule_based_verdict_from_evidence(
         "stats": stats,
         "soft_claim": soft_claim,
         "serious_allegation": serious_allegation,
+        "absolute_claim": absolute_claim,
         "risk_flags": sorted(flags),
     }
 
@@ -401,9 +407,9 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
         else:
             reasoning["verified_confidence"] = model_confidence
 
-    if rule_view["soft_claim"] and reasoning.get("verified_confidence") == "High":
+    if rule_view["soft_claim"] and reasoning.get("verified_confidence") == "High" and not rule_view.get("absolute_claim"):
         reasoning["verified_confidence"] = "Medium"
-    if rule_view["soft_claim"] and reasoning.get("verified_verdict") in {"Supported", "Likely supported", "Partly supported", "Not supported by credible evidence", "False / contradicted"}:
+    if rule_view["soft_claim"] and reasoning.get("verified_verdict") in {"Supported", "Likely supported", "Partly supported", "Not supported by credible evidence", "False / contradicted"} and not rule_view.get("absolute_claim"):
         if factual_core_supported:
             if reasoning.get("verified_verdict") == "Supported":
                 reasoning["verified_verdict"] = "Likely supported"
@@ -427,6 +433,8 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
         evidence_assessment["evidence_gaps"].append("Several sources provide allegation, adjacency, or contextual association rather than direct substantiation of the claim as stated.")
     if rule_view["soft_claim"]:
         evidence_assessment["evidence_gaps"].append("Part of the claim is interpretive, rhetorical, predictive, or otherwise difficult to verify directly.")
+    if rule_view.get("absolute_claim"):
+        evidence_assessment["evidence_gaps"].append("Absolute claims require counterexample checking; one credible exception can materially change the verdict.")
 
     explanation_note = rule_view["rationale"]
     final_explanation = (reasoning.get("final_explanation") or "").strip()

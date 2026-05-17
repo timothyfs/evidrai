@@ -594,3 +594,36 @@ def test_fast_pass_overrides_nato_never_claim_with_known_counterexample():
     assert result["verdict"] == "Not supported by credible evidence"
     assert result["confidence"] == "High"
     assert result["fast_sources"][0]["domain"] == "nato.int"
+
+
+def test_absolute_claim_queries_include_generic_counterexample_searches():
+    from evidrai.pipeline.verification import build_search_queries
+    from evidrai.models import SubClaim
+
+    subclaims = [SubClaim(id="sc_1", text="No electric cars have caught fire", claim_type="factual")]
+    queries = build_search_queries(subclaims)
+
+    assert any("counterexample" in query for query in queries)
+    assert any("official exception" in query for query in queries)
+    assert any("evidence against" in query for query in queries)
+
+
+def test_rule_engine_single_strong_counterexample_defeats_absolute_claim():
+    from evidrai.rules.verdict import rule_based_verdict_from_evidence
+    from evidrai.models import SubClaim
+
+    subclaims = [SubClaim(id="sc_1", text="No electric cars have caught fire", claim_type="factual", risk_flags=["absolute_claim"])]
+    sources = [{
+        "source_type": "primary",
+        "claim_support": "contradicts",
+        "evidence_category": "credible_contradiction",
+        "weighted_score": 4.8,
+        "title": "Official fire incident dataset",
+        "url": "https://example.gov/fire-data",
+    }]
+
+    result = rule_based_verdict_from_evidence("No electric cars have caught fire", subclaims, sources, "Mixed / uncertain")
+
+    assert result["verdict"] == "False / contradicted"
+    assert result["confidence"] == "High"
+    assert result["absolute_claim"] is True

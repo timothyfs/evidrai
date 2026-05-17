@@ -143,6 +143,7 @@ CLAIM_ANALYSIS_SYSTEM_PROMPT = dedent(
     - Identify when the input is partly or mostly opinion, prediction, motive attribution, rhetoric, or ambiguity.
     - Preserve the strongest verifyable core rather than the loudest framing.
     - Flag when the claim depends on hidden definitions, missing timeframes, unclear jurisdictions, or undefined terms.
+    - For absolute claims using terms like never, always, only, first, last, all, every, none, or no, add risk_flag "absolute_claim" and preserve the absolute proposition as a checkable subclaim.
 
     Guidance:
     - For a vague or rhetorical claim, still produce the best normalized claim you can, but note the ambiguity in overall_notes and risk_flags.
@@ -263,6 +264,8 @@ SOURCE_SUMMARY_SYSTEM_PROMPT = dedent(
     - Do not label a source as supports just because it repeats the claim.
     - Do not treat partisan accusations, screenshots without provenance, or social media summaries as direct evidence.
     - Prefer mixed when a source contains both facts and overreach.
+    - For absolute claims such as never, always, only, first, last, all, every, none, or no, classify a credible exception or counterexample as claim_support="contradicts", evidence_category="credible_contradiction", source_role="contradiction".
+    - A single strong counterexample can be decisive against an absolute claim; do not mark it irrelevant merely because it covers an exception rather than the whole topic.
     - Use narrative_cluster to group near-duplicate narratives so downstream logic can avoid fake corroboration.
 
     Schema:
@@ -349,6 +352,7 @@ def build_claim_analysis_messages(user_input: str) -> List[Dict[str, str]]:
                 - Extract the most falsifiable version of the claim.
                 - Split factual content from opinion, motive attribution, or rhetorical framing where possible.
                 - Flag ambiguity, time sensitivity, and any terms that need definition before verification.
+                - For absolute wording such as never, always, only, first, last, all, every, none, or no, add risk_flag "absolute_claim" and make counterexample search requirements explicit.
                 """
             ).strip(),
         },
@@ -405,6 +409,7 @@ def build_source_summary_messages(
                 - If the source mainly helps explain why a rumor is spreading, label it as rumor_amplification or contextual_signal, not supports.
                 - If the source contains documented facts from records, transcripts, footage, filings, or direct reporting based on evidence, use stronger categories such as direct_evidence or credible_reporting.
                 - If the source includes both useful facts and overreach, use mixed and explain the boundary clearly.
+                - If the sub-claim is absolute and the source provides a credible exception or counterexample, classify it as contradicts / credible_contradiction / contradiction.
                 - Use narrative_cluster to group near-duplicate rumor narratives together.
                 """
             ).strip(),

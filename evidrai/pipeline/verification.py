@@ -158,6 +158,9 @@ def parse_claim_analysis(payload: Dict[str, Any], user_input: str) -> ClaimAnaly
         )
     if not subclaims:
         subclaims = [SubClaim(id="sc_1", text=user_input.strip(), claim_type="other")]
+    for subclaim in subclaims:
+        if has_absolute_claim_language(subclaim.text) and "absolute_claim" not in subclaim.risk_flags:
+            subclaim.risk_flags.append("absolute_claim")
     return ClaimAnalysisResult(
         normalized_claim=validated.get("normalized_claim") or user_input,
         subclaims=subclaims,
@@ -173,6 +176,20 @@ def has_absolute_claim_language(text: str) -> bool:
     return bool(tokens & ABSOLUTE_CLAIM_TERMS)
 
 
+def absolute_counterexample_queries(text: str) -> List[str]:
+    base = re.sub(r"\s+", " ", (text or "").strip())
+    if not base:
+        return []
+    return [
+        f"{base} counterexample",
+        f"{base} exception",
+        f"{base} contradicted",
+        f"{base} fact check",
+        f"{base} official exception",
+        f"{base} evidence against",
+    ]
+
+
 def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
     queries: List[str] = []
     seen = set()
@@ -185,12 +202,7 @@ def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
             f"{sub.text} debunked OR disputed",
         ]
         if has_absolute_claim_language(sub.text):
-            candidates.extend([
-                f"{sub.text} counterexample",
-                f"{sub.text} exception",
-                f"{sub.text} contradicted",
-                f"{sub.text} fact check",
-            ])
+            candidates.extend(absolute_counterexample_queries(sub.text))
         lower = sub.text.lower()
         if "nato" in lower and any(term in lower for term in ["america", "united states", " u.s", " us ", "usa"]):
             candidates.extend([
