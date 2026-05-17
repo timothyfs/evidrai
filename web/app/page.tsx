@@ -16,6 +16,7 @@ import {
   createAssessment,
   extractSpeechClaims,
   getMe,
+  getAuthDiagnostics,
   getAccountProfile,
   getAnonymousAccountProfile,
   getReport,
@@ -489,6 +490,7 @@ export default function Home() {
   const [newPassword, setNewPassword] = useState('');
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
+  const [authDiagnostics, setAuthDiagnostics] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
@@ -524,11 +526,19 @@ export default function Home() {
     try {
       const payload = await getMe();
       setMe(payload);
+      setAuthDiagnostics('');
       if (payload.user) {
         setAccount((current) => current ? { ...current, plan: payload.user.tier_label } : current);
       }
     } catch (err) {
-      console.warn(err);
+      const message = err instanceof Error ? err.message : 'Could not load user profile';
+      setAuthMessage(message);
+      try {
+        const diagnostics = await getAuthDiagnostics();
+        setAuthDiagnostics(JSON.stringify(diagnostics, null, 2));
+      } catch (diagnosticErr) {
+        setAuthDiagnostics(diagnosticErr instanceof Error ? diagnosticErr.message : 'Auth diagnostics failed');
+      }
     }
   }
 
@@ -741,6 +751,14 @@ export default function Home() {
           <span>Account: {signedIn ? account?.owner_id.slice(0, 18) : 'sign in required'}</span>
         </div>
       </section>
+
+      {authDiagnostics && (
+        <section className="card">
+          <h2>Auth diagnostics</h2>
+          <p className="muted">Safe metadata only. No token or secret is shown.</p>
+          <pre>{authDiagnostics}</pre>
+        </section>
+      )}
 
       {passwordRecovery && signedIn && (
         <section className="card loginGate">

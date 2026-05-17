@@ -92,6 +92,16 @@ export type MeResponse = {
   feature_matrix: { schema_version: string; tiers: TierDefinition[] };
 };
 
+export type AuthDiagnosticsResponse = {
+  ok: boolean;
+  has_bearer: boolean;
+  verified?: boolean;
+  diagnostics?: Record<string, unknown>;
+  claims?: Record<string, unknown>;
+  error_type?: string;
+  error?: string;
+};
+
 export type RuntimeStatus = {
   ok: boolean;
   api_version: string;
@@ -236,6 +246,10 @@ export function getRuntime(): Promise<RuntimeStatus> {
 
 export function getMe(): Promise<MeResponse> {
   return request<MeResponse>('/me');
+}
+
+export function getAuthDiagnostics(): Promise<AuthDiagnosticsResponse> {
+  return request<AuthDiagnosticsResponse>('/auth/diagnostics');
 }
 
 export function getTiers(): Promise<{ ok: boolean; schema_version: string; tiers: TierDefinition[] }> {
