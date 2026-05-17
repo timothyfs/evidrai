@@ -253,63 +253,6 @@ function SpeechResult({
   );
 }
 
-function AccountPanel({
-  account,
-  authReady,
-  email,
-  password,
-  setEmail,
-  setPassword,
-  authMessage,
-  authBusy,
-  onGoogle,
-  onEmailPassword,
-  onSignUp,
-  onPasswordReset,
-  onSignOut,
-}: {
-  account: AccountProfile | null;
-  authReady: boolean;
-  email: string;
-  password: string;
-  setEmail: (value: string) => void;
-  setPassword: (value: string) => void;
-  authMessage: string;
-  authBusy: boolean;
-  onGoogle: () => void;
-  onEmailPassword: (event: FormEvent<HTMLFormElement>) => void;
-  onSignUp: () => void;
-  onPasswordReset: () => void;
-  onSignOut: () => void;
-}) {
-  const signedIn = Boolean(account?.owner_id && !account.owner_id.startsWith('anon_'));
-  return (
-    <section className="accountPanel">
-      <div>
-        <strong>{signedIn ? account?.label : 'Sign in required'}</strong>
-        <span>{signedIn ? `${account?.plan || 'Free'} user` : 'Use Google or email/password to continue'}</span>
-      </div>
-      {signedIn ? (
-        <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
-      ) : authReady ? (
-        <div className="authActions">
-          <button className="secondary" disabled={authBusy} onClick={onGoogle} type="button">Continue with Google</button>
-          <form className="emailLogin" onSubmit={onEmailPassword}>
-            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" />
-            <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" type="password" />
-            <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} type="submit">Sign in</button>
-            <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} onClick={onSignUp} type="button">Create free account</button>
-            <button className="linkButton" disabled={authBusy || !email.trim()} onClick={onPasswordReset} type="button">Set/reset password</button>
-          </form>
-        </div>
-      ) : (
-        <small>Auth env vars are not configured yet.</small>
-      )}
-      {authMessage && <small>{authMessage}</small>}
-    </section>
-  );
-}
-
 function LoginGate({
   account,
   authReady,
@@ -864,21 +807,6 @@ export default function Home() {
         </section>
 
         <aside className="card reports">
-          <AccountPanel
-            account={account}
-            authReady={authConfigured()}
-            email={authEmail}
-            password={authPassword}
-            setEmail={setAuthEmail}
-            setPassword={setAuthPassword}
-            authMessage={authMessage}
-            authBusy={authBusy}
-            onGoogle={handleGoogleSignIn}
-            onEmailPassword={handleEmailPasswordSignIn}
-            onSignUp={handleEmailPasswordSignUp}
-            onPasswordReset={handlePasswordReset}
-            onSignOut={handleSignOut}
-          />
           <div className="sectionHeader">
             <h2>Your reports</h2>
           </div>
