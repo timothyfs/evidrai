@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { AccountProfile, MeResponse, TierName, UserProfile, getAnonymousAccountProfile, getMe, listAdminUsers, setAccessToken, setAccountProfile, setAdminUserTier } from '../../lib/api';
+import { AccountProfile, MeResponse, TierName, UserProfile, deleteAdminUser, getAnonymousAccountProfile, getMe, listAdminUsers, setAccessToken, setAccountProfile, setAdminUserTier } from '../../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut } from '../../lib/auth';
 
 const TIER_OPTIONS = [
@@ -124,6 +124,23 @@ export default function AdminPage() {
     }
   }
 
+  async function deleteUser(user: UserProfile) {
+    const label = user.email || user.owner_id;
+    const confirmed = window.confirm(`Delete Evidrai profile for ${label}? This removes permissions/profile data only. The Supabase auth account is not deleted, and the user will reappear as Free if they sign in again.`);
+    if (!confirmed) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await deleteAdminUser(user.owner_id);
+      setUsers((current) => current.filter((item) => item.owner_id !== user.owner_id));
+      setMessage(payload.deleted ? `Deleted profile for ${label}.` : `No profile existed for ${label}.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not delete user profile.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveManualTier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -207,6 +224,7 @@ export default function AdminPage() {
               <strong>User</strong>
               <strong>Current tier</strong>
               <strong>Set permission</strong>
+              <strong>Delete</strong>
             </div>
             {filteredUsers.length === 0 ? <p className="muted">No users found. Users appear here after they sign in and the API creates their profile.</p> : filteredUsers.map((user) => (
               <article className="adminUserRow" key={user.owner_id}>
@@ -219,6 +237,7 @@ export default function AdminPage() {
                 <select disabled={busy} value={user.tier} onChange={(event) => updateUserTier(user, event.target.value as TierName)}>
                   {TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
+                <button className="danger" disabled={busy || user.owner_id === account?.owner_id} onClick={() => deleteUser(user)} type="button">Delete</button>
               </article>
             ))}
           </div>

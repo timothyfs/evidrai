@@ -328,7 +328,7 @@ summary { cursor: pointer; font-weight: 900; }
 }
 .adminUserHeader, .adminUserRow {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(120px, 0.45fr) minmax(180px, 0.65fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(120px, 0.45fr) minmax(180px, 0.65fr) minmax(90px, 0.3fr);
   gap: 14px;
   align-items: center;
 }
@@ -361,4 +361,12 @@ summary { cursor: pointer; font-weight: 900; }
 @media (max-width: 780px) {
   .adminUserHeader { display: none; }
   .adminUserRow { grid-template-columns: 1fr; }
+}
+
+button.danger {
+  border: 1px solid color-mix(in srgb, var(--bad) 35%, var(--line));
+  background: white;
+  color: var(--bad);
+  padding: 8px 12px;
+  font-size: 0.85rem;
 }

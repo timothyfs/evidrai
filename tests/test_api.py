@@ -136,6 +136,29 @@ def test_admin_user_tier_update_sets_profile(monkeypatch):
     assert payload["user"]["tier_label"] == "Pro"
 
 
+def test_admin_delete_user_profile(monkeypatch):
+    deleted = []
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "delete_user_profile", lambda owner_id: deleted.append(owner_id) or True)
+
+    response = client.delete("/admin/users/user-1", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    assert response.json()["deleted"] is True
+    assert deleted == ["user-1"]
+
+
+def test_admin_delete_user_profile_cannot_delete_self(monkeypatch):
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+
+    response = client.delete("/admin/users/master", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "cannot_delete_self"
+
+
 def test_claim_check_requires_input():
     response = client.post("/claims/check", json={"claim": "", "source_url": ""})
 

@@ -289,6 +289,12 @@ export function setAdminUserTier(input: { owner_id: string; tier: TierName; emai
   });
 }
 
+export function deleteAdminUser(owner_id: string): Promise<{ ok: boolean; owner_id: string; deleted: boolean; message: string }> {
+  return request<{ ok: boolean; owner_id: string; deleted: boolean; message: string }>(`/admin/users/${encodeURIComponent(owner_id)}`, {
+    method: 'DELETE',
+  });
+}
+
 export function submitFeedback(input: {
   assessment_id: string;
   rating: FeedbackRating;

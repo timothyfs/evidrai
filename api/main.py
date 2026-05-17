@@ -13,6 +13,7 @@ from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, master_admin_emails, supabase_auth_configured
 from evidrai.entitlements import (
+    delete_user_profile,
     enforce_speech_claim_limit,
     feature_matrix,
     get_or_create_profile,
@@ -292,6 +293,15 @@ def admin_set_user_tier(request: AdminSetTierRequest, http_request: Request) -> 
     _require_admin(http_request)
     profile = set_user_tier(request.owner_id, request.tier, email=request.email)
     return {"ok": True, "user": profile.to_dict()}
+
+
+@app.delete("/admin/users/{owner_id}", response_model=Dict[str, Any])
+def admin_delete_user(owner_id: str, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    if _auth_context_from_request(http_request).owner_id == owner_id:
+        raise HTTPException(status_code=400, detail={"code": "cannot_delete_self", "message": "You cannot delete your own admin profile."})
+    deleted = delete_user_profile(owner_id)
+    return {"ok": True, "owner_id": owner_id, "deleted": deleted, "message": "User profile deleted. Supabase auth account was not deleted."}
 
 
 @app.get("/reports/{report_id}", response_model=AssessmentResponse)

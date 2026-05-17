@@ -152,6 +152,9 @@ class UserProfileStore(Protocol):
     def list(self, limit: int = 100) -> List[UserProfile]:
         ...
 
+    def delete(self, owner_id: str) -> bool:
+        ...
+
 
 class LocalUserProfileStore:
     def __init__(self, path: Path | None = None) -> None:
@@ -200,6 +203,16 @@ class LocalUserProfileStore:
             UserProfile(owner_id=record.get("owner_id") or owner_id, email=record.get("email") or "", tier=normalize_tier(record.get("tier") or "free"))
             for owner_id, record in list(self._read().items())[:limit]
         ]
+
+    def delete(self, owner_id: str) -> bool:
+        if not owner_id:
+            raise EntitlementError("owner_id is required", code="owner_required", status_code=400)
+        data = self._read()
+        existed = owner_id in data
+        if existed:
+            data.pop(owner_id, None)
+            self._write(data)
+        return existed
 
 
 class PostgresUserProfileStore:
@@ -269,6 +282,17 @@ class PostgresUserProfileStore:
                 rows = cur.fetchall()
         return [_profile_from_row(row) for row in rows]
 
+    def delete(self, owner_id: str) -> bool:
+        if not owner_id:
+            raise EntitlementError("owner_id is required", code="owner_required", status_code=400)
+        self._ensure_schema()
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM user_profiles WHERE owner_id = %s", (owner_id,))
+                deleted = cur.rowcount > 0
+            conn.commit()
+        return deleted
+
 
 def _dt_value(value: Any) -> str:
     return value.isoformat() if hasattr(value, "isoformat") else str(value or "")
@@ -303,6 +327,10 @@ def set_user_tier(owner_id: str, tier: str, email: str = "", store: UserProfileS
 
 def list_user_profiles(limit: int = 100, store: UserProfileStore | None = None) -> List[UserProfile]:
     return (store or get_user_profile_store()).list(limit=limit)
+
+
+def delete_user_profile(owner_id: str, store: UserProfileStore | None = None) -> bool:
+    return (store or get_user_profile_store()).delete(owner_id)
 
 
 def require_feature(profile: UserProfile, feature: str, *, authenticated: bool = True) -> None:
