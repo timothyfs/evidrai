@@ -1288,3 +1288,126 @@ html[data-theme="light"] .planCard { background: rgba(255,255,255,0.72); }
 @media (max-width: 520px) {
   .assessmentSnapshot { grid-template-columns: 1fr; }
 }
+
+/* Mobile verification, evidence, guidance, and account polish */
+.mobileVerdictBar {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: none;
+  gap: 8px;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 12px 14px;
+  z-index: 8;
+}
+.mobileVerdictBar strong { letter-spacing: -0.02em; }
+.mobileVerdictBar span { color: var(--muted); font-size: 0.84rem; font-weight: 800; }
+.mobileVerdictBar.good { box-shadow: inset 4px 0 0 var(--good); }
+.mobileVerdictBar.mixed { box-shadow: inset 4px 0 0 var(--mixed); }
+.mobileVerdictBar.weak { box-shadow: inset 4px 0 0 var(--weak); }
+.mobileVerdictBar.bad { box-shadow: inset 4px 0 0 var(--bad); }
+.sourceDetails {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 8px;
+}
+.sourceDetails summary {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+.firstRunGuide {
+  border: 1px solid rgba(157,183,213,0.22);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(157,183,213,0.10), rgba(255,255,255,0.03));
+  padding: 16px;
+}
+.guideSteps {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.guideSteps span {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--muted);
+  display: flex;
+  gap: 9px;
+  line-height: 1.35;
+  padding: 10px;
+}
+.guideSteps strong {
+  align-items: center;
+  background: rgba(157,183,213,0.16);
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+.speechState {
+  border-radius: 14px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.4;
+  margin: 4px 0 0;
+  padding: 11px 12px;
+}
+.goodState { background: rgba(79,159,120,0.12); color: var(--good); }
+.mixedState { background: rgba(196,154,80,0.12); color: var(--mixed); }
+.weakState { background: rgba(113,131,154,0.12); color: var(--weak); }
+.errorState {
+  border: 1px solid color-mix(in srgb, var(--bad) 35%, var(--line));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+  line-height: 1.45;
+  padding: 12px 14px;
+}
+.accountProfileLine strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html[data-theme="light"] .firstRunGuide,
+html[data-theme="light"] .mobileVerdictBar,
+html[data-theme="light"] .guideSteps span {
+  background: rgba(255,255,255,0.72);
+}
+@media (max-width: 900px) {
+  main { width: min(100% - 22px, 1180px); padding-top: 22px; }
+  .siteHeader { top: 10px; }
+  .layout { gap: 16px; }
+  .verifyCard, .assessmentCard, .resultCard { padding: 18px; }
+  .firstRunGuide .guideSteps { grid-template-columns: 1fr; }
+  .assessmentHeader .verdictPanel { display: none; }
+  .mobileVerdictBar {
+    display: flex;
+    position: sticky;
+    top: 78px;
+    backdrop-filter: blur(18px);
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+  }
+  .sourceGrid,
+  .sourceGrid.compact { grid-template-columns: 1fr; }
+  .sourceCard { gap: 7px; }
+  .sourceCard > p,
+  .sourceReason { font-size: 0.9rem; }
+  .reports { order: 3; }
+  .reports:not([open]) { padding: 18px; }
+  .accountMenuPanel p:nth-child(3) { display: none; }
+}
+@media (max-width: 560px) {
+  .siteHeader { gap: 8px; }
+  .brand { font-size: 1rem; }
+  .accountMenu > summary { width: 100%; }
+  .modeSwitch, .segmented { border-radius: 18px; }
+  .modeSwitch button { flex: 1; }
+  .mobileVerdictBar { align-items: flex-start; flex-direction: column; top: 88px; }
+  .primaryInput, .verifyGuide, .speechExplainer, .selectionGuide, .youtubeFallbackBox { border-radius: 18px; }
+  .checkedClaim { padding: 13px; }
+  .verdict.mini { padding: 13px; }
+}

@@ -116,6 +116,12 @@ function formatReasoningValue(value: unknown) {
 function SourceCard({ source, compact = false }: { source: AssessmentSource; compact?: boolean }) {
   const score = Number(source.score || 0);
   const role = source.source_role || source.evidence_category || source.stance || '';
+  const detail = (
+    <>
+      <p>{source.summary || source.classification_reason || 'No summary available.'}</p>
+      {source.classification_reason && source.summary && <small className="sourceReason">Why this source matters: {source.classification_reason}</small>}
+    </>
+  );
   return (
     <article className={`source sourceCard ${compact ? 'compactSource' : ''}`}>
       <div className="sourceTopline">
@@ -129,8 +135,7 @@ function SourceCard({ source, compact = false }: { source: AssessmentSource; com
         <strong className="sourceTitle">{source.title || 'Untitled source'}</strong>
       )}
       {source.domain && <div className="sourceDomain">{source.domain}</div>}
-      <p>{source.summary || source.classification_reason || 'No summary available.'}</p>
-      {source.classification_reason && source.summary && <small className="sourceReason">Why this source matters: {source.classification_reason}</small>}
+      {compact ? <details className="sourceDetails"><summary>Source detail</summary>{detail}</details> : detail}
     </article>
   );
 }
@@ -146,7 +151,7 @@ function SourceList({ assessment }: { assessment: AssessmentResponse }) {
             <span>{sources.length} source{sources.length === 1 ? '' : 's'}</span>
           </div>
           <div className="sourceGrid">
-            {sources.map((source, index) => <SourceCard source={source} key={`${source.id || source.url}-${index}`} />)}
+            {sources.map((source, index) => <SourceCard source={source} compact key={`${source.id || source.url}-${index}`} />)}
           </div>
         </section>
       ))}
@@ -425,6 +430,40 @@ function SpeechAuditExplainer() {
   );
 }
 
+function FirstRunGuide({ mode }: { mode: 'claim' | 'speech' }) {
+  return (
+    <section className="firstRunGuide" aria-label="Getting started">
+      <p className="eyebrow">Try this first</p>
+      {mode === 'claim' ? (
+        <div className="guideSteps">
+          <span><strong>1</strong> Paste one clear claim</span>
+          <span><strong>2</strong> Choose fast or deep</span>
+          <span><strong>3</strong> Inspect verdict, caveats, and sources</span>
+        </div>
+      ) : (
+        <div className="guideSteps">
+          <span><strong>1</strong> Paste transcript when possible</span>
+          <span><strong>2</strong> Extract candidate claims</span>
+          <span><strong>3</strong> Verify only selected claims</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SpeechInputState({ transcript, sourceUrl, tryYouTubeCaptions }: { transcript: string; sourceUrl: string; tryYouTubeCaptions: boolean }) {
+  if (transcript.trim()) {
+    return <p className="speechState goodState">Transcript pasted. This is the most reliable path for speech/video analysis.</p>;
+  }
+  if (sourceUrl.trim() && tryYouTubeCaptions) {
+    return <p className="speechState mixedState">No transcript pasted. Evidrai will try YouTube captions first, but hosting restrictions can block this. Manual transcript remains the reliable fallback.</p>;
+  }
+  if (sourceUrl.trim()) {
+    return <p className="speechState weakState">URL provided, but automatic captions are off. Paste the transcript above for analysis.</p>;
+  }
+  return <p className="speechState weakState">Paste a transcript to start. YouTube URL-only extraction is experimental and may be blocked by YouTube.</p>;
+}
+
 function LoginGate({
   account,
   authReady,
@@ -495,10 +534,10 @@ function AccountMenu({ account, me, theme, onToggleTheme, onSignOut, authBusy }:
         <strong>{me?.user?.tier_label || account.plan}</strong>
       </summary>
       <div className="accountMenuPanel">
-        <p><span>Email</span><strong>{label}</strong></p>
-        <p><span>User ID</span><code>{account.owner_id}</code></p>
+        <p className="accountProfileLine"><span>Signed in as</span><strong>{label}</strong></p>
         <p><span>Plan</span><strong>{me?.user?.tier_label || account.plan}</strong></p>
-        <p><span>Admin</span><strong>{me?.is_admin ? 'Yes' : 'No'}</strong></p>
+        <p><span>User ID</span><code>{account.owner_id}</code></p>
+        {me?.is_admin && <p><span>Admin</span><strong>Enabled</strong></p>}
         {me?.is_admin && <a className="button secondary" href="/admin">Admin UI</a>}
         <button className="secondary" onClick={onToggleTheme} type="button">{theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}</button>
         <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
@@ -514,10 +553,11 @@ function SiteHeader({ account, me, signedIn, theme, onToggleTheme, onSignOut, au
         <summary aria-label="Open navigation"><span></span><span></span><span></span></summary>
         <nav>
           <a href="/">Verify</a>
-          <a href="/product">Investigations</a>
-          <a href="/plans">Evidence</a>
+          <a href="/product">Product</a>
+          <a href="/plans">Plans</a>
           <a href="/about">About</a>
-          <a href="/contact">Account</a>
+          <a href="/team">Team</a>
+          <a href="/contact">Contact</a>
           {me?.is_admin && <a href="/admin">Admin</a>}
         </nav>
       </details>
@@ -548,6 +588,11 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
           <div className="confidenceMeter" aria-label={`${assessment.verdict.confidence} confidence`}><span style={{ width: `${confidence}%` }} /></div>
           <small>{assessment.verdict.confidence} confidence{evidenceStrength ? ` · ${evidenceStrength}` : ''}</small>
         </div>
+      </div>
+
+      <div className={`mobileVerdictBar ${tone}`} aria-label="Sticky verdict summary">
+        <strong>{assessment.verdict.label}</strong>
+        <span>{assessment.verdict.confidence || 'Unstated'} confidence · {assessment.sources?.length || 0} sources</span>
       </div>
 
       <div className="assessmentSnapshot" aria-label="Assessment summary">
@@ -972,6 +1017,8 @@ export default function Home() {
             </div>
           </div>
 
+          {!assessment && !speechExtraction && !loading && <FirstRunGuide mode={toolMode} />}
+
           {toolMode === 'claim' ? (
             <form className="verifyForm" onSubmit={submit}>
               <div className="primaryInput">
@@ -1035,6 +1082,7 @@ export default function Home() {
               <div className="youtubeFallbackBox">
                 <label className="checkPill"><input checked={tryYouTubeCaptions} onChange={(event) => setTryYouTubeCaptions(event.target.checked)} type="checkbox" /> Try automatic YouTube captions when transcript is empty</label>
                 <p className="muted">URL-only audits are best-effort. If YouTube blocks caption access, paste the transcript above and run again.</p>
+                <SpeechInputState transcript={speechTranscript} sourceUrl={speechSourceUrl} tryYouTubeCaptions={tryYouTubeCaptions} />
               </div>
               <VerifyGuide mode="speech" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
@@ -1044,7 +1092,7 @@ export default function Home() {
             </form>
           )}
           {(loading || verifyingSpeech) && <LoadingState type={verifyingSpeech ? 'speech-verify' : loadingKind} />}
-          {error && <p className="error">{error}</p>}
+          {error && <p className="error errorState">{error}</p>}
         </section>
 
         <details className="card reports" open>
