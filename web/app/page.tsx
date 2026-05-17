@@ -231,8 +231,9 @@ function SpeechResult({
     <section className="card resultCard">
       <div className="resultHeader">
         <div>
-          <p className="eyebrow">Speech / Video Audit</p>
+          <p className="eyebrow">Stage 1 complete · claim extraction</p>
           <h2>{extraction.title || 'Extracted claims'}</h2>
+          <p className="resultSubcopy">Evidrai found checkable claims in the transcript. Select the ones that matter, then run evidence verification only on those claims.</p>
         </div>
         <div className="verdict weak">
           <strong>{extraction.claims.length} claims</strong>
@@ -248,8 +249,13 @@ function SpeechResult({
       </div>
       {extraction.extraction_notes?.length > 0 && <p className="caveat">{extraction.extraction_notes.join(' ')}</p>}
 
+      <div className="selectionGuide">
+        <strong>Choose claims to verify</strong>
+        <p>Prioritise claims that are material, specific, and worth spending evidence-search time on. You can skip rhetoric, repeated points, or claims that are not central to the audit.</p>
+      </div>
+
       <details open>
-        <summary>1. Extracted claims: choose what to verify</summary>
+        <summary>1. Extracted claims · choose what to verify</summary>
         <div className="claimPickList">
           {extraction.claims.map((claim, index) => (
             <label className="claimPick" key={claim.id || index}>
@@ -274,7 +280,7 @@ function SpeechResult({
 
       {verification && (
         <details open>
-          <summary>2. Verified claims</summary>
+          <summary>2. Verified claims · evidence assessment</summary>
           <div className="checkedClaims">
             {verification.claims_checked.map((item, index) => {
               const label = checkedClaimVerdict(item);
@@ -375,6 +381,23 @@ function VerifyGuide({ mode, canUseDeep, canUseSpeech }: { mode: 'claim' | 'spee
         </ul>
       )}
     </aside>
+  );
+}
+
+function SpeechAuditExplainer() {
+  return (
+    <section className="speechExplainer">
+      <div>
+        <p className="eyebrow">Two-stage audit</p>
+        <h3>Extract first. Verify only what matters.</h3>
+        <p>Evidrai does not blindly fact-check an entire transcript. It first identifies candidate factual claims, ranks them by checkability and importance, then lets you choose which claims deserve evidence verification.</p>
+      </div>
+      <div className="speechFlowSteps">
+        <span><strong>1</strong> Extract checkable claims</span>
+        <span><strong>2</strong> Select the claims that matter</span>
+        <span><strong>3</strong> Verify selected claims against evidence</span>
+      </div>
+    </section>
   );
 }
 
@@ -929,8 +952,9 @@ export default function Home() {
                   Transcript
                   <textarea value={speechTranscript} onChange={(event) => setSpeechTranscript(event.target.value)} placeholder="Paste a speech, interview, podcast transcript, debate excerpt, or video transcript..." />
                 </label>
-                <p className="fieldHint">Evidrai first extracts checkable claims, then lets you choose which ones to verify.</p>
+                <p className="fieldHint">Paste a transcript or provide a YouTube URL. Evidrai will extract candidate claims first; verification happens only after you choose the claims worth checking.</p>
               </div>
+              <SpeechAuditExplainer />
               <div className="secondaryInputs">
                 <label>
                   Video/source URL <span>optional context</span>

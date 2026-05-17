@@ -1101,3 +1101,62 @@ html[data-theme="light"] .loadingState {
 html[data-theme="light"] .youtubeFallbackBox {
   background: rgba(255,255,255,0.7);
 }
+
+.speechExplainer, .selectionGuide {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(157,183,213,0.055);
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+.speechExplainer {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr);
+}
+.speechExplainer h3 {
+  font-size: 1.15rem;
+  margin: 0 0 8px;
+}
+.speechExplainer p, .selectionGuide p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+.speechFlowSteps {
+  display: grid;
+  gap: 8px;
+}
+.speechFlowSteps span {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.88rem;
+  font-weight: 850;
+  gap: 9px;
+  padding: 8px 10px;
+}
+.speechFlowSteps strong {
+  align-items: center;
+  background: rgba(157,183,213,0.18);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+.selectionGuide {
+  margin: 18px 0 0;
+}
+.selectionGuide strong {
+  font-size: 1rem;
+}
+html[data-theme="light"] .speechExplainer,
+html[data-theme="light"] .selectionGuide {
+  background: rgba(255,255,255,0.65);
+}
+@media (max-width: 900px) {
+  .speechExplainer { grid-template-columns: 1fr; }
+}
