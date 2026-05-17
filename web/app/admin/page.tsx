@@ -1,15 +1,17 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AccountProfile, MeResponse, TierName, UserProfile, getAnonymousAccountProfile, getMe, listAdminUsers, setAccessToken, setAccountProfile, setAdminUserTier } from '../../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut } from '../../lib/auth';
 
-function tierOptions() {
-  return [
-    { value: 'free', label: 'Free' },
-    { value: 'pro', label: 'Pro' },
-    { value: 'researcher', label: 'Researcher / Journalist' },
-  ] as const;
+const TIER_OPTIONS = [
+  { value: 'free', label: 'Free' },
+  { value: 'pro', label: 'Pro' },
+  { value: 'researcher', label: 'Researcher / Journalist' },
+] as const;
+
+function tierLabel(tier: TierName) {
+  return TIER_OPTIONS.find((item) => item.value === tier)?.label || tier;
 }
 
 export default function AdminPage() {
@@ -17,14 +19,20 @@ export default function AdminPage() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [ownerId, setOwnerId] = useState('');
-  const [targetEmail, setTargetEmail] = useState('');
-  const [tier, setTier] = useState<TierName>('free');
+  const [manualOwnerId, setManualOwnerId] = useState('');
+  const [manualEmail, setManualEmail] = useState('');
+  const [manualTier, setManualTier] = useState<TierName>('free');
+  const [search, setSearch] = useState('');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
-  const isAdmin = me?.is_admin;
+  const isAdmin = Boolean(me?.is_admin);
+  const filteredUsers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return users;
+    return users.filter((user) => [user.email, user.owner_id, user.tier_label, user.subscription_status].some((value) => (value || '').toLowerCase().includes(query)));
+  }, [search, users]);
 
   async function refreshMe() {
     const payload = await getMe();
@@ -100,12 +108,28 @@ export default function AdminPage() {
     }
   }
 
-  async function saveTier(event: FormEvent<HTMLFormElement>) {
+  async function updateUserTier(user: UserProfile, nextTier: TierName) {
+    if (nextTier === user.tier) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await setAdminUserTier({ owner_id: user.owner_id, email: user.email, tier: nextTier });
+      setUsers((current) => current.map((item) => item.owner_id === payload.user.owner_id ? payload.user : item));
+      setMessage(`Updated ${payload.user.email || payload.user.owner_id} to ${payload.user.tier_label}.`);
+      await refreshMe();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not update tier.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveManualTier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setMessage('');
     try {
-      const payload = await setAdminUserTier({ owner_id: ownerId, email: targetEmail, tier });
+      const payload = await setAdminUserTier({ owner_id: manualOwnerId, email: manualEmail, tier: manualTier });
       setMessage(`Updated ${payload.user.email || payload.user.owner_id} to ${payload.user.tier_label}.`);
       await loadUsers();
       await refreshMe();
@@ -135,11 +159,12 @@ export default function AdminPage() {
         <div>
           <p className="eyebrow">Evidrai Admin</p>
           <h1>User management</h1>
-          <p className="lead">The master admin can view users and set their visible product tier: Free, Pro, or Researcher / Journalist. Payments and 30-day trials can wire into the reserved subscription fields later.</p>
+          <p className="lead">The master admin can view users and set their visible product tier: Free, Pro, or Researcher / Journalist.</p>
         </div>
         <div className="statusPanel">
           <span>Account: {account?.label || 'checking...'}</span>
-          <span>Tier: {me?.user?.tier_label || 'not signed in'}</span>
+          <span>Plan: {me?.user?.tier_label || 'not signed in'}</span>
+          <span>Admin: {isAdmin ? 'yes' : 'no'}</span>
           <a href="/">Back to product</a>
         </div>
       </section>
@@ -162,28 +187,51 @@ export default function AdminPage() {
       ) : (
         <section className="card adminPanel">
           <div className="sectionHeader">
-            <h2>Users</h2>
-            <button className="secondary" disabled={busy} onClick={handleSignOut} type="button">Sign out</button>
-          </div>
-          <form onSubmit={saveTier}>
-            <label>User ID<input value={ownerId} onChange={(event) => setOwnerId(event.target.value)} placeholder="Supabase user id" /></label>
-            <label>Email<input value={targetEmail} onChange={(event) => setTargetEmail(event.target.value)} placeholder="optional email" /></label>
-            <label>Tier<select value={tier} onChange={(event) => setTier(event.target.value as TierName)}>{tierOptions().map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-            <div className="formRow">
-              <button disabled={busy || !ownerId.trim()} type="submit">Set tier</button>
-              <button className="secondary" disabled={busy} onClick={loadUsers} type="button">Reload users</button>
+            <div>
+              <h2>Users</h2>
+              <p className="muted">{filteredUsers.length} shown · {users.length} total</p>
             </div>
-          </form>
-          <div className="adminUsers">
-            {users.map((user) => (
-              <button key={user.owner_id} className="reportItem" type="button" onClick={() => { setOwnerId(user.owner_id); setTargetEmail(user.email || ''); setTier(user.tier); }}>
+            <div className="formRow compactActions">
+              <button className="secondary" disabled={busy} onClick={loadUsers} type="button">Reload</button>
+              <button className="secondary" disabled={busy} onClick={handleSignOut} type="button">Sign out</button>
+            </div>
+          </div>
+
+          <label>
+            Search users
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search email, user ID, tier, subscription..." />
+          </label>
+
+          <div className="adminUserTable">
+            <div className="adminUserHeader">
+              <strong>User</strong>
+              <strong>Current tier</strong>
+              <strong>Set permission</strong>
+            </div>
+            {filteredUsers.length === 0 ? <p className="muted">No users found. Users appear here after they sign in and the API creates their profile.</p> : filteredUsers.map((user) => (
+              <article className="adminUserRow" key={user.owner_id}>
+                <div>
+                  <strong>{user.email || 'No email captured'}</strong>
+                  <small>{user.owner_id}</small>
+                  <small>Subscription: {user.subscription_status || 'none'}{user.trial_ends_at ? ` · trial ends ${user.trial_ends_at}` : ''}</small>
+                </div>
                 <strong>{user.tier_label}</strong>
-                <span>{user.email || user.owner_id}</span>
-                <small>{user.owner_id}</small>
-                <small>Subscription: {user.subscription_status || 'none'}{user.trial_ends_at ? ` · trial ends ${user.trial_ends_at}` : ''}</small>
-              </button>
+                <select disabled={busy} value={user.tier} onChange={(event) => updateUserTier(user, event.target.value as TierName)}>
+                  {TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+              </article>
             ))}
           </div>
+
+          <details>
+            <summary>Manual update by user ID</summary>
+            <form onSubmit={saveManualTier}>
+              <label>User ID<input value={manualOwnerId} onChange={(event) => setManualOwnerId(event.target.value)} placeholder="Supabase user id" /></label>
+              <label>Email<input value={manualEmail} onChange={(event) => setManualEmail(event.target.value)} placeholder="optional email" /></label>
+              <label>Tier<select value={manualTier} onChange={(event) => setManualTier(event.target.value as TierName)}>{TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <button disabled={busy || !manualOwnerId.trim()} type="submit">Set tier manually</button>
+            </form>
+          </details>
         </section>
       )}
       {message && <p className="muted">{message}</p>}

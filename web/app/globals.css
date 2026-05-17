@@ -320,3 +320,45 @@ summary { cursor: pointer; font-weight: 900; }
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.adminUserTable {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+.adminUserHeader, .adminUserRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(120px, 0.45fr) minmax(180px, 0.65fr);
+  gap: 14px;
+  align-items: center;
+}
+.adminUserHeader {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.adminUserRow {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: white;
+  padding: 14px;
+}
+.adminUserRow div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.adminUserRow small {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compactActions {
+  min-width: 180px;
+}
+@media (max-width: 780px) {
+  .adminUserHeader { display: none; }
+  .adminUserRow { grid-template-columns: 1fr; }
+}
