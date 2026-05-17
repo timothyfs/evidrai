@@ -95,6 +95,25 @@ def _caption_candidates(tracks: Dict[str, List[Dict[str, Any]]], preferred_langs
 
 
 
+
+def transcript_backend_status() -> Dict[str, Any]:
+    status: Dict[str, Any] = {}
+    try:
+        import youtube_transcript_api  # type: ignore
+        status["youtube_transcript_api"] = True
+        status["youtube_transcript_api_version"] = getattr(youtube_transcript_api, "__version__", "unknown")
+    except Exception as exc:
+        status["youtube_transcript_api"] = False
+        status["youtube_transcript_api_error"] = str(exc)
+    try:
+        import yt_dlp  # type: ignore
+        status["yt_dlp"] = True
+        status["yt_dlp_version"] = getattr(getattr(yt_dlp, "version", None), "__version__", "unknown")
+    except Exception as exc:
+        status["yt_dlp"] = False
+        status["yt_dlp_error"] = str(exc)
+    return status
+
 def youtube_video_id(url: str) -> str:
     patterns = [
         r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{6,})",
@@ -157,13 +176,13 @@ def extract_youtube_transcript(url: str, preferred_langs: Tuple[str, ...] = ("en
                 "ok": False,
                 "code": "youtube_bot_check",
                 "error": "YouTube blocked automatic transcript access for this video. Paste the transcript into the Transcript box and run the speech/video audit again.",
-                "developer_detail": raw_error,
+                "developer_detail": f"youtube-transcript-api: {transcript_api_result.get('error', '')}; yt-dlp: {raw_error}",
             }
         return {
             "ok": False,
             "code": "youtube_inspection_failed",
             "error": "Evidrai could not inspect this YouTube URL automatically. Paste the transcript manually, or try another video with accessible captions.",
-            "developer_detail": raw_error,
+            "developer_detail": f"youtube-transcript-api: {transcript_api_result.get('error', '')}; yt-dlp: {raw_error}",
         }
 
     subtitles = info.get("subtitles") or {}

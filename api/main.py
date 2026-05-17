@@ -33,7 +33,7 @@ from evidrai.pipeline.verification import (
     verify_speech_claim,
 )
 from evidrai.reports import list_reports, load_report, save_report
-from evidrai.transcripts import clean_pasted_youtube_transcript, extract_youtube_transcript
+from evidrai.transcripts import clean_pasted_youtube_transcript, extract_youtube_transcript, transcript_backend_status
 from evidrai.utils import build_analysis_input, is_probable_url
 
 
@@ -441,6 +441,7 @@ def runtime_status() -> Dict[str, Any]:
         "storage_backend": "postgres" if database_url() else "local_json",
         "auth_configured": supabase_auth_configured(),
         "admin_configured": bool(admin_token() or master_admin_emails()),
+        "transcript_backends": transcript_backend_status(),
     }
 
 
