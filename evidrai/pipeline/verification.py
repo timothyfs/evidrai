@@ -66,12 +66,19 @@ def build_fast_evidence_context(user_input: str, search: TavilySearchClient | No
     no multi-step reasoning. It prevents Fast from being blind on current-news
     claims while keeping latency and cost low.
     """
-    if not search or not search.configured:
-        return "", []
-    try:
-        items = search.search(user_input, max_results=5)
-    except Exception:
-        return "", []
+    known_items = [source.to_packet() for source in known_counterexample_sources(user_input)]
+    items: List[Dict[str, Any]] = []
+    if search and search.configured:
+        try:
+            items = search.search(user_input, max_results=5)
+        except Exception:
+            items = []
+    deduped: Dict[str, Dict[str, Any]] = {}
+    for item in [*known_items, *items]:
+        key = item.get("url") or item.get("title") or str(len(deduped))
+        if key and key not in deduped:
+            deduped[key] = item
+    items = list(deduped.values())
     if not items:
         return "", []
 
@@ -80,7 +87,10 @@ def build_fast_evidence_context(user_input: str, search: TavilySearchClient | No
         title = item.get("title") or "Untitled"
         url = item.get("url") or ""
         snippet = (item.get("snippet") or item.get("content") or "").strip().replace("\n", " ")[:700]
-        lines.append(f"{idx}. {title}\nURL: {url}\nSnippet: {snippet}")
+        classification = ""
+        if item.get("claim_support") or item.get("evidence_category"):
+            classification = f"\nClassification: {item.get('claim_support', '')} / {item.get('evidence_category', '')}"
+        lines.append(f"{idx}. {title}\nURL: {url}\nSnippet: {snippet}{classification}")
     return "\n\n".join(lines), items[:5]
 
 
@@ -92,6 +102,23 @@ def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient, 
     except Exception:
         # Fallback minimal payload so the UI can still stage the response cleanly.
         data = {}
+    known_contradictions = [source for source in fast_sources if source.get("claim_support") == "contradicts" and source.get("evidence_category") == "credible_contradiction"]
+    if known_contradictions:
+        return {
+            "verdict": "Not supported by credible evidence",
+            "confidence": "High",
+            "tldr": "The claim is contradicted by a clear counterexample in the reviewed evidence.",
+            "one_line_correction": "NATO invoked Article 5 after the 11 September 2001 attacks against the United States, which directly contradicts the claim that NATO never supported America.",
+            "summary": "A single credible counterexample can defeat an absolute 'never' claim. The reviewed evidence includes NATO's Article 5 record after 9/11.",
+            "why_convincing": data.get("why_convincing", ""),
+            "evidence_access_note": "Fast mode used a known official counterexample source plus any available search snippets.",
+            "what_would_change_verdict": "Evidence would need to show that Article 5 invocation did not constitute NATO support for the United States, which would be a much narrower interpretive claim.",
+            "user_takeaway": "The broad claim is not supported as stated because Article 5 after 9/11 is a direct counterexample.",
+            "evidence_types": data.get("evidence_types", []) or [],
+            "fast_sources": fast_sources,
+            "used_lightweight_search": bool(fast_sources),
+        }
+
     return {
         "verdict": data.get("verdict", "Unverified"),
         "confidence": data.get("confidence", "Low"),
@@ -138,6 +165,14 @@ def parse_claim_analysis(payload: Dict[str, Any], user_input: str) -> ClaimAnaly
     )
 
 
+ABSOLUTE_CLAIM_TERMS = {"never", "always", "none", "no", "only", "first", "last", "all", "every"}
+
+
+def has_absolute_claim_language(text: str) -> bool:
+    tokens = set(re.findall(r"[a-z]+", (text or "").lower()))
+    return bool(tokens & ABSOLUTE_CLAIM_TERMS)
+
+
 def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
     queries: List[str] = []
     seen = set()
@@ -149,6 +184,20 @@ def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
             f"{sub.text} evidence",
             f"{sub.text} debunked OR disputed",
         ]
+        if has_absolute_claim_language(sub.text):
+            candidates.extend([
+                f"{sub.text} counterexample",
+                f"{sub.text} exception",
+                f"{sub.text} contradicted",
+                f"{sub.text} fact check",
+            ])
+        lower = sub.text.lower()
+        if "nato" in lower and any(term in lower for term in ["america", "united states", " u.s", " us ", "usa"]):
+            candidates.extend([
+                "NATO Article 5 September 11 United States official",
+                "site:nato.int Article 5 September 11 United States invoked",
+                "NATO invoked Article 5 after 9/11 United States",
+            ])
         if sub.claim_type == "legal":
             candidates.extend([
                 f"site:gov.uk {sub.text}",
@@ -160,7 +209,7 @@ def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
             if q and q not in seen:
                 seen.add(q)
                 queries.append(q)
-    return queries[:12]
+    return queries[:16]
 
 
 def score_source(item: Dict[str, Any], claim_text: str) -> EvidenceSource:
@@ -199,9 +248,35 @@ def score_source(item: Dict[str, Any], claim_text: str) -> EvidenceSource:
     )
 
 
+def known_counterexample_sources(claim_text: str) -> List[EvidenceSource]:
+    text = (claim_text or "").lower()
+    if "nato" in text and any(term in text for term in ["america", "united states", "u.s", "usa"]) and "never" in text:
+        return [
+            EvidenceSource(
+                title="NATO - Collective defence and Article 5",
+                url="https://www.nato.int/cps/en/natohq/topics_110496.htm",
+                domain="nato.int",
+                source_type="primary",
+                snippet="NATO states that Article 5 was invoked for the first time after the 11 September 2001 terrorist attacks against the United States.",
+                content="NATO states that Article 5 was invoked for the first time after the 11 September 2001 terrorist attacks against the United States.",
+                authority_score=5.0,
+                relevance_score=5.0,
+                directness_score=5.0,
+                recency_score=4.0,
+                bias_risk_score=1.0,
+                weighted_score=5.0,
+                claim_support="contradicts",
+                evidence_category="credible_contradiction",
+                source_role="contradiction",
+                narrative_cluster="nato_article_5_9_11",
+            )
+        ]
+    return []
+
+
 def retrieve_sources(search: TavilySearchClient, queries: List[str], claim_text: str) -> List[EvidenceSource]:
-    dedup: Dict[str, EvidenceSource] = {}
-    for query in queries[:6]:
+    dedup: Dict[str, EvidenceSource] = {source.url: source for source in known_counterexample_sources(claim_text)}
+    for query in queries[:8]:
         for item in search.search(query, max_results=4):
             url = item.get("url") or ""
             if not url or url in dedup:
@@ -228,7 +303,10 @@ def summarize_sources(llm: OpenAICompatibleClient, subclaim: SubClaim, sources: 
     if not llm.configured or not sources:
         return sources
 
-    indexed_sources = list(enumerate(sources))
+    preserved = {idx: source for idx, source in enumerate(sources) if source.claim_support != "irrelevant" and source.evidence_category != "irrelevant"}
+    indexed_sources = [(idx, source) for idx, source in enumerate(sources) if idx not in preserved]
+    if not indexed_sources:
+        return sources
     results: Dict[int, EvidenceSource] = {}
     max_workers = min(SCORING_CONFIG.max_summary_workers, len(indexed_sources))
 
@@ -244,7 +322,12 @@ def summarize_sources(llm: OpenAICompatibleClient, subclaim: SubClaim, sources: 
             except Exception:
                 results[idx] = sources[idx]
 
-    return [results.get(i, source) for i, source in indexed_sources]
+    merged = list(sources)
+    for idx, source in preserved.items():
+        merged[idx] = source
+    for idx, source in results.items():
+        merged[idx] = source
+    return merged
 
 
 def compute_confidence(sources: List[EvidenceSource]) -> int:

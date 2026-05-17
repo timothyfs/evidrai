@@ -559,3 +559,38 @@ def test_transcript_diagnostics_rejects_non_youtube_url():
 
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "unsupported_source"
+
+
+def test_nato_never_supported_america_has_counterexample_source(monkeypatch):
+    from evidrai.pipeline.verification import build_search_queries, known_counterexample_sources
+    from evidrai.models import SubClaim
+
+    claim = "NATO never supported America"
+    subclaims = [SubClaim(id="sc_1", text=claim, claim_type="political")]
+
+    queries = build_search_queries(subclaims)
+    sources = known_counterexample_sources(claim)
+
+    assert any("Article 5" in query and "United States" in query for query in queries)
+    assert sources
+    assert sources[0].domain == "nato.int"
+    assert sources[0].claim_support == "contradicts"
+    assert sources[0].evidence_category == "credible_contradiction"
+
+
+def test_fast_pass_overrides_nato_never_claim_with_known_counterexample():
+    from evidrai.pipeline.verification import run_quick_pass
+
+    class FakeLLM:
+        configured = True
+        def complete_json(self, messages, temperature=0.1):
+            return {"verdict": "Unverified", "confidence": "Medium", "summary": "Too vague"}
+
+    class FakeSearch:
+        configured = False
+
+    result = run_quick_pass("NATO never supported America", "auto-detect", FakeLLM(), FakeSearch())
+
+    assert result["verdict"] == "Not supported by credible evidence"
+    assert result["confidence"] == "High"
+    assert result["fast_sources"][0]["domain"] == "nato.int"
