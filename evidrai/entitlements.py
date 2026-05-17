@@ -11,7 +11,7 @@ from evidrai.db import run_migrations
 from evidrai.errors import EvidraiError
 
 
-TIERS = ("free", "pro", "journalist")
+TIERS = ("free", "pro", "admin")
 
 
 class EntitlementError(EvidraiError):
@@ -33,6 +33,10 @@ class UserProfile:
     owner_id: str
     email: str = ""
     tier: str = "free"
+    subscription_status: str = "none"
+    trial_started_at: str = ""
+    trial_ends_at: str = ""
+    payment_provider_customer_id: str = ""
     features: Dict[str, bool] = field(default_factory=dict)
     limits: Dict[str, int] = field(default_factory=dict)
 
@@ -60,6 +64,7 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
             "evidence_ledger": False,
             "source_snapshots": False,
             "api_access": False,
+            "admin_ui": False,
         },
         limits={"saved_reports": 10, "max_speech_claims": 0, "monthly_fast_checks": 25, "monthly_deep_checks": 0, "monthly_speech_audits": 0},
     ),
@@ -77,13 +82,14 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
             "evidence_ledger": False,
             "source_snapshots": False,
             "api_access": False,
+            "admin_ui": False,
         },
         limits={"saved_reports": 250, "max_speech_claims": 5, "monthly_fast_checks": 500, "monthly_deep_checks": 100, "monthly_speech_audits": 25},
     ),
-    "journalist": TierDefinition(
-        tier="journalist",
-        label="Journalist",
-        description="Higher limits and investigation-grade provenance, ledger, and export capabilities.",
+    "admin": TierDefinition(
+        tier="admin",
+        label="Admin",
+        description="Full product access plus the internal admin UI and user management.",
         features={
             "fast_claims": True,
             "deep_claims": True,
@@ -94,6 +100,7 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
             "evidence_ledger": True,
             "source_snapshots": True,
             "api_access": True,
+            "admin_ui": True,
         },
         limits={"saved_reports": 2000, "max_speech_claims": 20, "monthly_fast_checks": 5000, "monthly_deep_checks": 1000, "monthly_speech_audits": 250},
     ),
@@ -224,13 +231,13 @@ class PostgresUserProfileStore:
                     ON CONFLICT (owner_id) DO UPDATE SET
                         email = COALESCE(NULLIF(EXCLUDED.email, ''), user_profiles.email),
                         updated_at = now()
-                    RETURNING owner_id, email, tier
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id
                     """,
                     (owner_id, email),
                 )
                 row = cur.fetchone()
             conn.commit()
-        return UserProfile(owner_id=row["owner_id"], email=row.get("email") or "", tier=normalize_tier(row.get("tier") or "free"))
+        return _profile_from_row(row)
 
     def set_tier(self, owner_id: str, tier: str, email: str = "") -> UserProfile:
         if not owner_id:
@@ -247,21 +254,37 @@ class PostgresUserProfileStore:
                         email = COALESCE(NULLIF(EXCLUDED.email, ''), user_profiles.email),
                         tier = EXCLUDED.tier,
                         updated_at = now()
-                    RETURNING owner_id, email, tier
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id
                     """,
                     (owner_id, email, normalized),
                 )
                 row = cur.fetchone()
             conn.commit()
-        return UserProfile(owner_id=row["owner_id"], email=row.get("email") or "", tier=normalize_tier(row.get("tier") or "free"))
+        return _profile_from_row(row)
 
     def list(self, limit: int = 100) -> List[UserProfile]:
         self._ensure_schema()
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT owner_id, email, tier FROM user_profiles ORDER BY updated_at DESC LIMIT %s", (limit,))
+                cur.execute("SELECT owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id FROM user_profiles ORDER BY updated_at DESC LIMIT %s", (limit,))
                 rows = cur.fetchall()
-        return [UserProfile(owner_id=row["owner_id"], email=row.get("email") or "", tier=normalize_tier(row.get("tier") or "free")) for row in rows]
+        return [_profile_from_row(row) for row in rows]
+
+
+def _dt_value(value: Any) -> str:
+    return value.isoformat() if hasattr(value, "isoformat") else str(value or "")
+
+
+def _profile_from_row(row: Dict[str, Any]) -> UserProfile:
+    return UserProfile(
+        owner_id=row["owner_id"],
+        email=row.get("email") or "",
+        tier=normalize_tier(row.get("tier") or "free"),
+        subscription_status=row.get("subscription_status") or "none",
+        trial_started_at=_dt_value(row.get("trial_started_at")),
+        trial_ends_at=_dt_value(row.get("trial_ends_at")),
+        payment_provider_customer_id=row.get("payment_provider_customer_id") or "",
+    )
 
 
 def get_user_profile_store() -> UserProfileStore:

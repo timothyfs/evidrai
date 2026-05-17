@@ -21,15 +21,11 @@ import {
   getReport,
   getRuntime,
   setAccessToken,
-  listAdminUsers,
   setAccountProfile,
-  setAdminUserTier,
   submitFeedback,
   verifySpeechClaims,
-  TierName,
-  UserProfile,
 } from '../lib/api';
-import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmail, signInWithGoogle, signOut } from '../lib/auth';
+import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut, signUpWithEmailPassword } from '../lib/auth';
 
 const FRONTEND_BUILD = process.env.NEXT_PUBLIC_APP_BUILD || 'local';
 
@@ -260,21 +256,27 @@ function AccountPanel({
   account,
   authReady,
   email,
+  password,
   setEmail,
+  setPassword,
   authMessage,
   authBusy,
   onGoogle,
-  onEmail,
+  onEmailPassword,
+  onSignUp,
   onSignOut,
 }: {
   account: AccountProfile | null;
   authReady: boolean;
   email: string;
+  password: string;
   setEmail: (value: string) => void;
+  setPassword: (value: string) => void;
   authMessage: string;
   authBusy: boolean;
   onGoogle: () => void;
-  onEmail: (event: FormEvent<HTMLFormElement>) => void;
+  onEmailPassword: (event: FormEvent<HTMLFormElement>) => void;
+  onSignUp: () => void;
   onSignOut: () => void;
 }) {
   const signedIn = Boolean(account?.owner_id && !account.owner_id.startsWith('anon_'));
@@ -282,16 +284,18 @@ function AccountPanel({
     <section className="accountPanel">
       <div>
         <strong>{signedIn ? account?.label : 'Sign in required'}</strong>
-        <span>{signedIn ? `${account?.plan || 'Free'} user` : 'Use Google or email magic link to continue'}</span>
+        <span>{signedIn ? `${account?.plan || 'Free'} user` : 'Use Google or email/password to continue'}</span>
       </div>
       {signedIn ? (
         <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
       ) : authReady ? (
         <div className="authActions">
           <button className="secondary" disabled={authBusy} onClick={onGoogle} type="button">Continue with Google</button>
-          <form className="emailLogin" onSubmit={onEmail}>
+          <form className="emailLogin" onSubmit={onEmailPassword}>
             <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" />
-            <button className="secondary" disabled={authBusy || !email.trim()} type="submit">Email magic link</button>
+            <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" type="password" />
+            <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} type="submit">Sign in</button>
+            <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} onClick={onSignUp} type="button">Create free account</button>
           </form>
         </div>
       ) : (
@@ -310,16 +314,22 @@ function LoginGate({
   authMessage,
   authBusy,
   onGoogle,
-  onEmail,
+  password,
+  setPassword,
+  onEmailPassword,
+  onSignUp,
 }: {
   account: AccountProfile | null;
   authReady: boolean;
   email: string;
+  password: string;
   setEmail: (value: string) => void;
+  setPassword: (value: string) => void;
   authMessage: string;
   authBusy: boolean;
   onGoogle: () => void;
-  onEmail: (event: FormEvent<HTMLFormElement>) => void;
+  onEmailPassword: (event: FormEvent<HTMLFormElement>) => void;
+  onSignUp: () => void;
 }) {
   return (
     <section className="card loginGate">
@@ -329,12 +339,19 @@ function LoginGate({
       {authReady ? (
         <div className="authActions">
           <button disabled={authBusy} onClick={onGoogle} type="button">Continue with Google</button>
-          <form className="emailLogin" onSubmit={onEmail}>
+          <form className="emailLogin" onSubmit={onEmailPassword}>
             <label>
-              Email magic link
+              Email
               <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" />
             </label>
-            <button className="secondary" disabled={authBusy || !email.trim()} type="submit">Send magic link</button>
+            <label>
+              Password
+              <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimum 6 characters" type="password" />
+            </label>
+            <div className="formRow">
+              <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} type="submit">Sign in</button>
+              <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} onClick={onSignUp} type="button">Create free account</button>
+            </div>
           </form>
         </div>
       ) : (
@@ -375,89 +392,6 @@ function FeatureMatrix({ me }: { me: MeResponse | null }) {
   );
 }
 
-function AdminPanel({ currentUser, onRefreshMe }: { currentUser: UserProfile | null; onRefreshMe: () => void }) {
-  const [adminToken, setAdminToken] = useState('');
-  const [ownerId, setOwnerId] = useState(currentUser?.owner_id || '');
-  const [email, setEmail] = useState(currentUser?.email || '');
-  const [tier, setTier] = useState<TierName>(currentUser?.tier || 'free');
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [status, setStatus] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function loadUsers() {
-    setBusy(true);
-    setStatus('');
-    try {
-      const payload = await listAdminUsers(adminToken);
-      setUsers(payload.users || []);
-      setStatus('Loaded users.');
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : 'Could not load users');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveTier(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setStatus('');
-    try {
-      const payload = await setAdminUserTier({ adminToken, owner_id: ownerId, tier, email });
-      setStatus(`Updated ${payload.user.owner_id} to ${payload.user.tier_label}.`);
-      await loadUsers();
-      onRefreshMe();
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : 'Could not update tier');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <details className="adminPanel">
-      <summary>Admin: set user tier</summary>
-      <p className="muted">Requires the Render-only admin token. Do not share it with users.</p>
-      <form onSubmit={saveTier}>
-        <label>
-          Admin token
-          <input value={adminToken} onChange={(event) => setAdminToken(event.target.value)} placeholder="EVIDRAI_ADMIN_TOKEN" type="password" />
-        </label>
-        <label>
-          User ID
-          <input value={ownerId} onChange={(event) => setOwnerId(event.target.value)} placeholder="Supabase user id" />
-        </label>
-        <label>
-          Email
-          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="optional email" />
-        </label>
-        <label>
-          Tier
-          <select value={tier} onChange={(event) => setTier(event.target.value as TierName)}>
-            <option value="free">Free</option>
-            <option value="pro">Pro</option>
-            <option value="journalist">Journalist</option>
-          </select>
-        </label>
-        <div className="formRow">
-          <button disabled={busy || !adminToken || !ownerId} type="submit">Set tier</button>
-          <button className="secondary" disabled={busy || !adminToken} onClick={loadUsers} type="button">Load users</button>
-        </div>
-      </form>
-      {status && <p className="muted">{status}</p>}
-      {users.length > 0 && <div className="adminUsers">
-        {users.map((user) => (
-          <button key={user.owner_id} className="reportItem" type="button" onClick={() => { setOwnerId(user.owner_id); setEmail(user.email || ''); setTier(user.tier); }}>
-            <strong>{user.tier_label}</strong>
-            <span>{user.email || user.owner_id}</span>
-            <small>{user.owner_id}</small>
-          </button>
-        ))}
-      </div>}
-    </details>
-  );
-}
-
 function UserSummary({ account, me, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; onSignOut: () => void; authBusy: boolean }) {
   return (
     <section className="userSummary">
@@ -473,6 +407,7 @@ function UserSummary({ account, me, onSignOut, authBusy }: { account: AccountPro
         <span>Type</span>
         <strong>{me?.user?.tier_label || account.plan}</strong>
       </div>
+      {me?.user?.tier === 'admin' && <a className="button secondary" href="/admin">Admin</a>}
       <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
     </section>
   );
@@ -544,6 +479,7 @@ export default function Home() {
   const [account, setAccount] = useState<AccountProfile | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
   const [authMessage, setAuthMessage] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
@@ -631,15 +567,32 @@ export default function Home() {
     }
   }
 
-  async function handleEmailSignIn(event: FormEvent<HTMLFormElement>) {
+  async function handleEmailPasswordSignIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthBusy(true);
     setAuthMessage('');
     try {
-      await signInWithEmail(authEmail.trim());
-      setAuthMessage('Magic link sent. Check your email.');
+      const session = await signInWithEmailPassword(authEmail.trim(), authPassword);
+      setAccessToken(session?.access_token || '');
+      setAuthMessage('Signed in.');
+      await refreshMe();
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-in failed');
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleEmailPasswordSignUp() {
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      const session = await signUpWithEmailPassword(authEmail.trim(), authPassword);
+      setAccessToken(session?.access_token || '');
+      setAuthMessage(session ? 'Free account created.' : 'Account created. Check your email to confirm before signing in.');
+      await refreshMe();
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : 'Email sign-up failed');
     } finally {
       setAuthBusy(false);
     }
@@ -753,18 +706,20 @@ export default function Home() {
         <>
           <UserSummary account={account} me={me} onSignOut={handleSignOut} authBusy={authBusy} />
           <FeatureMatrix me={me} />
-          <AdminPanel currentUser={me?.user || null} onRefreshMe={refreshMe} />
         </>
       ) : (
         <LoginGate
           account={account}
           authReady={authConfigured()}
           email={authEmail}
+          password={authPassword}
           setEmail={setAuthEmail}
+          setPassword={setAuthPassword}
           authMessage={authMessage}
           authBusy={authBusy}
           onGoogle={handleGoogleSignIn}
-          onEmail={handleEmailSignIn}
+          onEmailPassword={handleEmailPasswordSignIn}
+          onSignUp={handleEmailPasswordSignUp}
         />
       )}
 
@@ -839,11 +794,14 @@ export default function Home() {
             account={account}
             authReady={authConfigured()}
             email={authEmail}
+            password={authPassword}
             setEmail={setAuthEmail}
+            setPassword={setAuthPassword}
             authMessage={authMessage}
             authBusy={authBusy}
             onGoogle={handleGoogleSignIn}
-            onEmail={handleEmailSignIn}
+            onEmailPassword={handleEmailPasswordSignIn}
+            onSignUp={handleEmailPasswordSignUp}
             onSignOut={handleSignOut}
           />
           <div className="sectionHeader">

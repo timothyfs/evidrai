@@ -56,12 +56,12 @@ export type ReportSummary = {
   owner_id?: string | null;
 };
 
-export type TierName = 'free' | 'pro' | 'journalist';
+export type TierName = 'free' | 'pro' | 'admin';
 
 export type AccountProfile = {
   owner_id: string;
   label: string;
-  plan: 'Free' | 'Pro' | 'Journalist';
+  plan: 'Free' | 'Pro' | 'Admin';
 };
 
 export type TierDefinition = {
@@ -76,7 +76,11 @@ export type UserProfile = {
   owner_id: string;
   email: string;
   tier: TierName;
-  tier_label: 'Free' | 'Pro' | 'Journalist';
+  tier_label: 'Free' | 'Pro' | 'Admin';
+  subscription_status: string;
+  trial_started_at?: string;
+  trial_ends_at?: string;
+  payment_provider_customer_id?: string;
   features: Record<string, boolean>;
   limits: Record<string, number>;
 };
@@ -259,16 +263,13 @@ export function getReport(id: string): Promise<AssessmentResponse> {
   return request<AssessmentResponse>(`/reports/${encodeURIComponent(id)}`);
 }
 
-export function listAdminUsers(adminToken: string): Promise<{ ok: boolean; users: UserProfile[]; feature_matrix: { schema_version: string; tiers: TierDefinition[] } }> {
-  return request<{ ok: boolean; users: UserProfile[]; feature_matrix: { schema_version: string; tiers: TierDefinition[] } }>('/admin/users', {
-    headers: { 'X-Evidrai-Admin-Token': adminToken },
-  });
+export function listAdminUsers(): Promise<{ ok: boolean; users: UserProfile[]; feature_matrix: { schema_version: string; tiers: TierDefinition[] } }> {
+  return request<{ ok: boolean; users: UserProfile[]; feature_matrix: { schema_version: string; tiers: TierDefinition[] } }>('/admin/users');
 }
 
-export function setAdminUserTier(input: { adminToken: string; owner_id: string; tier: TierName; email?: string }): Promise<{ ok: boolean; user: UserProfile }> {
+export function setAdminUserTier(input: { owner_id: string; tier: TierName; email?: string }): Promise<{ ok: boolean; user: UserProfile }> {
   return request<{ ok: boolean; user: UserProfile }>('/admin/users/tier', {
     method: 'PATCH',
-    headers: { 'X-Evidrai-Admin-Token': input.adminToken },
     body: JSON.stringify({ owner_id: input.owner_id, tier: input.tier, email: input.email || '' }),
   });
 }

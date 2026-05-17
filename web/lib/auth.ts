@@ -51,6 +51,26 @@ export async function signInWithGoogle() {
   if (error) throw error;
 }
 
+export async function signInWithEmailPassword(email: string, password: string) {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Supabase Auth is not configured.');
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data.session;
+}
+
+export async function signUpWithEmailPassword(email: string, password: string) {
+  const supabase = getSupabaseClient();
+  if (!supabase) throw new Error('Supabase Auth is not configured.');
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: window.location.origin },
+  });
+  if (error) throw error;
+  return data.session;
+}
+
 export async function signInWithEmail(email: string) {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase Auth is not configured.');

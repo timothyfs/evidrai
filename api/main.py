@@ -107,7 +107,7 @@ class FeedbackCreateRequest(BaseModel):
 
 class AdminSetTierRequest(BaseModel):
     owner_id: str
-    tier: str = Field(pattern="^(free|pro|journalist)$")
+    tier: str = Field(pattern="^(free|pro|admin)$")
     email: str = ""
 
 
@@ -195,12 +195,18 @@ def _profile_from_request(request: Request):
 
 
 def _require_admin(request: Request) -> None:
+    context = _auth_context_from_request(request)
+    if context.authenticated:
+        profile = get_or_create_profile(context.owner_id, email=context.email)
+        if profile.tier == "admin":
+            return
+
     configured = admin_token()
     supplied = (request.headers.get("x-evidrai-admin-token") or "").strip()
-    if not configured:
-        raise HTTPException(status_code=503, detail={"code": "admin_not_configured", "message": "EVIDRAI_ADMIN_TOKEN is not configured"})
-    if supplied != configured:
-        raise HTTPException(status_code=403, detail={"code": "admin_forbidden", "message": "Invalid admin token"})
+    if configured and supplied == configured:
+        return
+
+    raise HTTPException(status_code=403, detail={"code": "admin_forbidden", "message": "Admin access is required"})
 
 
 def _assessment_response_from_request(request: AssessmentCreateRequest, mode: str, owner_id: str = "") -> AssessmentResponse:

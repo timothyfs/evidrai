@@ -299,3 +299,10 @@ summary { cursor: pointer; font-weight: 900; }
   .resultHeader { display: grid; }
   .verdict { text-align: left; min-width: 0; }
 }
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}

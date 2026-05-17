@@ -69,13 +69,13 @@ def test_tiers_endpoint_returns_feature_matrix():
     assert response.status_code == 200
     payload = response.json()
     assert payload["schema_version"] == "feature_matrix.v1"
-    assert [tier["tier"] for tier in payload["tiers"]] == ["free", "pro", "journalist"]
+    assert [tier["tier"] for tier in payload["tiers"]] == ["free", "pro", "admin"]
     assert payload["tiers"][0]["features"]["deep_claims"] is False
     assert payload["tiers"][1]["features"]["speech_audit"] is True
 
 
 def test_me_endpoint_returns_current_profile(monkeypatch):
-    grant_tier(monkeypatch, "journalist", owner_id="jwt-user", email="user@example.com")
+    grant_tier(monkeypatch, "admin", owner_id="jwt-user", email="user@example.com")
 
     response = client.get("/me")
 
@@ -83,7 +83,7 @@ def test_me_endpoint_returns_current_profile(monkeypatch):
     payload = response.json()
     assert payload["authenticated"] is True
     assert payload["user"]["owner_id"] == "jwt-user"
-    assert payload["user"]["tier_label"] == "Journalist"
+    assert payload["user"]["tier_label"] == "Admin"
     assert payload["user"]["features"]["evidence_ledger"] is True
 
 
