@@ -2,13 +2,11 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
-  API_BASE_URL,
   AccountProfile,
   AssessmentResponse,
   FeedbackRating,
   MeResponse,
   ReportSummary,
-  RuntimeStatus,
   SpeechCheckedClaim,
   SpeechClaim,
   SpeechExtractionResult,
@@ -20,15 +18,12 @@ import {
   getAccountProfile,
   getAnonymousAccountProfile,
   getReport,
-  getRuntime,
   setAccessToken,
   setAccountProfile,
   submitFeedback,
   verifySpeechClaims,
 } from '../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, sendPasswordReset, signInWithEmailPassword, signInWithGoogle, signOut, signUpWithEmailPassword, updatePassword } from '../lib/auth';
-
-const FRONTEND_BUILD = process.env.NEXT_PUBLIC_APP_BUILD || 'local';
 
 const verdictClass: Record<string, string> = {
   Supported: 'good',
@@ -313,57 +308,46 @@ function LoginGate({
   );
 }
 
-function FeatureMatrix({ me }: { me: MeResponse | null }) {
-  if (!me?.feature_matrix?.tiers?.length) return null;
-  const featureLabels: Record<string, string> = {
-    fast_claims: 'Fast claim checks',
-    deep_claims: 'Deep claim checks',
-    speech_audit: 'Speech/video audit',
-    feedback: 'Feedback',
-    share_reports: 'Shareable reports',
-    exports: 'Exports',
-    evidence_ledger: 'Evidence ledger',
-    source_snapshots: 'Source snapshots',
-    api_access: 'API access',
-  };
-  const featureKeys = Object.keys(me.feature_matrix.tiers[0].features);
+function AccountMenu({ account, me, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; onSignOut: () => void; authBusy: boolean }) {
+  const label = account.label || 'Signed in';
+  const displayName = label.includes('@') ? label.split('@')[0] : label;
   return (
-    <section className="card matrixCard">
-      <h2>Feature matrix</h2>
-      <div className="matrixGrid">
-        <strong>Feature</strong>
-        {me.feature_matrix.tiers.map((tier) => <strong key={tier.tier}>{tier.label}</strong>)}
-        {featureKeys.map((feature) => [
-          <span key={`${feature}-label`}>{featureLabels[feature] || feature}</span>,
-          ...me.feature_matrix.tiers.map((tier) => <span key={`${feature}-${tier.tier}`}>{tier.features[feature] ? 'Yes' : 'No'}</span>),
-        ])}
+    <details className="accountMenu">
+      <summary>
+        <span>{displayName}</span>
+        <strong>{me?.user?.tier_label || account.plan}</strong>
+      </summary>
+      <div className="accountMenuPanel">
+        <p><span>Email</span><strong>{label}</strong></p>
+        <p><span>User ID</span><code>{account.owner_id}</code></p>
+        <p><span>Plan</span><strong>{me?.user?.tier_label || account.plan}</strong></p>
+        <p><span>Admin</span><strong>{me?.is_admin ? 'Yes' : 'No'}</strong></p>
+        {me?.is_admin && <a className="button secondary" href="/admin">Admin UI</a>}
+        <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
       </div>
-    </section>
+    </details>
   );
 }
 
-function UserSummary({ account, me, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; onSignOut: () => void; authBusy: boolean }) {
+function SiteHeader({ account, me, signedIn, onSignOut, authBusy }: { account: AccountProfile | null; me: MeResponse | null; signedIn: boolean; onSignOut: () => void; authBusy: boolean }) {
   return (
-    <section className="userSummary">
-      <div>
-        <span>User</span>
-        <strong>{account.label}</strong>
-      </div>
-      <div>
-        <span>User ID</span>
-        <code>{account.owner_id}</code>
-      </div>
-      <div>
-        <span>Plan</span>
-        <strong>{me?.user?.tier_label || account.plan}</strong>
-      </div>
-      <div>
-        <span>Admin</span>
-        <strong>{me?.is_admin ? 'Yes' : 'No'}</strong>
-      </div>
-      {me?.is_admin && <a className="button secondary" href="/admin">Admin UI</a>}
-      <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
-    </section>
+    <header className="siteHeader">
+      <details className="navMenu">
+        <summary aria-label="Open navigation"><span></span><span></span><span></span></summary>
+        <nav>
+          <a href="/">Claim check</a>
+          <a href="/product">Product</a>
+          <a href="/plans">Plans</a>
+          <a href="/about">About us</a>
+          <a href="/team">Team</a>
+          <a href="/contact">Contact us</a>
+          {me?.is_admin && <a href="/admin">Admin</a>}
+        </nav>
+      </details>
+      <a className="brand" href="/">Evidrai</a>
+      <div className="headerSpacer" />
+      {signedIn && account ? <AccountMenu account={account} me={me} onSignOut={onSignOut} authBusy={authBusy} /> : <a className="button secondary" href="/">Sign in</a>}
+    </header>
   );
 }
 
@@ -429,7 +413,6 @@ export default function Home() {
   const [speechExtraction, setSpeechExtraction] = useState<SpeechExtractionResult | null>(null);
   const [selectedSpeechClaims, setSelectedSpeechClaims] = useState<string[]>([]);
   const [speechVerification, setSpeechVerification] = useState<SpeechVerificationResult | null>(null);
-  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [account, setAccount] = useState<AccountProfile | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [authEmail, setAuthEmail] = useState('');
@@ -512,7 +495,6 @@ export default function Home() {
       else setMe(null);
     });
     if (typeof window !== 'undefined' && window.location.href.includes('type=recovery')) setPasswordRecovery(true);
-    getRuntime().then(setRuntime).catch((err) => setError(err.message));
     try {
       const saved = window.localStorage.getItem('evidrai_recent_reports');
       if (saved) setReports(JSON.parse(saved));
@@ -682,20 +664,12 @@ export default function Home() {
 
   return (
     <main>
-      <section className="hero">
+      <SiteHeader account={account} me={me} signedIn={signedIn} onSignOut={handleSignOut} authBusy={authBusy} />
+      <section className="hero appHero">
         <div>
           <p className="eyebrow">Evidrai</p>
           <h1>Check claims against evidence, not repetition.</h1>
-          <p className="lead">A thin customer-facing frontend backed by the independent Evidrai API.</p>
-        </div>
-        <div className="statusPanel">
-          <span>API: {API_BASE_URL}</span>
-          <span>Frontend build: {FRONTEND_BUILD}</span>
-          <span>API build: {runtime?.build || 'checking...'}</span>
-          <span>Storage: {runtime?.storage_backend || 'checking...'}</span>
-          <span>OpenAI: {runtime?.openai_configured ? 'configured' : 'missing'}</span>
-          <span>Auth: {runtime?.auth_configured ? 'server verified' : 'not configured'}</span>
-          <span>Account: {signedIn ? account?.owner_id.slice(0, 18) : 'sign in required'}</span>
+          <p className="lead">Run fast claim checks and deeper evidence reviews from one focused workspace.</p>
         </div>
       </section>
 
@@ -718,12 +692,7 @@ export default function Home() {
         </section>
       )}
 
-      {signedIn && account ? (
-        <>
-          <UserSummary account={account} me={me} onSignOut={handleSignOut} authBusy={authBusy} />
-          <FeatureMatrix me={me} />
-        </>
-      ) : (
+      {!signedIn && (
         <LoginGate
           account={account}
           authReady={authConfigured()}

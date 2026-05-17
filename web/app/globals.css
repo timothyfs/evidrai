@@ -370,3 +370,115 @@ button.danger {
   padding: 8px 12px;
   font-size: 0.85rem;
 }
+
+.siteHeader {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 30px;
+  position: relative;
+}
+.brand {
+  color: var(--ink);
+  font-size: 1.1rem;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+}
+.headerSpacer { min-width: 1px; }
+.navMenu { position: relative; }
+.navMenu > summary {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  height: 42px;
+  justify-content: center;
+  list-style: none;
+  padding: 0;
+  width: 42px;
+}
+.navMenu > summary::-webkit-details-marker, .accountMenu > summary::-webkit-details-marker { display: none; }
+.navMenu > summary span {
+  background: var(--ink);
+  border-radius: 999px;
+  display: block;
+  height: 2px;
+  width: 18px;
+}
+.navMenu nav, .accountMenuPanel {
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(40, 32, 20, 0.12);
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  padding: 10px;
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 20;
+}
+.navMenu nav { left: 0; }
+.navMenu nav a, .staticNav a {
+  border-radius: 12px;
+  color: var(--ink);
+  font-weight: 850;
+  padding: 10px 12px;
+  text-decoration: none;
+}
+.navMenu nav a:hover, .staticNav a:hover { background: var(--bg); }
+.accountMenu { position: relative; }
+.accountMenu > summary {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  list-style: none;
+  padding: 7px 12px;
+}
+.accountMenu > summary span { font-weight: 900; }
+.accountMenu > summary strong {
+  background: var(--bg);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  padding: 5px 8px;
+}
+.accountMenuPanel { right: 0; }
+.accountMenuPanel p {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+}
+.accountMenuPanel span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.accountMenuPanel code {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.appHero { grid-template-columns: 1fr; margin-bottom: 24px; }
+.staticNav { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.marketingPage { display: grid; gap: 18px; }
+.marketingMatrix { margin-top: 12px; }
+@media (max-width: 780px) {
+  .siteHeader { grid-template-columns: auto auto 1fr; }
+  .accountMenu { grid-column: 1 / -1; justify-self: stretch; }
+  .accountMenu > summary { justify-content: space-between; }
+  .accountMenuPanel { left: 0; right: 0; }
+  .staticNav { justify-content: flex-start; }
+}
