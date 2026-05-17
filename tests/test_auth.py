@@ -27,3 +27,30 @@ def test_context_from_headers_prefers_verified_bearer_claims(monkeypatch):
     assert context.owner_id == "user-123"
     assert context.auth_method == "supabase_jwt"
     assert context.email == "user@example.com"
+
+
+def test_decode_supabase_token_falls_back_to_jwks_when_secret_fails(monkeypatch):
+    calls = []
+
+    def fake_decode(token, key, algorithms, options):
+        calls.append((key, tuple(algorithms)))
+        if key == "stale-secret":
+            raise auth.jwt.InvalidTokenError("bad secret")
+        return {"sub": "jwks-user", "email": "jwks@example.com"}
+
+    class FakeSigningKey:
+        key = "jwks-key"
+
+    class FakeJwksClient:
+        def get_signing_key_from_jwt(self, token):
+            return FakeSigningKey()
+
+    monkeypatch.setattr(auth, "supabase_jwt_secret", lambda: "stale-secret")
+    monkeypatch.setattr(auth, "supabase_url", lambda: "https://example.supabase.co")
+    monkeypatch.setattr(auth, "_jwks_client", lambda: FakeJwksClient())
+    monkeypatch.setattr(auth.jwt, "decode", fake_decode)
+
+    claims = auth.decode_supabase_access_token("token")
+
+    assert claims["sub"] == "jwks-user"
+    assert calls == [("stale-secret", ("HS256",)), ("jwks-key", ("ES256", "RS256"))]
