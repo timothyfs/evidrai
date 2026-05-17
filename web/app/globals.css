@@ -825,3 +825,142 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
 @media (max-width: 780px) {
   .methodologyGrid { grid-template-columns: 1fr; }
 }
+
+/* Theme toggle, navigation refinement, report collapse, and dark contrast fixes */
+.navMenu > summary {
+  gap: 3px;
+  height: 34px;
+  width: 34px;
+}
+.navMenu > summary span {
+  height: 1.5px;
+  width: 14px;
+}
+.navMenu > summary span:nth-child(2) { width: 11px; }
+.navMenu > summary span:nth-child(3) { width: 7px; }
+html:not([data-theme="light"]) .claimPick,
+html:not([data-theme="light"]) .checkPill,
+html:not([data-theme="light"]) .segmented button,
+html:not([data-theme="light"]) .reportItem,
+html:not([data-theme="light"]) .facts span {
+  background: rgba(255,255,255,0.045);
+  color: var(--ink);
+}
+html:not([data-theme="light"]) .segmented button.active {
+  background: rgba(157, 183, 213, 0.22);
+  color: var(--ink);
+}
+.reports { align-self: start; }
+.reportsSummary {
+  align-items: center;
+  border: 0;
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.reportsSummary::-webkit-details-marker { display: none; }
+.reportsSummary span { font-size: 1.2rem; font-weight: 950; }
+.reportsSummary small { color: var(--muted); font-weight: 850; }
+.reportsSummary::after {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  content: "Collapse";
+  font-size: 0.75rem;
+  font-weight: 850;
+  margin-left: 10px;
+  padding: 5px 8px;
+}
+.reports:not([open]) .reportsSummary::after { content: "Open"; }
+.reportsBody { margin-top: 14px; }
+.adminInviteBox {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  margin: 18px 0;
+  padding: 16px;
+}
+.adminInviteBox form {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f1ea;
+  --ink: #15130f;
+  --muted: #6f675c;
+  --card: #fffaf1;
+  --line: #ded5c6;
+  --accent: #22201b;
+  --accent-strong: #394f68;
+  --good: #156b3a;
+  --mixed: #8a5a00;
+  --weak: #555f6b;
+  --bad: #9d241f;
+}
+html[data-theme="light"] body {
+  background: radial-gradient(circle at top left, #fff8e8, var(--bg) 40%, #ece4d8);
+}
+html[data-theme="light"] .card,
+html[data-theme="light"] .statusPanel,
+html[data-theme="light"] .accountPanel,
+html[data-theme="light"] .userSummary,
+html[data-theme="light"] .adminPanel,
+html[data-theme="light"] .breakdownItem,
+html[data-theme="light"] .source,
+html[data-theme="light"] .reportItem,
+html[data-theme="light"] .matrixGrid > *,
+html[data-theme="light"] .adminUserRow,
+html[data-theme="light"] .navMenu nav,
+html[data-theme="light"] .accountMenuPanel,
+html[data-theme="light"] .claimPick,
+html[data-theme="light"] .checkPill,
+html[data-theme="light"] .methodologyCard,
+html[data-theme="light"] .evidenceGroup,
+html[data-theme="light"] .assessmentNarrative {
+  background: color-mix(in srgb, var(--card) 92%, white);
+  border-color: var(--line);
+  box-shadow: 0 18px 50px rgba(40, 32, 20, 0.08);
+}
+html[data-theme="light"] .siteHeader,
+html[data-theme="light"] .navMenu > summary,
+html[data-theme="light"] .accountMenu > summary {
+  background: rgba(255, 250, 241, 0.82);
+  border-color: var(--line);
+}
+html[data-theme="light"] input,
+html[data-theme="light"] textarea,
+html[data-theme="light"] select,
+html[data-theme="light"] .segmented button,
+html[data-theme="light"] .facts span {
+  background: white;
+  border-color: var(--line);
+  color: var(--ink);
+}
+html[data-theme="light"] button,
+html[data-theme="light"] .button {
+  background: var(--accent);
+  color: white;
+}
+html[data-theme="light"] button.secondary,
+html[data-theme="light"] .button.secondary,
+html[data-theme="light"] .segmented button {
+  background: white;
+  color: var(--ink);
+}
+html[data-theme="light"] .lead { color: var(--muted); }
+html[data-theme="light"] .trustSignals span,
+html[data-theme="light"] .previewSources span,
+html[data-theme="light"] .workspaceIntro p {
+  background: white;
+  color: var(--muted);
+}
+html[data-theme="light"] .verdictPanel {
+  background: white;
+  color: var(--ink);
+}
+@media (max-width: 900px) {
+  .reports { order: -1; }
+}

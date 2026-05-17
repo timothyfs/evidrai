@@ -40,6 +40,14 @@ function verdictTone(label: string) {
   return verdictClass[label] || 'weak';
 }
 
+type ThemeMode = 'dark' | 'light';
+
+function applyTheme(theme: ThemeMode) {
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.theme = theme;
+  window.localStorage.setItem('evidrai_theme', theme);
+}
+
 function formatDate(value?: string) {
   if (!value) return '';
   const date = new Date(value);
@@ -381,7 +389,7 @@ function LoginGate({
   );
 }
 
-function AccountMenu({ account, me, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; onSignOut: () => void; authBusy: boolean }) {
+function AccountMenu({ account, me, theme, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; theme: ThemeMode; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
   const label = account.label || 'Signed in';
   const displayName = label.includes('@') ? label.split('@')[0] : label;
   return (
@@ -396,13 +404,14 @@ function AccountMenu({ account, me, onSignOut, authBusy }: { account: AccountPro
         <p><span>Plan</span><strong>{me?.user?.tier_label || account.plan}</strong></p>
         <p><span>Admin</span><strong>{me?.is_admin ? 'Yes' : 'No'}</strong></p>
         {me?.is_admin && <a className="button secondary" href="/admin">Admin UI</a>}
+        <button className="secondary" onClick={onToggleTheme} type="button">{theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}</button>
         <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
       </div>
     </details>
   );
 }
 
-function SiteHeader({ account, me, signedIn, onSignOut, authBusy }: { account: AccountProfile | null; me: MeResponse | null; signedIn: boolean; onSignOut: () => void; authBusy: boolean }) {
+function SiteHeader({ account, me, signedIn, theme, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile | null; me: MeResponse | null; signedIn: boolean; theme: ThemeMode; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
   return (
     <header className="siteHeader">
       <details className="navMenu">
@@ -418,7 +427,7 @@ function SiteHeader({ account, me, signedIn, onSignOut, authBusy }: { account: A
       </details>
       <a className="brand" href="/">Evidrai</a>
       <div className="headerSpacer" />
-      {signedIn && account ? <AccountMenu account={account} me={me} onSignOut={onSignOut} authBusy={authBusy} /> : <a className="button secondary" href="/">Sign in</a>}
+      {signedIn && account ? <AccountMenu account={account} me={me} theme={theme} onToggleTheme={onToggleTheme} onSignOut={onSignOut} authBusy={authBusy} /> : <a className="button secondary" href="/">Sign in</a>}
     </header>
   );
 }
@@ -509,6 +518,7 @@ export default function Home() {
   const [authPassword, setAuthPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>('dark');
   const [authMessage, setAuthMessage] = useState('');
   const [authDiagnostics, setAuthDiagnostics] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
@@ -752,9 +762,17 @@ export default function Home() {
     }
   }
 
+  function toggleTheme() {
+    setTheme((current) => {
+      const next = current === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      return next;
+    });
+  }
+
   return (
     <main>
-      <SiteHeader account={account} me={me} signedIn={signedIn} onSignOut={handleSignOut} authBusy={authBusy} />
+      <SiteHeader account={account} me={me} signedIn={signedIn} theme={theme} onToggleTheme={toggleTheme} onSignOut={handleSignOut} authBusy={authBusy} />
       <section className={`hero appHero ${signedIn ? 'compactHero' : 'landingHero'}`}>
         <div>
           <p className="eyebrow">Because trust needs evidence</p>
@@ -869,26 +887,29 @@ export default function Home() {
           {error && <p className="error">{error}</p>}
         </section>
 
-        <aside className="card reports">
-          <div className="sectionHeader">
-            <h2>Your reports</h2>
+        <details className="card reports" open>
+          <summary className="reportsSummary">
+            <span>Your reports</span>
+            <small>{reports.length} saved locally</small>
+          </summary>
+          <div className="reportsBody">
+            <p className="muted">Reports created or loaded by this signed-in user.</p>
+            <form className="loadForm" onSubmit={(event) => { event.preventDefault(); if (reportIdInput.trim()) loadReport(reportIdInput); }}>
+              <label>
+                Load by report ID
+                <input value={reportIdInput} onChange={(event) => setReportIdInput(event.target.value)} placeholder="assessment_id" />
+              </label>
+              <button className="secondary" type="submit" disabled={!reportIdInput.trim() || loading}>Load report</button>
+            </form>
+            {reports.length === 0 ? <p className="muted">No reports in this browser yet. Run a check to start a local history.</p> : reports.slice(0, 8).map((report) => (
+              <button className="reportItem" key={report.assessment_id} onClick={() => loadReport(report.assessment_id)} type="button">
+                <strong>{report.verdict || 'Unverified'}</strong>
+                <span>{report.claim || 'Untitled claim'}</span>
+                <small>{formatDate(report.created_at)} · {report.mode}</small>
+              </button>
+            ))}
           </div>
-          <p className="muted">Reports created or loaded by this signed-in user.</p>
-          <form className="loadForm" onSubmit={(event) => { event.preventDefault(); if (reportIdInput.trim()) loadReport(reportIdInput); }}>
-            <label>
-              Load by report ID
-              <input value={reportIdInput} onChange={(event) => setReportIdInput(event.target.value)} placeholder="assessment_id" />
-            </label>
-            <button className="secondary" type="submit" disabled={!reportIdInput.trim() || loading}>Load report</button>
-          </form>
-          {reports.length === 0 ? <p className="muted">No reports in this browser yet. Run a check to start a local history.</p> : reports.slice(0, 8).map((report) => (
-            <button className="reportItem" key={report.assessment_id} onClick={() => loadReport(report.assessment_id)} type="button">
-              <strong>{report.verdict || 'Unverified'}</strong>
-              <span>{report.claim || 'Untitled claim'}</span>
-              <small>{formatDate(report.created_at)} · {report.mode}</small>
-            </button>
-          ))}
-        </aside>
+        </details>
       </div>}
 
       {signedIn && assessment && <AssessmentResult assessment={assessment} />}

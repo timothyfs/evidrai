@@ -487,3 +487,22 @@ def test_deep_assessment_missing_tavily_returns_structured_error(monkeypatch):
 
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "configuration_error"
+
+
+def test_admin_invite_user_creates_profile(monkeypatch):
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "_create_or_invite_supabase_user", lambda request: {"id": "new-user", "email": request.email})
+    monkeypatch.setattr(api_main, "set_user_tier", lambda owner_id, tier, email="": UserProfile(owner_id=owner_id, email=email, tier=tier))
+
+    response = client.post(
+        "/admin/users/invite",
+        json={"email": "New.User@example.com", "tier": "pro", "send_invite": True},
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sent_invite"] is True
+    assert payload["owner_id"] == "new-user"
+    assert payload["user"]["tier_label"] == "Pro"

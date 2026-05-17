@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+import requests
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -11,7 +12,7 @@ from evidrai.api_models import AssessmentResponse, serialize_assessment_response
 from evidrai.auth import AuthContext, context_from_headers, decode_supabase_access_token, unverified_token_diagnostics
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, master_admin_emails, supabase_auth_configured
+from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, master_admin_emails, supabase_auth_configured, supabase_service_role_key, supabase_url
 from evidrai.entitlements import (
     delete_user_profile,
     enforce_speech_claim_limit,
@@ -49,7 +50,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=api_allowed_origins(),
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -112,12 +113,63 @@ class AdminSetTierRequest(BaseModel):
     email: str = ""
 
 
+class AdminInviteUserRequest(BaseModel):
+    email: str
+    tier: str = Field(default="free", pattern="^(free|pro|researcher)$")
+    send_invite: bool = True
+    redirect_to: str = ""
+
+
 class ApiEnvelope(BaseModel):
     ok: bool
     build: str
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
+
+
+
+def _supabase_admin_headers() -> dict[str, str]:
+    key = supabase_service_role_key()
+    if not key:
+        raise HTTPException(status_code=503, detail={"code": "supabase_service_role_missing", "message": "SUPABASE_SERVICE_ROLE_KEY is required for admin user invitations."})
+    return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+
+
+def _supabase_auth_url(path: str) -> str:
+    url = supabase_url()
+    if not url:
+        raise HTTPException(status_code=503, detail={"code": "supabase_url_missing", "message": "SUPABASE_URL is required for admin user invitations."})
+    return f"{url.rstrip()}/auth/v1/{path.lstrip('/')}"
+
+
+def _create_or_invite_supabase_user(request: AdminInviteUserRequest) -> dict[str, Any]:
+    email = request.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail={"code": "invalid_email", "message": "A valid email address is required."})
+    body: dict[str, Any] = {"email": email, "data": {"evidrai_tier": request.tier}}
+    if request.redirect_to.strip():
+        body["redirect_to"] = request.redirect_to.strip()
+    if request.send_invite:
+        endpoint = _supabase_auth_url("invite")
+    else:
+        endpoint = _supabase_auth_url("admin/users")
+        body["email_confirm"] = True
+        body["user_metadata"] = body.pop("data")
+    try:
+        response = requests.post(endpoint, headers=_supabase_admin_headers(), json=body, timeout=20)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail={"code": "supabase_admin_request_failed", "message": "Could not reach Supabase admin API.", "developer_detail": str(exc)})
+    if response.status_code >= 400:
+        try:
+            detail = response.json()
+        except ValueError:
+            detail = response.text
+        raise HTTPException(status_code=response.status_code, detail={"code": "supabase_admin_error", "message": "Supabase could not create or invite this user.", "supabase_detail": detail})
+    try:
+        return response.json()
+    except ValueError:
+        return {}
 
 def _clients() -> tuple[OpenAICompatibleClient, TavilySearchClient]:
     return OpenAICompatibleClient(), TavilySearchClient()
@@ -293,6 +345,25 @@ def admin_set_user_tier(request: AdminSetTierRequest, http_request: Request) -> 
     _require_admin(http_request)
     profile = set_user_tier(request.owner_id, request.tier, email=request.email)
     return {"ok": True, "user": profile.to_dict()}
+
+
+
+
+@app.post("/admin/users/invite", response_model=Dict[str, Any])
+def admin_invite_user(request: AdminInviteUserRequest, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    created = _create_or_invite_supabase_user(request)
+    owner_id = str(created.get("id") or created.get("user", {}).get("id") or "").strip()
+    email = str(created.get("email") or created.get("user", {}).get("email") or request.email).strip().lower()
+    profile = set_user_tier(owner_id, request.tier, email=email) if owner_id else None
+    return {
+        "ok": True,
+        "sent_invite": request.send_invite,
+        "owner_id": owner_id,
+        "email": email,
+        "user": profile.to_dict() if profile else None,
+        "message": "Invitation sent and profile created." if request.send_invite else "User created without sending an invite email.",
+    }
 
 
 @app.delete("/admin/users/{owner_id}", response_model=Dict[str, Any])

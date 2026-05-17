@@ -77,6 +77,8 @@ SUPABASE_JWT_SECRET_PATHS = (("supabase", "jwt_secret"), ("SUPABASE_JWT_SECRET",
 SUPABASE_JWT_SECRET_ENV_NAMES = ("SUPABASE_JWT_SECRET",)
 SUPABASE_URL_SECRET_PATHS = (("supabase", "url"), ("SUPABASE_URL",), ("NEXT_PUBLIC_SUPABASE_URL",))
 SUPABASE_URL_ENV_NAMES = ("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY_SECRET_PATHS = (("supabase", "service_role_key"), ("SUPABASE_SERVICE_ROLE_KEY",))
+SUPABASE_SERVICE_ROLE_KEY_ENV_NAMES = ("SUPABASE_SERVICE_ROLE_KEY",)
 ADMIN_TOKEN_SECRET_PATHS = (("admin", "token"), ("EVIDRAI_ADMIN_TOKEN",))
 ADMIN_TOKEN_ENV_NAMES = ("EVIDRAI_ADMIN_TOKEN",)
 MASTER_ADMIN_EMAILS_SECRET_PATHS = (("admin", "master_emails"), ("EVIDRAI_MASTER_ADMIN_EMAILS",))
@@ -127,6 +129,13 @@ def supabase_url() -> Optional[str]:
 
 def supabase_auth_configured() -> bool:
     return bool(supabase_url() or supabase_jwt_secret())
+
+
+def supabase_service_role_key() -> Optional[str]:
+    return read_config_value(
+        secret_paths=SUPABASE_SERVICE_ROLE_KEY_SECRET_PATHS,
+        env_names=SUPABASE_SERVICE_ROLE_KEY_ENV_NAMES,
+    )
 
 
 def admin_token() -> Optional[str]:

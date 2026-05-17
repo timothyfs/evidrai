@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { AccountProfile, MeResponse, TierName, UserProfile, deleteAdminUser, getAnonymousAccountProfile, getMe, listAdminUsers, setAccessToken, setAccountProfile, setAdminUserTier } from '../../lib/api';
+import { AccountProfile, MeResponse, TierName, UserProfile, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, listAdminUsers, setAccessToken, setAccountProfile, setAdminUserTier } from '../../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut } from '../../lib/auth';
 
 const TIER_OPTIONS = [
@@ -22,6 +22,9 @@ export default function AdminPage() {
   const [manualOwnerId, setManualOwnerId] = useState('');
   const [manualEmail, setManualEmail] = useState('');
   const [manualTier, setManualTier] = useState<TierName>('free');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteTier, setInviteTier] = useState<TierName>('free');
+  const [sendInvite, setSendInvite] = useState(true);
   const [search, setSearch] = useState('');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [busy, setBusy] = useState(false);
@@ -141,6 +144,25 @@ export default function AdminPage() {
     }
   }
 
+
+  async function inviteUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await inviteAdminUser({ email: inviteEmail.trim(), tier: inviteTier, send_invite: sendInvite });
+      setMessage(payload.message || `Created ${payload.email}.`);
+      setInviteEmail('');
+      setInviteTier('free');
+      setSendInvite(true);
+      await loadUsers();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not create or invite user.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveManualTier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -213,6 +235,17 @@ export default function AdminPage() {
               <button className="secondary" disabled={busy} onClick={handleSignOut} type="button">Sign out</button>
             </div>
           </div>
+
+          <details open className="adminInviteBox">
+            <summary>Invite or create user</summary>
+            <form onSubmit={inviteUser}>
+              <label>Email<input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="new.user@example.com" /></label>
+              <label>Initial tier<select value={inviteTier} onChange={(event) => setInviteTier(event.target.value as TierName)}>{TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <label className="checkPill"><input checked={sendInvite} onChange={(event) => setSendInvite(event.target.checked)} type="checkbox" /> Send Supabase invite email</label>
+              <button disabled={busy || !inviteEmail.trim()} type="submit">{sendInvite ? 'Create and send invite' : 'Create without email'}</button>
+            </form>
+            <p className="muted">Uses the backend Supabase admin API. Requires SUPABASE_SERVICE_ROLE_KEY on Render; the key is never exposed to the browser.</p>
+          </details>
 
           <label>
             Search users

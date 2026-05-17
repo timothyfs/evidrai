@@ -289,6 +289,13 @@ export function setAdminUserTier(input: { owner_id: string; tier: TierName; emai
   });
 }
 
+export function inviteAdminUser(input: { email: string; tier: TierName; send_invite: boolean; redirect_to?: string }): Promise<{ ok: boolean; sent_invite: boolean; owner_id: string; email: string; user: UserProfile | null; message: string }> {
+  return request<{ ok: boolean; sent_invite: boolean; owner_id: string; email: string; user: UserProfile | null; message: string }>('/admin/users/invite', {
+    method: 'POST',
+    body: JSON.stringify({ email: input.email, tier: input.tier, send_invite: input.send_invite, redirect_to: input.redirect_to || '' }),
+  });
+}
+
 export function deleteAdminUser(owner_id: string): Promise<{ ok: boolean; owner_id: string; deleted: boolean; message: string }> {
   return request<{ ok: boolean; owner_id: string; deleted: boolean; message: string }>(`/admin/users/${encodeURIComponent(owner_id)}`, {
     method: 'DELETE',
