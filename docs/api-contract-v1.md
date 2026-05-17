@@ -112,7 +112,7 @@ GET /admin/users
 PATCH /admin/users/tier
 ```
 
-`GET /tiers` returns the server-owned feature matrix for `free`, `pro`, and `admin` tiers. `GET /me` returns the current auth-backed user profile, resolved from the verified Supabase Bearer token when present.
+`GET /tiers` returns the server-owned feature matrix for `free`, `pro`, and `researcher` tiers. `GET /me` returns the current auth-backed user profile, resolved from the verified Supabase Bearer token when present.
 
 Server gates:
 

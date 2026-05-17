@@ -11,7 +11,7 @@ from evidrai.db import run_migrations
 from evidrai.errors import EvidraiError
 
 
-TIERS = ("free", "pro", "admin")
+TIERS = ("free", "pro", "researcher")
 
 
 class EntitlementError(EvidraiError):
@@ -64,7 +64,6 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
             "evidence_ledger": False,
             "source_snapshots": False,
             "api_access": False,
-            "admin_ui": False,
         },
         limits={"saved_reports": 10, "max_speech_claims": 0, "monthly_fast_checks": 25, "monthly_deep_checks": 0, "monthly_speech_audits": 0},
     ),
@@ -82,14 +81,13 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
             "evidence_ledger": False,
             "source_snapshots": False,
             "api_access": False,
-            "admin_ui": False,
         },
         limits={"saved_reports": 250, "max_speech_claims": 5, "monthly_fast_checks": 500, "monthly_deep_checks": 100, "monthly_speech_audits": 25},
     ),
-    "admin": TierDefinition(
-        tier="admin",
-        label="Admin",
-        description="Full product access plus the internal admin UI and user management.",
+    "researcher": TierDefinition(
+        tier="researcher",
+        label="Researcher / Journalist",
+        description="Higher limits and investigation-grade provenance, ledger, and export capabilities.",
         features={
             "fast_claims": True,
             "deep_claims": True,
@@ -100,7 +98,6 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
             "evidence_ledger": True,
             "source_snapshots": True,
             "api_access": True,
-            "admin_ui": True,
         },
         limits={"saved_reports": 2000, "max_speech_claims": 20, "monthly_fast_checks": 5000, "monthly_deep_checks": 1000, "monthly_speech_audits": 250},
     ),
@@ -109,6 +106,8 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
 
 def normalize_tier(tier: str) -> str:
     normalized = (tier or "free").strip().lower()
+    if normalized == "admin":
+        normalized = "researcher"
     if normalized not in TIERS:
         raise EntitlementError("Unknown user tier.", code="unknown_tier", status_code=400, developer_detail=tier)
     return normalized

@@ -414,7 +414,7 @@ function UserSummary({ account, me, onSignOut, authBusy }: { account: AccountPro
         <span>Type</span>
         <strong>{me?.user?.tier_label || account.plan}</strong>
       </div>
-      {me?.user?.tier === 'admin' && <a className="button secondary" href="/admin">Admin</a>}
+      {me?.is_admin && <a className="button secondary" href="/admin">Admin</a>}
       <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
     </section>
   );

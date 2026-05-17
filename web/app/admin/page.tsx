@@ -8,7 +8,7 @@ function tierOptions() {
   return [
     { value: 'free', label: 'Free' },
     { value: 'pro', label: 'Pro' },
-    { value: 'admin', label: 'Admin' },
+    { value: 'researcher', label: 'Researcher / Journalist' },
   ] as const;
 }
 
@@ -24,7 +24,7 @@ export default function AdminPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
-  const isAdmin = me?.user?.tier === 'admin';
+  const isAdmin = me?.is_admin;
 
   async function refreshMe() {
     const payload = await getMe();
@@ -135,7 +135,7 @@ export default function AdminPage() {
         <div>
           <p className="eyebrow">Evidrai Admin</p>
           <h1>User management</h1>
-          <p className="lead">Admin users can promote open free signups to Pro or Admin. Payments and 30-day trials can wire into the reserved subscription fields later.</p>
+          <p className="lead">The master admin can view users and set their visible product tier: Free, Pro, or Researcher / Journalist. Payments and 30-day trials can wire into the reserved subscription fields later.</p>
         </div>
         <div className="statusPanel">
           <span>Account: {account?.label || 'checking...'}</span>
@@ -147,7 +147,7 @@ export default function AdminPage() {
       {!isAdmin ? (
         <section className="card loginGate">
           <h2>Admin access required</h2>
-          <p className="muted">Sign in as an admin user. Free and Pro users cannot access this UI.</p>
+          <p className="muted">Sign in as the master admin user. Product tiers do not grant admin access.</p>
           {authConfigured() ? (
             <div className="authActions">
               <button disabled={busy} onClick={googleSignIn} type="button">Continue with Google</button>

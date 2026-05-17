@@ -79,6 +79,8 @@ SUPABASE_URL_SECRET_PATHS = (("supabase", "url"), ("SUPABASE_URL",), ("NEXT_PUBL
 SUPABASE_URL_ENV_NAMES = ("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
 ADMIN_TOKEN_SECRET_PATHS = (("admin", "token"), ("EVIDRAI_ADMIN_TOKEN",))
 ADMIN_TOKEN_ENV_NAMES = ("EVIDRAI_ADMIN_TOKEN",)
+MASTER_ADMIN_EMAILS_SECRET_PATHS = (("admin", "master_emails"), ("EVIDRAI_MASTER_ADMIN_EMAILS",))
+MASTER_ADMIN_EMAILS_ENV_NAMES = ("EVIDRAI_MASTER_ADMIN_EMAILS",)
 
 
 def api_allowed_origins() -> list[str]:
@@ -132,6 +134,15 @@ def admin_token() -> Optional[str]:
         secret_paths=ADMIN_TOKEN_SECRET_PATHS,
         env_names=ADMIN_TOKEN_ENV_NAMES,
     )
+
+
+def master_admin_emails() -> set[str]:
+    raw = read_config_value(
+        secret_paths=MASTER_ADMIN_EMAILS_SECRET_PATHS,
+        env_names=MASTER_ADMIN_EMAILS_ENV_NAMES,
+        default="timfsmithson@gmail.com",
+    )
+    return {item.strip().lower() for item in (raw or "").split(",") if item.strip()}
 
 
 def config_presence_diagnostics() -> dict[str, Any]:

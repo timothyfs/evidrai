@@ -11,7 +11,7 @@ from evidrai.api_models import AssessmentResponse, serialize_assessment_response
 from evidrai.auth import AuthContext, context_from_headers, decode_supabase_access_token, unverified_token_diagnostics
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, supabase_auth_configured
+from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, master_admin_emails, supabase_auth_configured
 from evidrai.entitlements import (
     enforce_speech_claim_limit,
     feature_matrix,
@@ -107,7 +107,7 @@ class FeedbackCreateRequest(BaseModel):
 
 class AdminSetTierRequest(BaseModel):
     owner_id: str
-    tier: str = Field(pattern="^(free|pro|admin)$")
+    tier: str = Field(pattern="^(free|pro|researcher)$")
     email: str = ""
 
 
@@ -194,19 +194,21 @@ def _profile_from_request(request: Request):
     return context, get_or_create_profile(context.owner_id, email=context.email)
 
 
+def _is_master_admin(context: AuthContext) -> bool:
+    return context.authenticated and context.email.strip().lower() in master_admin_emails()
+
+
 def _require_admin(request: Request) -> None:
     context = _auth_context_from_request(request)
-    if context.authenticated:
-        profile = get_or_create_profile(context.owner_id, email=context.email)
-        if profile.tier == "admin":
-            return
+    if _is_master_admin(context):
+        return
 
     configured = admin_token()
     supplied = (request.headers.get("x-evidrai-admin-token") or "").strip()
     if configured and supplied == configured:
         return
 
-    raise HTTPException(status_code=403, detail={"code": "admin_forbidden", "message": "Admin access is required"})
+    raise HTTPException(status_code=403, detail={"code": "admin_forbidden", "message": "Master admin access is required"})
 
 
 def _assessment_response_from_request(request: AssessmentCreateRequest, mode: str, owner_id: str = "") -> AssessmentResponse:
@@ -276,7 +278,7 @@ def tiers() -> Dict[str, Any]:
 @app.get("/me", response_model=Dict[str, Any])
 def me(http_request: Request) -> Dict[str, Any]:
     context, profile = _profile_from_request(http_request)
-    return {"ok": True, "authenticated": context.authenticated, "user": profile.to_dict(), "feature_matrix": feature_matrix()}
+    return {"ok": True, "authenticated": context.authenticated, "is_admin": _is_master_admin(context), "user": profile.to_dict(), "feature_matrix": feature_matrix()}
 
 
 @app.get("/admin/users", response_model=Dict[str, Any])
@@ -342,7 +344,7 @@ def runtime_status() -> Dict[str, Any]:
         "tavily_configured": search.configured,
         "storage_backend": "postgres" if database_url() else "local_json",
         "auth_configured": supabase_auth_configured(),
-        "admin_configured": bool(admin_token()),
+        "admin_configured": bool(admin_token() or master_admin_emails()),
     }
 
 

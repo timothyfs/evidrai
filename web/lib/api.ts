@@ -56,12 +56,12 @@ export type ReportSummary = {
   owner_id?: string | null;
 };
 
-export type TierName = 'free' | 'pro' | 'admin';
+export type TierName = 'free' | 'pro' | 'researcher';
 
 export type AccountProfile = {
   owner_id: string;
   label: string;
-  plan: 'Free' | 'Pro' | 'Admin';
+  plan: 'Free' | 'Pro' | 'Researcher / Journalist';
 };
 
 export type TierDefinition = {
@@ -76,7 +76,7 @@ export type UserProfile = {
   owner_id: string;
   email: string;
   tier: TierName;
-  tier_label: 'Free' | 'Pro' | 'Admin';
+  tier_label: 'Free' | 'Pro' | 'Researcher / Journalist';
   subscription_status: string;
   trial_started_at?: string;
   trial_ends_at?: string;
@@ -88,6 +88,7 @@ export type UserProfile = {
 export type MeResponse = {
   ok: boolean;
   authenticated: boolean;
+  is_admin?: boolean;
   user: UserProfile;
   feature_matrix: { schema_version: string; tiers: TierDefinition[] };
 };

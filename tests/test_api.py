@@ -69,13 +69,13 @@ def test_tiers_endpoint_returns_feature_matrix():
     assert response.status_code == 200
     payload = response.json()
     assert payload["schema_version"] == "feature_matrix.v1"
-    assert [tier["tier"] for tier in payload["tiers"]] == ["free", "pro", "admin"]
+    assert [tier["tier"] for tier in payload["tiers"]] == ["free", "pro", "researcher"]
     assert payload["tiers"][0]["features"]["deep_claims"] is False
     assert payload["tiers"][1]["features"]["speech_audit"] is True
 
 
 def test_me_endpoint_returns_current_profile(monkeypatch):
-    grant_tier(monkeypatch, "admin", owner_id="jwt-user", email="user@example.com")
+    grant_tier(monkeypatch, "researcher", owner_id="jwt-user", email="user@example.com")
 
     response = client.get("/me")
 
@@ -83,7 +83,7 @@ def test_me_endpoint_returns_current_profile(monkeypatch):
     payload = response.json()
     assert payload["authenticated"] is True
     assert payload["user"]["owner_id"] == "jwt-user"
-    assert payload["user"]["tier_label"] == "Admin"
+    assert payload["user"]["tier_label"] == "Researcher / Journalist"
     assert payload["user"]["features"]["evidence_ledger"] is True
 
 
@@ -103,6 +103,21 @@ def test_admin_user_tier_update_requires_token(monkeypatch):
 
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "admin_forbidden"
+
+
+def test_master_admin_email_can_update_user_tier(monkeypatch):
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "set_user_tier", lambda owner_id, tier, email="": UserProfile(owner_id=owner_id, email=email, tier=tier))
+
+    response = client.patch(
+        "/admin/users/tier",
+        json={"owner_id": "user-1", "email": "user@example.com", "tier": "researcher"},
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["user"]["tier_label"] == "Researcher / Journalist"
 
 
 def test_admin_user_tier_update_sets_profile(monkeypatch):
