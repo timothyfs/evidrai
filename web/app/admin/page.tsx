@@ -14,6 +14,14 @@ function tierLabel(tier: TierName) {
   return TIER_OPTIONS.find((item) => item.value === tier)?.label || tier;
 }
 
+function statusTone(message: string) {
+  const text = message.toLowerCase();
+  if (!message) return '';
+  if (text.includes('could not') || text.includes('failed') || text.includes('required') || text.includes('not configured')) return 'bad';
+  if (text.includes('deleted')) return 'mixed';
+  return 'good';
+}
+
 export default function AdminPage() {
   const [account, setAccount] = useState<AccountProfile | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -198,12 +206,12 @@ export default function AdminPage() {
         <div>
           <p className="eyebrow">Evidrai Admin</p>
           <h1>User management</h1>
-          <p className="lead">The master admin can view users and set their visible product tier: Free, Pro, or Researcher / Journalist.</p>
+          <p className="lead">Manage product access without confusing customer tiers with admin rights. Users stay on Free, Pro, or Researcher / Journalist; admin access is separate and controlled server-side.</p>
         </div>
         <div className="statusPanel">
           <span>Account: {account?.label || 'checking...'}</span>
-          <span>Plan: {me?.user?.tier_label || 'not signed in'}</span>
-          <span>Admin: {isAdmin ? 'yes' : 'no'}</span>
+          <span>Product plan: {me?.user?.tier_label || 'not signed in'}</span>
+          <span>Admin access: {isAdmin ? 'enabled' : 'not enabled'}</span>
           <a href="/">Back to product</a>
         </div>
       </section>
@@ -211,7 +219,7 @@ export default function AdminPage() {
       {!isAdmin ? (
         <section className="card loginGate">
           <h2>Admin access required</h2>
-          <p className="muted">Sign in as the master admin user. Product tiers do not grant admin access.</p>
+          <p className="muted">Sign in with a server-authorised admin account. Product tiers do not grant admin access.</p>
           {authConfigured() ? (
             <div className="authActions">
               <button disabled={busy} onClick={googleSignIn} type="button">Continue with Google</button>
@@ -227,8 +235,8 @@ export default function AdminPage() {
         <section className="card adminPanel">
           <div className="sectionHeader">
             <div>
-              <h2>Users</h2>
-              <p className="muted">{filteredUsers.length} shown · {users.length} total</p>
+              <h2>User access</h2>
+              <p className="muted">{filteredUsers.length} shown · {users.length} total · product tiers only</p>
             </div>
             <div className="formRow compactActions">
               <button className="secondary" disabled={busy} onClick={loadUsers} type="button">Reload</button>
@@ -236,30 +244,43 @@ export default function AdminPage() {
             </div>
           </div>
 
+          <section className="adminStats" aria-label="User summary">
+            <div><span>Total users</span><strong>{users.length}</strong></div>
+            <div><span>Free</span><strong>{users.filter((user) => user.tier === 'free').length}</strong></div>
+            <div><span>Pro</span><strong>{users.filter((user) => user.tier === 'pro').length}</strong></div>
+            <div><span>Researcher</span><strong>{users.filter((user) => user.tier === 'researcher').length}</strong></div>
+          </section>
+
+          <section className="adminGuardRails" aria-label="Admin guardrails">
+            <div><strong>Product tiers</strong><span>Free, Pro, and Researcher / Journalist control user-facing limits.</span></div>
+            <div><strong>Admin access</strong><span>Separate server-side permission. It is not a plan and cannot be granted here.</span></div>
+            <div><strong>Secrets</strong><span>Service-role credentials stay on the backend only.</span></div>
+          </section>
+
           <details open className="adminInviteBox">
-            <summary>Invite or create user</summary>
+            <summary><span>Invite or create user</span><small>Create auth access and assign an initial product tier</small></summary>
             <form onSubmit={inviteUser}>
-              <label>Email<input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="new.user@example.com" /></label>
-              <label>Initial tier<select value={inviteTier} onChange={(event) => setInviteTier(event.target.value as TierName)}>{TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-              <label className="checkPill"><input checked={sendInvite} onChange={(event) => setSendInvite(event.target.checked)} type="checkbox" /> Send Supabase invite email</label>
-              <button disabled={busy || !inviteEmail.trim()} type="submit">{sendInvite ? 'Create and send invite' : 'Create without email'}</button>
+              <label>User email<input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="new.user@example.com" /></label>
+              <label>Initial product tier<select value={inviteTier} onChange={(event) => setInviteTier(event.target.value as TierName)}>{TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <label className="checkPill"><input checked={sendInvite} onChange={(event) => setSendInvite(event.target.checked)} type="checkbox" /> Send invite email</label>
+              <button disabled={busy || !inviteEmail.trim()} type="submit">{sendInvite ? 'Create user and send invite' : 'Create user without email'}</button>
             </form>
-            <p className="muted">Uses the backend Supabase admin API. Requires SUPABASE_SERVICE_ROLE_KEY on Render; the key is never exposed to the browser.</p>
+            <p className="muted">Runs through the backend admin API. The service-role key stays on Render and is never exposed to the browser.</p>
           </details>
 
           <label>
             Search users
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search email, user ID, tier, subscription..." />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search email, user ID, product tier, subscription..." />
           </label>
 
           <div className="adminUserTable">
             <div className="adminUserHeader">
               <strong>User</strong>
-              <strong>Current tier</strong>
-              <strong>Set permission</strong>
-              <strong>Delete</strong>
+              <strong>Product tier</strong>
+              <strong>Change tier</strong>
+              <strong>Profile</strong>
             </div>
-            {filteredUsers.length === 0 ? <p className="muted">No users found. Users appear here after they sign in and the API creates their profile.</p> : filteredUsers.map((user) => (
+            {filteredUsers.length === 0 ? <p className="muted">No users found. Users appear here after sign-in, invite creation, or profile creation by the API.</p> : filteredUsers.map((user) => (
               <article className="adminUserRow" key={user.owner_id}>
                 <div>
                   <strong>{user.email || 'No email captured'}</strong>
@@ -276,17 +297,17 @@ export default function AdminPage() {
           </div>
 
           <details>
-            <summary>Manual update by user ID</summary>
+            <summary><span>Manual update by user ID</span><small>Fallback for repairing a specific profile</small></summary>
             <form onSubmit={saveManualTier}>
               <label>User ID<input value={manualOwnerId} onChange={(event) => setManualOwnerId(event.target.value)} placeholder="Supabase user id" /></label>
               <label>Email<input value={manualEmail} onChange={(event) => setManualEmail(event.target.value)} placeholder="optional email" /></label>
-              <label>Tier<select value={manualTier} onChange={(event) => setManualTier(event.target.value as TierName)}>{TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-              <button disabled={busy || !manualOwnerId.trim()} type="submit">Set tier manually</button>
+              <label>Product tier<select value={manualTier} onChange={(event) => setManualTier(event.target.value as TierName)}>{TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <button disabled={busy || !manualOwnerId.trim()} type="submit">Set product tier manually</button>
             </form>
           </details>
         </section>
       )}
-      {message && <p className="muted">{message}</p>}
+      {message && <p className={`adminMessage ${statusTone(message)}`}>{message}</p>}
     </main>
   );
 }

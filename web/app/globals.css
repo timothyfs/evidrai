@@ -1411,3 +1411,98 @@ html[data-theme="light"] .guideSteps span {
   .checkedClaim { padding: 13px; }
   .verdict.mini { padding: 13px; }
 }
+
+/* Trust language and admin UX polish */
+.trustLanguageStrip {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: -4px 0 18px;
+}
+.trustLanguageStrip span {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.035);
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+  line-height: 1.35;
+  padding: 13px;
+}
+.trustLanguageStrip strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.adminStats,
+.adminGuardRails {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+.adminStats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.adminStats div,
+.adminGuardRails div {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.035);
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+}
+.adminStats span,
+.adminGuardRails span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+.adminStats span {
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.adminStats strong {
+  font-size: 1.55rem;
+  letter-spacing: -0.04em;
+}
+.adminGuardRails { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.adminGuardRails strong { color: var(--ink); }
+.adminInviteBox summary,
+.adminPanel details summary {
+  display: grid;
+  gap: 3px;
+}
+.adminInviteBox summary small,
+.adminPanel details summary small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+.adminMessage {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--muted);
+  font-weight: 850;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+}
+.adminMessage.good { background: rgba(79,159,120,0.12); color: var(--good); }
+.adminMessage.mixed { background: rgba(196,154,80,0.12); color: var(--mixed); }
+.adminMessage.bad { background: rgba(157,36,31,0.12); color: var(--bad); }
+html[data-theme="light"] .trustLanguageStrip span,
+html[data-theme="light"] .adminStats div,
+html[data-theme="light"] .adminGuardRails div {
+  background: rgba(255,255,255,0.72);
+}
+@media (max-width: 900px) {
+  .trustLanguageStrip,
+  .adminStats,
+  .adminGuardRails { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .trustLanguageStrip,
+  .adminStats,
+  .adminGuardRails { grid-template-columns: 1fr; }
+}

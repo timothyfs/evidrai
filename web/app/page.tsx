@@ -118,7 +118,7 @@ function SourceCard({ source, compact = false }: { source: AssessmentSource; com
   const role = source.source_role || source.evidence_category || source.stance || '';
   const detail = (
     <>
-      <p>{source.summary || source.classification_reason || 'No summary available.'}</p>
+      <p>{source.summary || source.classification_reason || 'No source summary was returned.'}</p>
       {source.classification_reason && source.summary && <small className="sourceReason">Why this source matters: {source.classification_reason}</small>}
     </>
   );
@@ -200,7 +200,7 @@ function FeedbackControls({ assessment }: { assessment: AssessmentResponse }) {
   return (
     <section className="feedbackBox">
       <h3>Was this useful?</h3>
-      <p className="muted">Your feedback is linked to this exact assessment and helps improve verdict quality.</p>
+      <p className="muted">Your feedback is linked to this exact assessment and helps improve evidence quality, caveats, and explanation clarity.</p>
       <form onSubmit={submit}>
         <div className="segmented" role="radiogroup" aria-label="Feedback rating">
           {(['Useful', 'Partly useful', 'Not useful'] as FeedbackRating[]).map((item) => (
@@ -262,7 +262,7 @@ function SpeechResult({
         <div>
           <p className="eyebrow">Stage 1 complete · claim extraction</p>
           <h2>{extraction.title || 'Extracted claims'}</h2>
-          <p className="resultSubcopy">Evidrai found checkable claims in the transcript. Select the ones that matter, then run evidence verification only on those claims.</p>
+          <p className="resultSubcopy">Evidrai found checkable claims in the transcript. Select the ones that matter, then verify those claims against grouped evidence.</p>
         </div>
         <div className="verdict weak">
           <strong>{extraction.claims.length} claims</strong>
@@ -280,7 +280,7 @@ function SpeechResult({
 
       <div className="selectionGuide">
         <strong>Choose claims to verify</strong>
-        <p>Prioritise claims that are material, specific, and worth spending evidence-search time on. You can skip rhetoric, repeated points, or claims that are not central to the audit.</p>
+        <p>Prioritise claims that are material, specific, and evidence-checkable. Skip rhetoric, repeated points, or claims that are not central to the audit.</p>
       </div>
 
       <details open>
@@ -348,7 +348,7 @@ function HeroPreview() {
         <p className="eyebrow">Evidence-based assessment</p>
         <h2>Claim credibility preview</h2>
         <div className="confidenceBar"><span style={{ width: '72%' }} /></div>
-        <p className="muted">Confidence reflects available evidence, corroboration, source quality, and transparency.</p>
+        <p className="muted">Confidence reflects the available evidence base. It is not a guarantee of certainty.</p>
         <div className="previewSources">
           <span>3 corroborating sources</span>
           <span>1 context caveat</span>
@@ -364,17 +364,28 @@ function TrustSignals() {
     <div className="trustSignals">
       <span>AI-assisted, source-grounded analysis</span>
       <span>Reasoning is inspectable</span>
-      <span>Confidence reflects available evidence</span>
+      <span>Confidence is not certainty</span>
     </div>
+  );
+}
+
+function TrustLanguageStrip() {
+  return (
+    <section className="trustLanguageStrip" aria-label="How to read Evidrai results">
+      <span><strong>Verdict</strong> Evidence-based, not popularity-based.</span>
+      <span><strong>Confidence</strong> A signal of evidence quality, not certainty.</span>
+      <span><strong>Sources</strong> Grouped by role: corroborating, contradicting, or context.</span>
+      <span><strong>Reasoning</strong> Inspectable so caveats stay visible.</span>
+    </section>
   );
 }
 
 function LoadingState({ type }: { type: 'claim' | 'speech' | 'report' | 'speech-verify' }) {
   const copy = {
-    claim: { title: 'Checking the claim', steps: ['Normalizing the factual claim', 'Finding relevant evidence', 'Comparing source roles', 'Preparing assessment'] },
+    claim: { title: 'Checking the claim', steps: ['Isolating the factual claim', 'Finding relevant evidence', 'Grouping sources by role', 'Preparing caveats and verdict'] },
     speech: { title: 'Extracting checkable claims', steps: ['Reading transcript', 'Separating claims from rhetoric', 'Ranking by checkability', 'Preparing selection list'] },
-    report: { title: 'Loading report', steps: ['Retrieving assessment', 'Restoring evidence trail', 'Preparing result card'] },
-    'speech-verify': { title: 'Verifying selected claims', steps: ['Checking selected claims', 'Grouping sources', 'Preparing claim assessments'] },
+    report: { title: 'Loading report', steps: ['Retrieving assessment', 'Restoring evidence trail', 'Preparing verdict and caveats'] },
+    'speech-verify': { title: 'Verifying selected claims', steps: ['Checking selected claims', 'Grouping sources by role', 'Preparing claim verdicts and caveats'] },
   }[type];
   return (
     <section className="loadingState" aria-live="polite">
@@ -398,7 +409,7 @@ function VerifyGuide({ mode, canUseDeep, canUseSpeech }: { mode: 'claim' | 'spee
         <ul>
           <li>We isolate the checkable factual claim.</li>
           <li>Evidence is grouped by source role, not raw volume.</li>
-          <li>You get a verdict, confidence level, caveats, and inspectable reasoning.</li>
+          <li>You get a verdict, confidence level, caveats, and inspectable reasoning. Confidence is not certainty.</li>
           {!canUseDeep && <li>Deep evidence checks unlock on Pro and Researcher tiers.</li>}
         </ul>
       ) : (
@@ -419,7 +430,7 @@ function SpeechAuditExplainer() {
       <div>
         <p className="eyebrow">Two-stage audit</p>
         <h3>Extract first. Verify only what matters.</h3>
-        <p>Evidrai does not blindly fact-check an entire transcript. It first identifies candidate factual claims, ranks them by checkability and importance, then lets you choose which claims deserve evidence verification.</p>
+        <p>Evidrai does not blindly fact-check an entire transcript. It first identifies candidate factual claims, ranks them by checkability and importance, then lets you choose which claims deserve evidence review.</p>
       </div>
       <div className="speechFlowSteps">
         <span><strong>1</strong> Extract checkable claims</span>
@@ -495,7 +506,7 @@ function LoginGate({
     <section className="card loginGate">
       <p className="eyebrow">Because trust needs evidence</p>
       <h2>Start verifying with Evidrai</h2>
-      <p className="muted">Sign in to save assessments, inspect evidence trails, and access the verification tools included in your plan.</p>
+      <p className="muted">Sign in to save assessments, inspect evidence trails, and use the verification tools included in your plan.</p>
       {authReady ? (
         <div className="authActions">
           <button disabled={authBusy} onClick={onGoogle} type="button">Continue with Google</button>
@@ -959,7 +970,7 @@ export default function Home() {
         <div>
           <p className="eyebrow">Because trust needs evidence</p>
           <h1>Check claims against evidence — not repetition.</h1>
-          <p className="lead">Evidrai analyzes claims, posts, articles, and videos using source credibility, corroboration, transparency, and AI-assisted evidence analysis.</p>
+          <p className="lead">Evidrai analyses claims, posts, articles, and videos using source credibility, corroboration, transparency, and AI-assisted evidence review.</p>
           {!signedIn && <TrustSignals />}
         </div>
         {!signedIn && <HeroPreview />}
@@ -1001,7 +1012,8 @@ export default function Home() {
         />
       )}
 
-      {signedIn && <section className="workspaceIntro"><p>Evidence-based assessment · AI-assisted, source-grounded analysis · Reasoning is inspectable</p></section>}
+      {signedIn && <section className="workspaceIntro"><p>Evidence-based assessment · Sources grouped by role · Confidence is not certainty · Reasoning is inspectable</p></section>}
+      {signedIn && <TrustLanguageStrip />}
 
       {signedIn && <div className="layout">
         <section className="card verifyCard">
@@ -1009,7 +1021,7 @@ export default function Home() {
             <div>
               <p className="eyebrow">Verify</p>
               <h2>{toolMode === 'claim' ? 'Assess a claim' : 'Extract claims from speech or video'}</h2>
-              <p className="muted">Start with a specific claim or source. Evidrai will show the evidence trail and uncertainty, not just a score.</p>
+              <p className="muted">Start with a specific claim or source. Evidrai shows the evidence trail, caveats, and uncertainty — not just a score.</p>
             </div>
             <div className="segmented modeSwitch" role="tablist" aria-label="Audit type">
               <button className={toolMode === 'claim' ? 'active' : ''} onClick={() => setToolMode('claim')} type="button">Claim</button>
@@ -1088,7 +1100,7 @@ export default function Home() {
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
               {!speechTranscript.trim() && speechSourceUrl.trim() && tryYouTubeCaptions && <p className="fieldHint">No transcript pasted, so Evidrai will try to extract captions from the URL first.</p>}
               {!speechTranscript.trim() && speechSourceUrl.trim() && !tryYouTubeCaptions && <p className="fieldHint">Paste the transcript above, or enable automatic YouTube captions for a best-effort URL-only attempt.</p>}
-              <p className="muted">Your tier allows up to {userLimits.max_speech_claims || 0} claims per audit.</p>
+              <p className="muted">Your plan allows up to {userLimits.max_speech_claims || 0} claims per audit.</p>
             </form>
           )}
           {(loading || verifyingSpeech) && <LoadingState type={verifyingSpeech ? 'speech-verify' : loadingKind} />}
@@ -1101,7 +1113,7 @@ export default function Home() {
             <small>{reports.length} saved locally</small>
           </summary>
           <div className="reportsBody">
-            <p className="muted">Reports created or loaded by this signed-in user.</p>
+            <p className="muted">Reports saved in this browser for the signed-in user.</p>
             <form className="loadForm" onSubmit={(event) => { event.preventDefault(); if (reportIdInput.trim()) loadReport(reportIdInput); }}>
               <label>
                 Load by report ID
@@ -1109,7 +1121,7 @@ export default function Home() {
               </label>
               <button className="secondary" type="submit" disabled={!reportIdInput.trim() || loading}>Load report</button>
             </form>
-            {reports.length === 0 ? <p className="muted">No reports in this browser yet. Run a check to start a local history.</p> : reports.slice(0, 8).map((report) => (
+            {reports.length === 0 ? <p className="muted">No reports in this browser yet. Run a check to start a local report history.</p> : reports.slice(0, 8).map((report) => (
               <button className="reportItem" key={report.assessment_id} onClick={() => loadReport(report.assessment_id)} type="button">
                 <strong>{report.verdict || 'Unverified'}</strong>
                 <span>{report.claim || 'Untitled claim'}</span>
