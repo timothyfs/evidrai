@@ -40,6 +40,9 @@ class FeedbackStore(Protocol):
     def save(self, record: Dict[str, Any]) -> FeedbackResult:
         ...
 
+    def get_by_feedback_id(self, feedback_id: str) -> Optional[Dict[str, Any]]:
+        ...
+
     def list_by_assessment(self, assessment_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         ...
 
@@ -95,6 +98,19 @@ class PostgresFeedbackStore:
             return FeedbackResult(ok=True, destination="postgres+notion", message="Saved to Postgres and Notion.", feedback_id=feedback_id)
         return FeedbackResult(ok=True, destination="postgres", message="Saved to Postgres feedback store.", feedback_id=feedback_id)
 
+    def get_by_feedback_id(self, feedback_id: str) -> Optional[Dict[str, Any]]:
+        self._ensure_schema()
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT payload FROM feedback WHERE feedback_id = %s", (feedback_id,))
+                row = cur.fetchone()
+        if not row:
+            return None
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        return payload
+
     def list_by_assessment(self, assessment_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         self._ensure_schema()
         with self._connect() as conn:
@@ -125,6 +141,9 @@ class LocalFeedbackStore:
 
     def save(self, record: Dict[str, Any]) -> FeedbackResult:
         return _save_feedback_record(record, path=self.path)
+
+    def get_by_feedback_id(self, feedback_id: str) -> Optional[Dict[str, Any]]:
+        return get_feedback_by_id(feedback_id, path=self.path)
 
     def list_by_assessment(self, assessment_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         return list_feedback_by_assessment_id(assessment_id, limit=limit, path=self.path)
@@ -310,22 +329,29 @@ def create_notion_feedback_page(record: Dict[str, Any]) -> Optional[str]:
     return response.json().get("url")
 
 
-def list_feedback_by_assessment_id(assessment_id: str, limit: int = 100, path: Optional[Path] = None) -> List[Dict[str, Any]]:
+def _iter_local_feedback_records(path: Optional[Path] = None):
     target = path or feedback_log_path()
     if not target.is_absolute():
         target = Path.cwd() / target
     if not target.exists():
-        return []
-
-    matches: List[Dict[str, Any]] = []
+        return
     with target.open("r", encoding="utf-8") as handle:
         for line in handle:
             try:
-                record = json.loads(line)
+                yield json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if record.get("assessment_id") == assessment_id:
-                matches.append(record)
+
+
+def get_feedback_by_id(feedback_id: str, path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    for record in _iter_local_feedback_records(path):
+        if record.get("feedback_id") == feedback_id:
+            return record
+    return None
+
+
+def list_feedback_by_assessment_id(assessment_id: str, limit: int = 100, path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    matches = [record for record in _iter_local_feedback_records(path) if record.get("assessment_id") == assessment_id]
     matches.sort(key=lambda item: item.get("captured_at", ""), reverse=True)
     return matches[:limit]
 
@@ -370,6 +396,16 @@ def _save_feedback_record(record: Dict[str, Any], path: Optional[Path] = None) -
 
 def save_feedback(record: Dict[str, Any], store: Optional[FeedbackStore] = None) -> FeedbackResult:
     return (store or get_feedback_store()).save(record)
+
+
+def load_feedback_by_id(
+    feedback_id: str,
+    store: Optional[FeedbackStore] = None,
+    path: Optional[Path] = None,
+) -> Optional[Dict[str, Any]]:
+    if path is not None:
+        return LocalFeedbackStore(path).get_by_feedback_id(feedback_id)
+    return (store or get_feedback_store()).get_by_feedback_id(feedback_id)
 
 
 def list_feedback_for_assessment(

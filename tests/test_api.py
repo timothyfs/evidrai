@@ -367,6 +367,15 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     assert feedback_list_payload["feedback_count"] == 1
     assert feedback_list_payload["feedback"][0]["comment"] == "Good enough"
 
+    feedback_lookup_response = client.get(f"/feedback/{feedback_payload['feedback_id']}")
+    assert feedback_lookup_response.status_code == 200
+    feedback_lookup_payload = feedback_lookup_response.json()
+    assert feedback_lookup_payload["assessment_id"] == payload["assessment_id"]
+    assert feedback_lookup_payload["feedback"]["comment"] == "Good enough"
+
+    missing_feedback_response = client.get("/feedback/00000000-0000-0000-0000-000000000000")
+    assert missing_feedback_response.status_code == 404
+
 
 def test_bearer_token_owner_overrides_spoofable_owner_header(monkeypatch):
     monkeypatch.setattr(api_main, "context_from_headers", lambda authorization, owner_header: api_main.AuthContext(owner_id="jwt-user", auth_method="supabase_jwt", email="user@example.com"))

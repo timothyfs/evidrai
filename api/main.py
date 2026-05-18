@@ -23,7 +23,7 @@ from evidrai.entitlements import (
     set_user_tier,
 )
 from evidrai.errors import EvidraiError, safe_error_payload
-from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, save_feedback
+from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, load_feedback_by_id, save_feedback
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
 from evidrai.pipeline.verification import (
     extract_speech_audit_claims,
@@ -436,6 +436,19 @@ def get_assessment_feedback(assessment_id: str, limit: int = 100) -> Dict[str, A
         "ok": True,
         "assessment_id": assessment.assessment_id,
         "feedback_count": len(feedback),
+        "feedback": feedback,
+    }
+
+
+@app.get("/feedback/{feedback_id}", response_model=Dict[str, Any])
+def get_feedback(feedback_id: str) -> Dict[str, Any]:
+    feedback = load_feedback_by_id(feedback_id)
+    if not feedback:
+        raise HTTPException(status_code=404, detail={"code": "feedback_not_found", "message": "Feedback not found."})
+    return {
+        "ok": True,
+        "feedback_id": feedback_id,
+        "assessment_id": feedback.get("assessment_id", ""),
         "feedback": feedback,
     }
 
