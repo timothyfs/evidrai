@@ -79,6 +79,7 @@ class AssessmentEvidenceSource(BaseModel):
     stance: str = "irrelevant"
     evidence_category: str = "irrelevant"
     source_role: str = "context"
+    narrative_cluster: str = ""
 
     @field_validator("stance", mode="before")
     @classmethod
@@ -95,6 +96,7 @@ class AssessmentEvidenceSource(BaseModel):
     def normalize_role(cls, value: object) -> str:
         return normalize_source_role_label(value)
     score: float = 0.0
+    scoring_factors: Dict[str, float] = Field(default_factory=dict)
     summary: str = ""
     classification_reason: str = ""
 
@@ -153,6 +155,15 @@ def serialize_assessment_response(
             evidence_category=source.get("evidence_category") or "irrelevant",
             source_role=source.get("source_role") or "context",
             score=float(source.get("weighted_score") or 0.0),
+            scoring_factors={
+                "authority": float(source.get("authority_score") or 0.0),
+                "relevance": float(source.get("relevance_score") or 0.0),
+                "directness": float(source.get("directness_score") or 0.0),
+                "recency": float(source.get("recency_score") or 0.0),
+                "bias_risk": float(source.get("bias_risk_score") or 0.0),
+                "weighted": float(source.get("weighted_score") or 0.0),
+            },
+            narrative_cluster=source.get("narrative_cluster") or "",
             summary=source.get("summary") or source.get("snippet") or "",
             classification_reason=source.get("classification_reason") or source.get("evidence_category") or "",
         )

@@ -7,7 +7,9 @@ export type AssessmentSource = {
   stance: string;
   evidence_category: string;
   source_role: string;
+  narrative_cluster?: string;
   score: number;
+  scoring_factors?: Record<string, number>;
   summary: string;
   classification_reason: string;
 };

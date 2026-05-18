@@ -67,7 +67,7 @@ h2 { font-size: 1.35rem; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 24px;
-  align-items: start;
+  align-items: flex-start;
 }
 
 .card { padding: 24px; }
@@ -700,7 +700,7 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
 }
 .assessmentNarrative .summary { margin: 0; }
 .assessmentNarrative .caveat {
-  align-items: start;
+  align-items: flex-start;
   border: 1px solid rgba(196,154,80,0.22);
   border-left: 4px solid var(--mixed);
   border-radius: 14px;
@@ -971,7 +971,7 @@ html[data-theme="light"] .verdictPanel {
   gap: 20px;
 }
 .verifyHeader {
-  align-items: start;
+  align-items: flex-start;
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1505,4 +1505,244 @@ html[data-theme="light"] .adminGuardRails div {
   .trustLanguageStrip,
   .adminStats,
   .adminGuardRails { grid-template-columns: 1fr; }
+}
+
+/* Evidence scoring visualisation */
+.scoreConstellation {
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(157,183,213,0.18), transparent 32%),
+    linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.02));
+  margin: 22px 0 0;
+  overflow: hidden;
+  padding: 20px;
+  position: relative;
+}
+.scoreConstellation::after {
+  background: linear-gradient(90deg, transparent, rgba(199,215,234,0.32), transparent);
+  content: "";
+  height: 1px;
+  left: 20px;
+  position: absolute;
+  right: 20px;
+  top: 68px;
+}
+.scoreConstellationHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.scoreConstellationHeader h3 { font-size: 1.2rem; margin: 0; }
+.scoreConstellationHeader > span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 850;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+.scoreConstellationGrid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 260px minmax(0, 1fr);
+  position: relative;
+  z-index: 1;
+}
+.scoreHeroTile {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(10,15,22,0.30);
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  padding: 18px;
+  text-align: center;
+}
+.scoreHeroTile p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+.scoreRingLarge, .scoreOrb {
+  --score-deg: 0deg;
+  align-items: center;
+  aspect-ratio: 1;
+  background:
+    radial-gradient(circle, var(--card) 56%, transparent 57%),
+    conic-gradient(var(--accent-strong) var(--score-deg), rgba(255,255,255,0.08) 0deg);
+  border-radius: 999px;
+  display: grid;
+  justify-items: center;
+  position: relative;
+}
+.scoreRingLarge {
+  height: 142px;
+  width: 142px;
+}
+.scoreRingLarge strong {
+  font-size: 2.25rem;
+  letter-spacing: -0.06em;
+  margin-top: 18px;
+}
+.scoreRingLarge span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  margin-top: -34px;
+}
+.scoreMetricGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.scoreMetricGrid div {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255,255,255,0.035);
+  display: grid;
+  gap: 6px;
+  padding: 15px;
+}
+.scoreMetricGrid span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.scoreMetricGrid strong { font-size: 1.35rem; letter-spacing: -0.03em; }
+.scoreMetricGrid em {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 750;
+}
+.scoreMethodDetails {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding-top: 14px;
+}
+.scoreMethodDetails summary {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+.scoreMethodDetails small { color: var(--muted); }
+.scoreMethodDetails p { color: var(--muted); line-height: 1.5; }
+.scoredSource {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025)),
+    radial-gradient(circle at 100% 0%, rgba(157,183,213,0.12), transparent 34%);
+  overflow: hidden;
+}
+.sourceScoreHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+.scoreOrb {
+  flex: 0 0 auto;
+  height: 58px;
+  width: 58px;
+}
+.scoreOrb strong {
+  font-size: 1rem;
+  letter-spacing: -0.04em;
+  margin-top: 8px;
+}
+.scoreOrb span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  margin-top: -16px;
+}
+.scoreOrb.good, .factorMeterTrack span.good { --tone: var(--good); }
+.scoreOrb.solid, .factorMeterTrack span.solid { --tone: var(--accent-strong); }
+.scoreOrb.mixed, .factorMeterTrack span.mixed { --tone: var(--mixed); }
+.scoreOrb.weak, .factorMeterTrack span.weak { --tone: var(--weak); }
+.scoreOrb.bad, .factorMeterTrack span.bad { --tone: var(--bad); }
+.scoreOrb { background: radial-gradient(circle, var(--card) 56%, transparent 57%), conic-gradient(var(--tone, var(--accent-strong)) var(--score-deg), rgba(255,255,255,0.08) 0deg); }
+.stanceChip.good { color: var(--good); }
+.stanceChip.bad { color: var(--bad); }
+.stanceChip.mixed { color: var(--mixed); }
+.stanceChip.context { color: var(--accent-strong); }
+.sourceMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sourceMetaRow span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 820;
+  padding: 5px 8px;
+}
+.sourceScoringDetails {
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+  padding-top: 12px;
+}
+.sourceScoringDetails summary {
+  align-items: center;
+  display: flex;
+  font-size: 0.9rem;
+  justify-content: space-between;
+}
+.sourceScoringDetails summary small { color: var(--muted); }
+.factorGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+.factorMeter { display: grid; gap: 5px; }
+.factorMeterLabel {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.76rem;
+  font-weight: 820;
+  justify-content: space-between;
+}
+.factorMeterLabel strong { color: var(--ink); }
+.factorMeterTrack {
+  background: rgba(255,255,255,0.07);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+.factorMeterTrack span {
+  background: linear-gradient(90deg, var(--tone, var(--accent)), color-mix(in srgb, var(--tone, var(--accent)) 64%, white));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+.sourceScoringNote {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  margin-bottom: 0;
+}
+html[data-theme="light"] .scoreConstellation,
+html[data-theme="light"] .scoreHeroTile,
+html[data-theme="light"] .scoreMetricGrid div,
+html[data-theme="light"] .scoredSource {
+  background: color-mix(in srgb, var(--card) 92%, white);
+}
+html[data-theme="light"] .scoreRingLarge,
+html[data-theme="light"] .scoreOrb {
+  background: radial-gradient(circle, #fffaf1 56%, transparent 57%), conic-gradient(var(--tone, var(--accent-strong)) var(--score-deg), rgba(34,32,27,0.10) 0deg);
+}
+@media (max-width: 780px) {
+  .scoreConstellationHeader { display: grid; }
+  .scoreConstellationGrid { grid-template-columns: 1fr; }
+  .scoreMetricGrid, .factorGrid { grid-template-columns: 1fr; }
 }

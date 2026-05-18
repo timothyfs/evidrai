@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import type { CSSProperties, FormEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AccountProfile,
   AssessmentResponse,
@@ -73,6 +74,38 @@ function confidencePercent(confidence?: string | null, fallbackScore?: number | 
   return 50;
 }
 
+function normaliseScore(score?: number | null, max = 5) {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return 0;
+  return Math.max(0, Math.min(1, score / max));
+}
+
+function scoreTone(score?: number | null, max = 5) {
+  const pct = normaliseScore(score, max);
+  if (pct >= 0.85) return 'good';
+  if (pct >= 0.65) return 'solid';
+  if (pct >= 0.45) return 'mixed';
+  if (pct >= 0.25) return 'weak';
+  return 'bad';
+}
+
+function sourceQualityLabel(score?: number | null) {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return 'Unscored';
+  if (score >= 4.5) return 'Very strong';
+  if (score >= 3.75) return 'Strong';
+  if (score >= 2.75) return 'Useful / mixed';
+  if (score >= 1.75) return 'Weak';
+  return 'Poor / indirect';
+}
+
+function stanceTone(stance?: string) {
+  const value = (stance || '').toLowerCase();
+  if (value.includes('support')) return 'good';
+  if (value.includes('contradict')) return 'bad';
+  if (value.includes('mixed')) return 'mixed';
+  if (value.includes('context')) return 'context';
+  return 'weak';
+}
+
 function sourceGroup(source: AssessmentSource) {
   const stance = (source.stance || source.evidence_category || source.source_role || '').toLowerCase();
   if (stance.includes('support') || stance.includes('corrobor')) return 'Corroborating';
@@ -113,9 +146,78 @@ function formatReasoningValue(value: unknown) {
   return String(value);
 }
 
+function FactorMeter({ label, value, max = 5, invert = false }: { label: string; value?: number | null; max?: number; invert?: boolean }) {
+  const raw = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  const display = Math.max(0, Math.min(max, raw));
+  const pct = invert ? (1 - normaliseScore(display, max)) * 100 : normaliseScore(display, max) * 100;
+  return (
+    <div className="factorMeter">
+      <div className="factorMeterLabel"><span>{label}</span><strong>{display.toFixed(1)}/{max}</strong></div>
+      <div className="factorMeterTrack"><span className={scoreTone(invert ? max - display : display, max)} style={{ width: `${Math.max(4, pct)}%` }} /></div>
+    </div>
+  );
+}
+
+function ScoreOrb({ score, max = 5, label = 'Source score' }: { score?: number | null; max?: number; label?: string }) {
+  const value = typeof score === 'number' && Number.isFinite(score) ? score : 0;
+  const pct = normaliseScore(value, max);
+  const degrees = Math.round(pct * 360);
+  return (
+    <div className={`scoreOrb ${scoreTone(value, max)}`} style={{ '--score-deg': `${degrees}deg` } as CSSProperties} aria-label={`${label}: ${value.toFixed(1)} out of ${max}`}>
+      <strong>{value.toFixed(1)}</strong>
+      <span>/{max}</span>
+    </div>
+  );
+}
+
+function EvidenceScorePanel({ assessment }: { assessment: AssessmentResponse }) {
+  const sources = assessment.sources || [];
+  const averageScore = sources.length ? sources.reduce((sum, source) => sum + Number(source.score || 0), 0) / sources.length : 0;
+  const primaryCount = sources.filter((source) => (source.source_type || '').toLowerCase().includes('primary')).length;
+  const contradictionCount = sources.filter((source) => sourceGroup(source) === 'Contradicting').length;
+  const supportCount = sources.filter((source) => sourceGroup(source) === 'Corroborating').length;
+  const evidenceScore = assessment.verdict.evidence_strength_score ?? null;
+  const confidence = confidencePercent(assessment.verdict.confidence, evidenceScore);
+  return (
+    <section className="scoreConstellation" aria-label="Evidence scoring overview">
+      <div className="scoreConstellationHeader">
+        <div>
+          <p className="eyebrow">Evidence scorecard</p>
+          <h3>How strong is the evidence?</h3>
+        </div>
+        <span>Source-weighted, not volume-weighted</span>
+      </div>
+      <div className="scoreConstellationGrid">
+        <article className="scoreHeroTile">
+          <div className="scoreRingLarge" style={{ '--score-deg': `${Math.round(normaliseScore(evidenceScore, 10) * 360)}deg` } as CSSProperties}>
+            <strong>{typeof evidenceScore === 'number' ? evidenceScore.toFixed(1) : '—'}</strong>
+            <span>/10 evidence</span>
+          </div>
+          <p>{evidenceStrengthLabel(evidenceScore) || 'Evidence strength depends on source quality, directness, and contradiction.'}</p>
+        </article>
+        <div className="scoreMetricGrid">
+          <div><span>Confidence</span><strong>{assessment.verdict.confidence || 'Unstated'}</strong><em>{confidence}% signal</em></div>
+          <div><span>Avg source quality</span><strong>{averageScore.toFixed(1)}/5</strong><em>{sourceQualityLabel(averageScore)}</em></div>
+          <div><span>Primary sources</span><strong>{primaryCount}/{sources.length}</strong><em>Direct evidence share</em></div>
+          <div><span>Evidence mix</span><strong>{supportCount} / {contradictionCount}</strong><em>supporting / contradicting</em></div>
+        </div>
+      </div>
+      <details className="scoreMethodDetails">
+        <summary><span>Why these scores?</span><small>Open scoring logic</small></summary>
+        <p>Evidence strength is separate from source count. Primary, direct, relevant and independent sources move the score more than repeated coverage or background context.</p>
+        <p>Contradictions and weak evidence chains reduce confidence, even when a claim is widely repeated.</p>
+      </details>
+    </section>
+  );
+}
+
 function SourceCard({ source, compact = false }: { source: AssessmentSource; compact?: boolean }) {
   const score = Number(source.score || 0);
   const role = source.source_role || source.evidence_category || source.stance || '';
+  const factors = source.scoring_factors || {};
+  const hasFactors = Object.values(factors).some((value) => typeof value === 'number' && value > 0);
+  const quality = sourceQualityLabel(score);
+  const group = sourceGroup(source);
   const detail = (
     <>
       <p>{source.summary || source.classification_reason || 'No source summary was returned.'}</p>
@@ -123,19 +225,42 @@ function SourceCard({ source, compact = false }: { source: AssessmentSource; com
     </>
   );
   return (
-    <article className={`source sourceCard ${compact ? 'compactSource' : ''}`}>
-      <div className="sourceTopline">
-        <span>{source.source_type || 'Source'}</span>
-        {role && <strong>{role}</strong>}
-        {score > 0 && <em>{score.toFixed(1)} relevance</em>}
+    <article className={`source sourceCard scoredSource ${compact ? 'compactSource' : ''}`}>
+      <div className="sourceScoreHeader">
+        <div className="sourceTopline">
+          <span>{source.source_type || 'Source'}</span>
+          {role && <strong className={`stanceChip ${stanceTone(source.stance || role)}`}>{role}</strong>}
+          <em>{quality}</em>
+        </div>
+        {score > 0 && <ScoreOrb score={score} />}
       </div>
       {source.url ? (
         <a href={sourceHref(source)} target="_blank" rel="noreferrer" className="sourceTitle">{source.title || source.domain || source.url}</a>
       ) : (
         <strong className="sourceTitle">{source.title || 'Untitled source'}</strong>
       )}
-      {source.domain && <div className="sourceDomain">{source.domain}</div>}
+      <div className="sourceMetaRow">
+        {source.domain && <span>{source.domain}</span>}
+        <span>{group}</span>
+        {source.narrative_cluster && <span>Chain: {source.narrative_cluster}</span>}
+      </div>
       {compact ? <details className="sourceDetails"><summary>Source detail</summary>{detail}</details> : detail}
+      <details className="sourceScoringDetails">
+        <summary><span>Why this score?</span><small>{score > 0 ? `${score.toFixed(1)}/5` : 'Scoring detail'}</small></summary>
+        {hasFactors ? (
+          <div className="factorGrid">
+            <FactorMeter label="Authority" value={factors.authority} />
+            <FactorMeter label="Relevance" value={factors.relevance} />
+            <FactorMeter label="Directness" value={factors.directness} />
+            <FactorMeter label="Recency" value={factors.recency} />
+            {'independence' in factors && <FactorMeter label="Independence" value={factors.independence} />}
+            <FactorMeter label="Bias risk" value={factors.bias_risk} invert />
+          </div>
+        ) : (
+          <p className="muted">Detailed scoring factors are not available for this source yet. The visible score is the source's weighted contribution to this claim.</p>
+        )}
+        <p className="sourceScoringNote">High-scoring sources are not just reputable. They must be relevant, direct, and useful for this exact claim.</p>
+      </details>
     </article>
   );
 }
@@ -637,6 +762,8 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
         <span>{formatDate(assessment.created_at)}</span>
         {stats.length ? stats.map((item) => <span key={item}>{item}</span>) : <span>No evidence grouping available</span>}
       </div>
+
+      <EvidenceScorePanel assessment={assessment} />
 
       {assessment.claim_breakdown?.length > 0 && (
         <details open className="resultSection">
