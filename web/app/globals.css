@@ -720,7 +720,7 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
 .resultSection summary::-webkit-details-marker { display: none; }
 .resultSection summary::after {
   color: var(--muted);
-  content: "Inspect";
+  content: "Show";
   font-size: 0.78rem;
   font-weight: 800;
 }
