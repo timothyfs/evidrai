@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import time
 from typing import Any, Dict, List, Optional
@@ -49,6 +50,174 @@ def render_score_bar(label: str, score: Any, max_score: float, help_text: str = 
     value = numeric_score(score)
     pct = clamp(value / max_score if max_score else 0.0)
     st.progress(pct, text=f"{label}: {value:.1f}/{max_score:g}" + (f" · {help_text}" if help_text else ""))
+
+
+def score_colour(score: float, max_score: float = 5.0) -> str:
+    pct = clamp(score / max_score if max_score else 0.0)
+    if pct >= 0.85:
+        return "#16a34a"
+    if pct >= 0.65:
+        return "#65a30d"
+    if pct >= 0.45:
+        return "#ca8a04"
+    if pct >= 0.25:
+        return "#ea580c"
+    return "#dc2626"
+
+
+def source_stance_colour(stance: str) -> str:
+    normalized = (stance or "").lower()
+    if normalized == "supports":
+        return "#16a34a"
+    if normalized == "contradicts":
+        return "#dc2626"
+    if normalized == "mixed":
+        return "#ca8a04"
+    if normalized == "context":
+        return "#2563eb"
+    return "#64748b"
+
+
+def render_scoring_styles() -> None:
+    st.markdown(
+        """
+<style>
+.evidrai-score-card {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 18px;
+  padding: 1rem 1.1rem;
+  margin: 0.8rem 0 1rem 0;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.035), rgba(59, 130, 246, 0.055));
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+.evidrai-score-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.evidrai-source-title {
+  font-weight: 750;
+  font-size: 1.02rem;
+  line-height: 1.35;
+}
+.evidrai-score-pill {
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  color: white;
+  font-weight: 750;
+  white-space: nowrap;
+  font-size: 0.88rem;
+}
+.evidrai-chip-row { margin-top: 0.55rem; }
+.evidrai-chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  margin: 0.12rem 0.25rem 0.12rem 0;
+  background: rgba(100, 116, 139, 0.12);
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+.evidrai-factor-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  margin: 0.38rem 0 0.12rem 0;
+  color: #334155;
+}
+.evidrai-factor-track {
+  height: 0.55rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.22);
+  overflow: hidden;
+}
+.evidrai-factor-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+.evidrai-muted { color: #64748b; font-size: 0.86rem; margin-top: 0.55rem; }
+</style>
+        """.strip(),
+        unsafe_allow_html=True,
+    )
+
+
+def render_factor_meter(label: str, score: Any, max_score: float = 5.0) -> None:
+    value = numeric_score(score)
+    pct = clamp(value / max_score if max_score else 0.0) * 100
+    colour = score_colour(value, max_score)
+    st.markdown(
+        f"""
+<div class="evidrai-factor-label"><span>{label}</span><strong>{value:.1f}/{max_score:g}</strong></div>
+<div class="evidrai-factor-track"><div class="evidrai-factor-fill" style="width:{pct:.0f}%; background:{colour};"></div></div>
+        """.strip(),
+        unsafe_allow_html=True,
+    )
+
+
+def source_scoring_factors(src: Dict[str, Any]) -> Dict[str, Any]:
+    factors = src.get("scoring_factors") or {}
+    if factors:
+        return factors
+    return {
+        "authority": src.get("authority_score"),
+        "relevance": src.get("relevance_score"),
+        "directness": src.get("directness_score"),
+        "recency": src.get("recency_score"),
+        "bias_risk": src.get("bias_risk_score"),
+        "weighted": src.get("weighted_score"),
+    }
+
+
+def build_source_score_lookup(result: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    trace = result.get("debug_trace") or {}
+    scoring = trace.get("scoring") or {}
+    lookup: Dict[str, Dict[str, Any]] = {}
+    for source in scoring.get("source_scores", []) or []:
+        url = source.get("url") or ""
+        if url:
+            lookup[url] = source
+    return lookup
+
+
+def merge_source_score_details(sources: List[Dict[str, Any]], result: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    if not result:
+        return sources
+    lookup = build_source_score_lookup(result)
+    merged: List[Dict[str, Any]] = []
+    for source in sources:
+        extra = lookup.get(source.get("url") or "")
+        if extra:
+            combined = dict(source)
+            combined.update({k: v for k, v in extra.items() if k not in combined or combined.get(k) in (None, "", [])})
+            if extra.get("scoring_factors"):
+                combined["scoring_factors"] = extra["scoring_factors"]
+            merged.append(combined)
+        else:
+            merged.append(source)
+    return merged
+
+
+def source_score_rationale(src: Dict[str, Any]) -> str:
+    support = normalize_claim_support(src.get("claim_support"))
+    source_type = (src.get("source_type") or "unknown").lower()
+    category = (src.get("evidence_category") or "").replace("_", " ")
+    if support == "Supports":
+        action = "supports the claim"
+    elif support == "Contradicts":
+        action = "challenges the claim"
+    elif support == "Mixed":
+        action = "partly supports and partly qualifies the claim"
+    elif support == "Context":
+        action = "adds context but is not direct proof"
+    else:
+        action = "has limited direct evidential value"
+    detail = f"{source_type.title()} source that {action}."
+    if category and category != "irrelevant":
+        detail += f" Evidence category: {category}."
+    return detail
 
 
 def render_claim_under_review(result: Dict[str, Any]) -> None:
@@ -186,17 +355,24 @@ def render_evidence_scorecard(result: Dict[str, Any]) -> None:
     score = result.get("pendulum_score", None) if result.get("pendulum_score", None) is not None else pendulum.get("score")
 
     st.markdown("### Evidence scorecard")
+    render_scoring_styles()
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Evidence strength", band)
     c2.metric("Avg source quality", f"{stats['avg_score']:.1f}/5")
     c3.metric("Primary sources", f"{stats['primary']}/{stats['source_count']}")
     c4.metric("Contradictions", stats["contradictions"])
 
-    if score is not None:
-        render_score_bar("Overall evidence strength", score, 10, band)
-    render_score_bar("Average source quality", stats["avg_score"], 5)
-    render_score_bar("Primary-source share", stats["primary_ratio"] * 100, 100)
-    render_score_bar("High-quality share", stats["high_quality_ratio"] * 100, 100)
+    with st.container():
+        if score is not None:
+            render_factor_meter("Overall evidence strength", score, 10)
+        render_factor_meter("Average source quality", stats["avg_score"], 5)
+        render_factor_meter("Primary-source share", stats["primary_ratio"] * 100, 100)
+        render_factor_meter("High-quality share", stats["high_quality_ratio"] * 100, 100)
+
+    with st.expander("Why these scores?", expanded=False):
+        st.write("Evidence strength is based on the strongest weighted support or contradiction, then reduced when the reviewed set is mostly contextual, amplified, stale, or internally conflicted.")
+        st.write("Source quality is separate: a source can be reputable and still not directly prove the claim.")
+        st.write("Primary-source share matters because direct records usually beat commentary, repetition, or status.")
 
 
 def render_amplification_warning(result: Dict[str, Any]) -> None:
@@ -401,24 +577,71 @@ When many reviewed sources appear to trace back to the same narrative cluster, E
         )
 
 
-def render_sources(sources: List[Dict[str, Any]]) -> None:
+def render_sources(sources: List[Dict[str, Any]], result: Optional[Dict[str, Any]] = None) -> None:
     if not sources:
         return
+    render_scoring_styles()
     st.markdown("### Sources reviewed")
-    for src in sources:
-        title = src.get("title", "Untitled")
-        url = src.get("url", "")
+    st.caption("Each card shows the source's evidential weight for this specific claim. Expand a card to see the scoring factors.")
+    for src in merge_source_score_details(sources, result):
+        title = str(src.get("title", "Untitled"))
+        url = str(src.get("url", ""))
         quality = map_source_quality_label(src.get("weighted_score"))
         stance = normalize_claim_support(src.get("claim_support", "context"))
         score = numeric_score(src.get("weighted_score"))
-        meta = f"{src.get('source_type', 'unknown').title()} • quality {quality} • stance {stance}"
-        if src.get("published_date"):
-            meta += f" • {src['published_date']}"
-        st.markdown(f"**[{title}]({url})**")
-        st.caption(meta)
-        render_score_bar("Source score", score, 5)
+        source_type = src.get("source_type", "unknown").title()
+        score_color = score_colour(score)
+        stance_color = source_stance_colour(stance)
+        safe_title = html.escape(title)
+        safe_url = html.escape(url, quote=True)
+        safe_type = html.escape(source_type)
+        safe_quality = html.escape(str(quality))
+        safe_stance = html.escape(str(stance))
+        safe_published = html.escape(str(src.get("published_date", "")))
+        safe_rationale = html.escape(source_score_rationale(src))
+        published = f"<span class='evidrai-chip'>{safe_published}</span>" if src.get("published_date") else ""
+        link = f"<a href='{safe_url}' target='_blank' rel='noopener noreferrer'>{safe_title}</a>" if is_probable_url(url) else safe_title
+        st.markdown(
+            f"""
+<div class="evidrai-score-card">
+  <div class="evidrai-score-header">
+    <div>
+      <div class="evidrai-source-title">{link}</div>
+      <div class="evidrai-chip-row">
+        <span class="evidrai-chip">{safe_type}</span>
+        <span class="evidrai-chip" style="background:{stance_color}22; color:{stance_color};">{safe_stance}</span>
+        <span class="evidrai-chip">Quality: {safe_quality}</span>
+        {published}
+      </div>
+    </div>
+    <div class="evidrai-score-pill" style="background:{score_color};">{score:.1f}/5</div>
+  </div>
+  <div class="evidrai-muted">{safe_rationale}</div>
+</div>
+            """.strip(),
+            unsafe_allow_html=True,
+        )
         if src.get("summary"):
             st.write(src["summary"])
+        factors = {k: v for k, v in source_scoring_factors(src).items() if v is not None and k != "weighted"}
+        with st.expander("Why this source scored this way", expanded=False):
+            if factors:
+                factor_labels = {
+                    "authority": "Authority",
+                    "relevance": "Relevance",
+                    "directness": "Directness",
+                    "recency": "Recency",
+                    "independence": "Independence",
+                    "bias_risk": "Bias risk",
+                }
+                for key in ["authority", "relevance", "directness", "independence", "recency", "bias_risk"]:
+                    if key in factors:
+                        render_factor_meter(factor_labels.get(key, key.replace("_", " ").title()), factors[key])
+                if src.get("narrative_cluster"):
+                    st.caption(f"Evidence chain: {src['narrative_cluster']}")
+            else:
+                st.caption("Detailed scoring factors are not available for this result yet.")
+            st.caption("High scores require more than reputation: the source must be relevant, direct, and preferably independent.")
         st.markdown("---")
 
 
@@ -521,7 +744,7 @@ def render_pipeline_result(result: Dict[str, Any]) -> None:
     tab1, tab2, tab3 = st.tabs(["Sources", "Reasoning", "Why it spreads"])
     with tab1:
         with st.expander("Sources and weighting", expanded=True):
-            render_sources(result.get("sources", []))
+            render_sources(result.get("sources", []), result)
         queries = result.get("queries", []) or []
         if queries:
             with st.expander("Search queries used", expanded=False):
@@ -594,7 +817,7 @@ def render_speech_audit_result(result: Dict[str, Any]) -> None:
             if rule_engine.get("rationale"):
                 st.caption("Rule check: " + rule_engine["rationale"])
             render_amplification_warning(item)
-            render_sources((item.get("sources") or [])[:4])
+            render_sources((item.get("sources") or [])[:4], item)
 
     skipped = result.get("skipped_rhetoric", []) or []
     notes = result.get("extraction_notes", []) or []

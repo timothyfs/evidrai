@@ -20,6 +20,8 @@ Given a claim or source URL, Evidrai can:
 
 ## How Evidrai scores evidence
 
+The detailed scoring specification lives in [`docs/evidence-scoring-system.md`](docs/evidence-scoring-system.md).
+
 Evidrai is claim-first, not speaker-first. A claim is assessed against the evidence chain behind it, not against the popularity, status, or confidence of whoever repeated it.
 
 Core principles:
