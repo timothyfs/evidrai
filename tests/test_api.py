@@ -403,6 +403,12 @@ def test_report_history_can_be_scoped_by_owner_header(monkeypatch, tmp_path):
     assert [item["assessment_id"] for item in payload["reports"]] == [alice["assessment_id"]]
     assert payload["reports"][0]["owner_id"] == "alice"
 
+    own_report = client.get(f"/reports/{alice['assessment_id']}", headers={"X-Evidrai-User-Id": "alice"})
+    assert own_report.status_code == 200
+
+    other_report = client.get(f"/reports/{alice['assessment_id']}", headers={"X-Evidrai-User-Id": "bob"})
+    assert other_report.status_code == 403
+
 
 def test_claim_check_embeds_assessment_contract(monkeypatch):
     def fake_run_claim_assessment(*, claim, source_url, category, mode):

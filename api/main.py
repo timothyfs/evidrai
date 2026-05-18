@@ -401,8 +401,12 @@ def admin_delete_user(owner_id: str, http_request: Request) -> Dict[str, Any]:
 
 
 @app.get("/reports/{report_id}", response_model=AssessmentResponse)
-def get_report(report_id: str) -> AssessmentResponse:
-    return load_report(report_id)
+def get_report(report_id: str, http_request: Request) -> AssessmentResponse:
+    assessment = load_report(report_id)
+    context = _auth_context_from_request(http_request)
+    if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+        raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
+    return assessment
 
 
 @app.post("/assessments/{assessment_id}/feedback", response_model=Dict[str, Any])

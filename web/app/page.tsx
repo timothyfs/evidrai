@@ -18,6 +18,7 @@ import {
   getMe,
   getAuthDiagnostics,
   getAccountProfile,
+  listReports,
   getAnonymousAccountProfile,
   getReport,
   setAccessToken,
@@ -869,12 +870,30 @@ export default function Home() {
       mode: result.mode,
       claim: result.request.claim,
       verdict: result.verdict.label,
+      owner_id: result.owner_id,
     };
     setReports((current) => {
       const next = [summary, ...current.filter((item) => item.assessment_id !== summary.assessment_id)].slice(0, 8);
       window.localStorage.setItem('evidrai_recent_reports', JSON.stringify(next));
       return next;
     });
+  }
+
+  async function refreshReports() {
+    try {
+      const serverReports = await listReports();
+      const recent = serverReports.slice(0, 8);
+      setReports(recent);
+      if (typeof window !== 'undefined') window.localStorage.setItem('evidrai_recent_reports', JSON.stringify(recent));
+    } catch (err) {
+      console.warn('Could not load saved reports', err);
+      try {
+        const saved = window.localStorage.getItem('evidrai_recent_reports');
+        if (saved) setReports(JSON.parse(saved));
+      } catch (localErr) {
+        console.warn(localErr);
+      }
+    }
   }
 
   async function refreshMe() {
@@ -906,7 +925,10 @@ export default function Home() {
         const profile = profileFromSession(session, fallback);
         setAccount(profile);
         setAccountProfile(profile);
-        if (session) refreshMe();
+        if (session) {
+          refreshMe();
+          refreshReports();
+        }
       })
       .catch((err) => setAuthMessage(err.message));
     const unsubscribe = onAuthStateChange((session) => {
@@ -916,8 +938,13 @@ export default function Home() {
       setAccount(profile);
       setAccountProfile(profile);
       setAuthMessage(session ? 'Signed in.' : 'Signed out. Sign in again to use Evidrai.');
-      if (session) refreshMe();
-      else setMe(null);
+      if (session) {
+        refreshMe();
+        refreshReports();
+      } else {
+        setMe(null);
+        setReports([]);
+      }
     });
     if (typeof window !== 'undefined' && window.location.href.includes('type=recovery')) setPasswordRecovery(true);
     try {
@@ -949,6 +976,7 @@ export default function Home() {
       setAccessToken(session?.access_token || '');
       setAuthMessage('Signed in.');
       await refreshMe();
+      await refreshReports();
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-in failed');
     } finally {
@@ -964,6 +992,7 @@ export default function Home() {
       setAccessToken(session?.access_token || '');
       setAuthMessage(session ? 'Free account created.' : 'Account created. Check your email to confirm before signing in.');
       await refreshMe();
+      await refreshReports();
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-up failed');
     } finally {
@@ -995,6 +1024,7 @@ export default function Home() {
       setNewPassword('');
       setAuthMessage('Password updated.');
       await refreshMe();
+      await refreshReports();
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Could not update password');
     } finally {
@@ -1027,6 +1057,7 @@ export default function Home() {
       setSpeechExtraction(null);
       setSpeechVerification(null);
       rememberReport(result);
+      refreshReports();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Assessment failed');
     } finally {
@@ -1247,10 +1278,10 @@ export default function Home() {
         <details className="card reports" open>
           <summary className="reportsSummary">
             <span>Your reports</span>
-            <small>{reports.length} saved locally</small>
+            <small>{reports.length} saved to your account</small>
           </summary>
           <div className="reportsBody">
-            <p className="muted">Reports saved in this browser for the signed-in user.</p>
+            <p className="muted">Reports are saved to your account and mirrored locally as a fallback.</p>
             <form className="loadForm" onSubmit={(event) => { event.preventDefault(); if (reportIdInput.trim()) loadReport(reportIdInput); }}>
               <label>
                 Load by report ID
@@ -1258,7 +1289,7 @@ export default function Home() {
               </label>
               <button className="secondary" type="submit" disabled={!reportIdInput.trim() || loading}>Load report</button>
             </form>
-            {reports.length === 0 ? <p className="muted">No reports in this browser yet. Run a check to start a local report history.</p> : reports.slice(0, 8).map((report) => (
+            {reports.length === 0 ? <p className="muted">No saved reports yet. Run a check to start your account history.</p> : reports.slice(0, 8).map((report) => (
               <button className="reportItem" key={report.assessment_id} onClick={() => loadReport(report.assessment_id)} type="button">
                 <strong>{report.verdict || 'Unverified'}</strong>
                 <span>{report.claim || 'Untitled claim'}</span>
