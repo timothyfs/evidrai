@@ -21,6 +21,47 @@ const methodologySteps = [
   },
 ];
 
+const scoringFactors = [
+  {
+    name: 'Authority',
+    weight: '30%',
+    text: 'Is this source authoritative for this claim type? Primary records, official datasets, filings, transcripts, and direct evidence carry more weight than commentary.',
+  },
+  {
+    name: 'Relevance',
+    weight: '25%',
+    text: 'Does the source directly address the exact claim, or is it only loosely related background?',
+  },
+  {
+    name: 'Directness',
+    weight: '20%',
+    text: 'Is the source close to the underlying evidence, or is it repeating what another source claimed?',
+  },
+  {
+    name: 'Recency',
+    weight: '10%',
+    text: 'Is the source temporally appropriate? Current claims need current evidence; historical claims may need contemporaneous records.',
+  },
+  {
+    name: 'Independence',
+    weight: '10%',
+    text: 'Does this source add an independent evidence chain, or is it amplifying the same report, briefing, post, or wire story?',
+  },
+  {
+    name: 'Bias risk',
+    weight: '5%',
+    text: 'Does the source have a direct incentive to frame the claim selectively? Bias risk is treated as a modifier, not a veto.',
+  },
+];
+
+const scoreBands = [
+  ['4.5-5.0', 'Very strong source'],
+  ['3.75-4.49', 'Strong source'],
+  ['2.75-3.74', 'Useful or mixed source'],
+  ['1.75-2.74', 'Weak source'],
+  ['0-1.74', 'Poor, indirect, or irrelevant source'],
+];
+
 export default function AboutPage() {
   return (
     <main>
@@ -42,6 +83,60 @@ export default function AboutPage() {
             </article>
           ))}
         </div>
+
+        <details className="methodologyScoringDetails" open>
+          <summary><span>How Evidrai scoring works</span><small>Source score, evidence strength, confidence</small></summary>
+          <div className="scoringMethodIntro">
+            <div>
+              <strong>Source score</strong>
+              <span>0.0-5.0</span>
+              <p>How strong an individual source is for the specific claim.</p>
+            </div>
+            <div>
+              <strong>Evidence strength</strong>
+              <span>0-10</span>
+              <p>How strong the reviewed evidence set is after support, contradiction, and repetition are considered.</p>
+            </div>
+            <div>
+              <strong>Confidence</strong>
+              <span>0-100 signal</span>
+              <p>How confident the system should be in the verdict, given source quality and uncertainty.</p>
+            </div>
+          </div>
+
+          <div className="methodologyScoreGrid">
+            {scoringFactors.map((factor) => (
+              <article className="methodologyScoreCard" key={factor.name}>
+                <div>
+                  <strong>{factor.name}</strong>
+                  <span>{factor.weight}</span>
+                </div>
+                <p>{factor.text}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="scoringBands">
+            <h2>Source score bands</h2>
+            <div>
+              {scoreBands.map(([range, label]) => (
+                <span key={range}><strong>{range}</strong>{label}</span>
+              ))}
+            </div>
+          </div>
+
+          <div className="methodologyGuardrails">
+            <h2>Guard rails</h2>
+            <ul>
+              <li>Primary evidence carries more weight than repetition.</li>
+              <li>Five articles based on the same briefing may count as one evidence chain.</li>
+              <li>Context helps explanation, but should not inflate confidence.</li>
+              <li>Strong contradictions reduce confidence, even when many sources support the claim.</li>
+              <li>No score is shown without an explanation path.</li>
+            </ul>
+          </div>
+        </details>
+
         <div className="trustSignals methodologySignals">
           <span>Evidence over repetition</span>
           <span>Confidence is not certainty</span>

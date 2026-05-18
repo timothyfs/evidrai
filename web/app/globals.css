@@ -1746,3 +1746,131 @@ html[data-theme="light"] .scoreOrb {
   .scoreConstellationGrid { grid-template-columns: 1fr; }
   .scoreMetricGrid, .factorGrid { grid-template-columns: 1fr; }
 }
+
+/* Public methodology scoring detail */
+.methodologyScoringDetails {
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(157,183,213,0.14), transparent 34%),
+    rgba(255,255,255,0.028);
+  margin-top: 22px;
+  padding: 18px;
+}
+.methodologyScoringDetails summary {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+}
+.methodologyScoringDetails summary::-webkit-details-marker { display: none; }
+.methodologyScoringDetails summary span {
+  font-size: 1.15rem;
+  font-weight: 950;
+}
+.methodologyScoringDetails summary small {
+  color: var(--muted);
+  font-weight: 850;
+}
+.scoringMethodIntro {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 18px;
+}
+.scoringMethodIntro div,
+.methodologyScoreCard,
+.scoringBands,
+.methodologyGuardrails {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255,255,255,0.035);
+  padding: 15px;
+}
+.scoringMethodIntro div {
+  display: grid;
+  gap: 7px;
+}
+.scoringMethodIntro strong,
+.methodologyScoreCard strong,
+.scoringBands h2,
+.methodologyGuardrails h2 {
+  color: var(--ink);
+}
+.scoringMethodIntro span {
+  color: var(--accent-strong);
+  font-size: 1.2rem;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+.scoringMethodIntro p,
+.methodologyScoreCard p,
+.methodologyGuardrails li {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+.methodologyScoreGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+}
+.methodologyScoreCard div {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.methodologyScoreCard span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 5px 8px;
+}
+.scoringBands,
+.methodologyGuardrails {
+  margin-top: 14px;
+}
+.scoringBands h2,
+.methodologyGuardrails h2 {
+  font-size: 1rem;
+  margin: 0 0 10px;
+}
+.scoringBands div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.scoringBands span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 780;
+  padding: 7px 10px;
+}
+.scoringBands strong {
+  color: var(--ink);
+  margin-right: 6px;
+}
+.methodologyGuardrails ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+}
+html[data-theme="light"] .methodologyScoringDetails,
+html[data-theme="light"] .scoringMethodIntro div,
+html[data-theme="light"] .methodologyScoreCard,
+html[data-theme="light"] .scoringBands,
+html[data-theme="light"] .methodologyGuardrails {
+  background: color-mix(in srgb, var(--card) 92%, white);
+}
+@media (max-width: 780px) {
+  .methodologyScoringDetails summary { align-items: flex-start; display: grid; gap: 6px; }
+  .scoringMethodIntro,
+  .methodologyScoreGrid { grid-template-columns: 1fr; }
+}
