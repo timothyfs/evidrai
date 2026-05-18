@@ -1,9 +1,69 @@
 from __future__ import annotations
 
 import re
+import os
 from typing import Any, Dict, List, Tuple
 
 import requests
+
+
+def _youtube_proxy_settings() -> Dict[str, Any]:
+    """Read non-secret proxy configuration for YouTube transcript extraction.
+
+    Render/serverless IPs are commonly blocked by YouTube even when the same
+    extraction path works from Streamlit or a local machine. Keep this explicit:
+    do not silently use global HTTPS_PROXY, and do not require user cookies.
+    """
+    generic = (os.getenv("YOUTUBE_TRANSCRIPT_PROXY_URL") or "").strip()
+    http_url = (os.getenv("YOUTUBE_TRANSCRIPT_HTTP_PROXY") or generic).strip()
+    https_url = (os.getenv("YOUTUBE_TRANSCRIPT_HTTPS_PROXY") or generic).strip()
+    webshare_username = (os.getenv("YOUTUBE_TRANSCRIPT_WEBSHARE_USERNAME") or "").strip()
+    webshare_password = (os.getenv("YOUTUBE_TRANSCRIPT_WEBSHARE_PASSWORD") or "").strip()
+    webshare_locations = [
+        item.strip().upper()
+        for item in (os.getenv("YOUTUBE_TRANSCRIPT_WEBSHARE_LOCATIONS") or "").split(",")
+        if item.strip()
+    ]
+    return {
+        "http_url": http_url,
+        "https_url": https_url,
+        "webshare_username": webshare_username,
+        "webshare_password": webshare_password,
+        "webshare_locations": webshare_locations,
+    }
+
+
+def _requests_proxy_dict() -> Dict[str, str]:
+    settings = _youtube_proxy_settings()
+    proxies: Dict[str, str] = {}
+    if settings["http_url"]:
+        proxies["http"] = settings["http_url"]
+    if settings["https_url"]:
+        proxies["https"] = settings["https_url"]
+    return proxies
+
+
+def _yt_dlp_proxy_url() -> str:
+    settings = _youtube_proxy_settings()
+    return settings["https_url"] or settings["http_url"] or ""
+
+
+def _youtube_transcript_proxy_config():
+    settings = _youtube_proxy_settings()
+    try:
+        from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
+    except Exception:
+        return None
+
+    if settings["webshare_username"] and settings["webshare_password"]:
+        return WebshareProxyConfig(
+            proxy_username=settings["webshare_username"],
+            proxy_password=settings["webshare_password"],
+            filter_ip_locations=settings["webshare_locations"] or None,
+        )
+    if settings["http_url"] or settings["https_url"]:
+        return GenericProxyConfig(http_url=settings["http_url"] or None, https_url=settings["https_url"] or None)
+    return None
 
 
 def clean_vtt_transcript(text: str) -> str:
@@ -98,6 +158,11 @@ def _caption_candidates(tracks: Dict[str, List[Dict[str, Any]]], preferred_langs
 
 def transcript_backend_status() -> Dict[str, Any]:
     status: Dict[str, Any] = {}
+    proxy_settings = _youtube_proxy_settings()
+    status["proxy_configured"] = bool(proxy_settings["http_url"] or proxy_settings["https_url"] or (proxy_settings["webshare_username"] and proxy_settings["webshare_password"]))
+    status["generic_proxy_configured"] = bool(proxy_settings["http_url"] or proxy_settings["https_url"])
+    status["webshare_proxy_configured"] = bool(proxy_settings["webshare_username"] and proxy_settings["webshare_password"])
+    status["webshare_location_filter_configured"] = bool(proxy_settings["webshare_locations"])
     try:
         import youtube_transcript_api  # type: ignore
         status["youtube_transcript_api"] = True
@@ -136,7 +201,7 @@ def _extract_with_youtube_transcript_api(url: str, preferred_langs: Tuple[str, .
         return {"ok": False, "code": "youtube_transcript_api_missing", "error": "youtube-transcript-api is not installed."}
 
     try:
-        fetched = YouTubeTranscriptApi().fetch(video_id, languages=list(preferred_langs))
+        fetched = YouTubeTranscriptApi(proxy_config=_youtube_transcript_proxy_config()).fetch(video_id, languages=list(preferred_langs))
     except Exception as exc:
         return {"ok": False, "code": "youtube_transcript_api_failed", "error": str(exc)}
 
@@ -195,7 +260,11 @@ def extract_youtube_transcript(url: str, preferred_langs: Tuple[str, ...] = ("en
         return {"ok": False, "error": "Automatic transcript extraction is unavailable. Paste the transcript manually and run the speech/video audit again.", "developer_detail": transcript_api_result.get("error", "yt-dlp is not installed")}
 
     try:
-        with YoutubeDL({"skip_download": True, "quiet": True, "no_warnings": True}) as ydl:
+        ydl_options = {"skip_download": True, "quiet": True, "no_warnings": True}
+        proxy_url = _yt_dlp_proxy_url()
+        if proxy_url:
+            ydl_options["proxy"] = proxy_url
+        with YoutubeDL(ydl_options) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as exc:
         raw_error = str(exc)
@@ -238,7 +307,7 @@ def extract_youtube_transcript(url: str, preferred_langs: Tuple[str, ...] = ("en
         if not caption_url:
             continue
         try:
-            response = requests.get(caption_url, timeout=20)
+            response = requests.get(caption_url, timeout=20, proxies=_requests_proxy_dict() or None)
             response.raise_for_status()
         except Exception:
             continue

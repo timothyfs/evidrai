@@ -1,4 +1,4 @@
-from evidrai.transcripts import _caption_candidates, clean_pasted_youtube_transcript, clean_vtt_transcript
+from evidrai.transcripts import _caption_candidates, _requests_proxy_dict, _yt_dlp_proxy_url, clean_pasted_youtube_transcript, clean_vtt_transcript, transcript_backend_status
 
 
 def test_clean_vtt_transcript_removes_timestamps_tags_and_duplicates():
@@ -53,3 +53,24 @@ we created 10 million jobs
     assert cleaned.count("thank you everybody") == 1
     assert "Applause" not in cleaned
     assert "[0:12] we created 10 million jobs" in cleaned
+
+
+def test_youtube_proxy_env_is_explicit(monkeypatch):
+    monkeypatch.delenv("YOUTUBE_TRANSCRIPT_PROXY_URL", raising=False)
+    monkeypatch.delenv("YOUTUBE_TRANSCRIPT_HTTP_PROXY", raising=False)
+    monkeypatch.delenv("YOUTUBE_TRANSCRIPT_HTTPS_PROXY", raising=False)
+    monkeypatch.delenv("YOUTUBE_TRANSCRIPT_WEBSHARE_USERNAME", raising=False)
+    monkeypatch.delenv("YOUTUBE_TRANSCRIPT_WEBSHARE_PASSWORD", raising=False)
+    monkeypatch.setenv("HTTPS_PROXY", "http://global-proxy.example:8080")
+
+    assert _requests_proxy_dict() == {}
+    assert _yt_dlp_proxy_url() == ""
+
+    monkeypatch.setenv("YOUTUBE_TRANSCRIPT_PROXY_URL", "http://youtube-proxy.example:8080")
+
+    assert _requests_proxy_dict() == {
+        "http": "http://youtube-proxy.example:8080",
+        "https": "http://youtube-proxy.example:8080",
+    }
+    assert _yt_dlp_proxy_url() == "http://youtube-proxy.example:8080"
+    assert transcript_backend_status()["generic_proxy_configured"] is True
