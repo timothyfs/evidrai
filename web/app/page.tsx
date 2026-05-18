@@ -128,11 +128,19 @@ function sourceStats(sources: AssessmentSource[]) {
   return groupSources(sources).map(({ group, sources: grouped }) => `${group}: ${grouped.length}`);
 }
 
-function evidenceStrengthLabel(score?: number | null) {
+function evidenceStrengthLabel(score?: number | null, verdict?: string) {
   if (typeof score !== 'number' || !Number.isFinite(score)) return '';
-  if (score >= 8) return 'Strong evidence base';
-  if (score >= 5.5) return 'Moderate evidence base';
-  if (score >= 3) return 'Limited evidence base';
+  const magnitude = Math.abs(score);
+  const contradicted = (verdict || '').toLowerCase().includes('contradict') || score < 0;
+  if (contradicted) {
+    if (magnitude >= 8) return 'Strong contradiction found';
+    if (magnitude >= 5.5) return 'Moderate contradiction found';
+    if (magnitude >= 3) return 'Limited contradiction found';
+    return 'Weak contradiction signal';
+  }
+  if (magnitude >= 8) return 'Strong evidence base';
+  if (magnitude >= 5.5) return 'Moderate evidence base';
+  if (magnitude >= 3) return 'Limited evidence base';
   return 'Weak evidence base';
 }
 
@@ -177,23 +185,25 @@ function EvidenceScorePanel({ assessment }: { assessment: AssessmentResponse }) 
   const contradictionCount = sources.filter((source) => sourceGroup(source) === 'Contradicting').length;
   const supportCount = sources.filter((source) => sourceGroup(source) === 'Corroborating').length;
   const evidenceScore = assessment.verdict.evidence_strength_score ?? null;
-  const confidence = confidencePercent(assessment.verdict.confidence, evidenceScore);
+  const displayEvidenceScore = typeof evidenceScore === 'number' ? Math.abs(evidenceScore) : null;
+  const contradicted = assessment.verdict.label.toLowerCase().includes('contradict') || (typeof evidenceScore === 'number' && evidenceScore < 0);
+  const confidence = confidencePercent(assessment.verdict.confidence, displayEvidenceScore);
   return (
     <section className="scoreConstellation" aria-label="Evidence scoring overview">
       <div className="scoreConstellationHeader">
         <div>
           <p className="eyebrow">Evidence scorecard</p>
-          <h3>How strong is the evidence?</h3>
+          <h3>{contradicted ? 'How strong is the contradiction?' : 'How strong is the evidence?'}</h3>
         </div>
         <span>Source-weighted, not volume-weighted</span>
       </div>
       <div className="scoreConstellationGrid">
         <article className="scoreHeroTile">
-          <div className="scoreRingLarge" style={{ '--score-deg': `${Math.round(normaliseScore(evidenceScore, 10) * 360)}deg` } as CSSProperties}>
-            <strong>{typeof evidenceScore === 'number' ? evidenceScore.toFixed(1) : '—'}</strong>
-            <span>/10 evidence</span>
+          <div className="scoreRingLarge" style={{ '--score-deg': `${Math.round(normaliseScore(displayEvidenceScore, 10) * 360)}deg` } as CSSProperties}>
+            <strong>{typeof displayEvidenceScore === 'number' ? displayEvidenceScore.toFixed(1) : '—'}</strong>
+            <span>/10 {contradicted ? 'contradiction' : 'evidence'}</span>
           </div>
-          <p>{evidenceStrengthLabel(evidenceScore) || 'Evidence strength depends on source quality, directness, and contradiction.'}</p>
+          <p>{evidenceStrengthLabel(evidenceScore, assessment.verdict.label) || 'Evidence strength depends on source quality, directness, and contradiction.'}</p>
         </article>
         <div className="scoreMetricGrid">
           <div><span>Confidence</span><strong>{assessment.verdict.confidence || 'Unstated'}</strong><em>{confidence}% signal</em></div>
@@ -204,8 +214,8 @@ function EvidenceScorePanel({ assessment }: { assessment: AssessmentResponse }) 
       </div>
       <details className="scoreMethodDetails">
         <summary><span>Why these scores?</span><small>Open scoring logic</small></summary>
-        <p>Evidence strength is separate from source count. Primary, direct, relevant and independent sources move the score more than repeated coverage or background context.</p>
-        <p>Contradictions and weak evidence chains reduce confidence, even when a claim is widely repeated.</p>
+        <p>Evidence strength is directional: it can support a claim or support rejecting it. For contradicted claims, the score is shown as contradiction strength.</p>
+        <p>Primary, direct, relevant and independent sources move the score more than repeated coverage or background context. Contradictions reduce confidence in the claim even when it is widely repeated.</p>
       </details>
     </section>
   );
@@ -707,7 +717,7 @@ function SiteHeader({ account, me, signedIn, theme, onToggleTheme, onSignOut, au
 function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
   const tone = verdictTone(assessment.verdict.label);
   const confidence = confidencePercent(assessment.verdict.confidence, assessment.verdict.evidence_strength_score);
-  const evidenceStrength = evidenceStrengthLabel(assessment.verdict.evidence_strength_score);
+  const evidenceStrength = evidenceStrengthLabel(assessment.verdict.evidence_strength_score, assessment.verdict.label);
   const stats = sourceStats(assessment.sources || []);
   const reasoning = assessment.reasoning ? reasoningEntries(assessment.reasoning) : [];
   return (

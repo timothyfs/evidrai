@@ -95,7 +95,7 @@ export default function AboutPage() {
             <div>
               <strong>Evidence strength</strong>
               <span>0-10</span>
-              <p>How strong the reviewed evidence set is after support, contradiction, and repetition are considered.</p>
+              <p>How strong the reviewed evidence set is after support, contradiction, and repetition are considered. For false or contradicted claims, this is shown as contradiction strength.</p>
             </div>
             <div>
               <strong>Confidence</strong>
@@ -131,7 +131,8 @@ export default function AboutPage() {
               <li>Primary evidence carries more weight than repetition.</li>
               <li>Five articles based on the same briefing may count as one evidence chain.</li>
               <li>Context helps explanation, but should not inflate confidence.</li>
-              <li>Strong contradictions reduce confidence, even when many sources support the claim.</li>
+              <li>Strong contradictions reduce confidence in the claim, even when it is widely repeated.</li>
+              <li>When a claim is rejected, Evidrai should say “claim unsupported; credible contradiction found” rather than implying the disproof itself is weak.</li>
               <li>No score is shown without an explanation path.</li>
             </ul>
           </div>

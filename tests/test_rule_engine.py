@@ -238,3 +238,27 @@ def test_amplification_warning_stays_clear_for_independent_primary_and_reporting
 
     assert warning["triggered"] is False
     assert warning["level"] == "none"
+
+
+def test_contradicted_claim_uses_clear_unsupported_framing():
+    rule_view = verdict_for(
+        [
+            source(support="contradicts", category="credible_contradiction", source_type="secondary", cluster="fact-check"),
+            source(support="mixed", category="rumor_amplification", source_type="secondary", cluster="rumor"),
+        ],
+        pendulum_band="Contradicted by evidence",
+    )
+
+    aligned = align_reasoning_with_rules(
+        {
+            "verified_verdict": "Unverified",
+            "verified_confidence": "Low",
+            "consensus_strength": "Weak agreement",
+            "consensus_summary": "Reviewed sources contradict the claim.",
+        },
+        rule_view,
+    )
+
+    assert aligned["verified_verdict"] == "False / contradicted"
+    assert aligned["consensus_strength"] == "Claim unsupported; credible contradiction found"
+    assert aligned["consensus_summary"].startswith("Claim unsupported; credible contradiction found.")

@@ -481,10 +481,12 @@ def run_claim_pipeline_typed(user_input: str, llm: OpenAICompatibleClient, searc
     reasoning["evidence_assessment"]["actual_evidence"] = reasoning["evidence_assessment"].get("actual_evidence") or split_view["actual_evidence"]
     reasoning["evidence_assessment"]["rumor_drivers"] = reasoning["evidence_assessment"].get("rumor_drivers") or split_view["rumor_drivers"]
 
-    if not reasoning.get("consensus_strength"):
-        support_count = sum(1 for source in sources if source.claim_support == "supports")
-        contradict_count = sum(1 for source in sources if source.claim_support == "contradicts")
-        primary_support = sum(1 for source in sources if source.source_type == "primary" and source.claim_support == "supports")
+    support_count = sum(1 for source in sources if source.claim_support == "supports")
+    contradict_count = sum(1 for source in sources if source.claim_support == "contradicts")
+    primary_support = sum(1 for source in sources if source.source_type == "primary" and source.claim_support == "supports")
+    if reasoning.get("verified_verdict") == "False / contradicted" and contradict_count >= 1:
+        reasoning["consensus_strength"] = "Claim unsupported; credible contradiction found"
+    elif not reasoning.get("consensus_strength"):
         if support_count >= 3 and contradict_count == 0 and primary_support >= 1:
             reasoning["consensus_strength"] = "Strong agreement"
         elif support_count >= 2 and contradict_count <= 1:

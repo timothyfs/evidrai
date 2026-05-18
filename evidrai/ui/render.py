@@ -364,14 +364,16 @@ def render_evidence_scorecard(result: Dict[str, Any]) -> None:
 
     with st.container():
         if score is not None:
-            render_factor_meter("Overall evidence strength", score, 10)
+            score_value = numeric_score(score)
+            score_label = "Contradiction strength" if score_value < 0 else "Overall evidence strength"
+            render_factor_meter(score_label, abs(score_value), 10)
         render_factor_meter("Average source quality", stats["avg_score"], 5)
         render_factor_meter("Primary-source share", stats["primary_ratio"] * 100, 100)
         render_factor_meter("High-quality share", stats["high_quality_ratio"] * 100, 100)
 
     with st.expander("Why these scores?", expanded=False):
-        st.write("Evidence strength is based on the strongest weighted support or contradiction, then reduced when the reviewed set is mostly contextual, amplified, stale, or internally conflicted.")
-        st.write("Source quality is separate: a source can be reputable and still not directly prove the claim.")
+        st.write("Evidence strength is directional: it can support a claim or support rejecting it. For contradicted claims, the score is better read as contradiction strength.")
+        st.write("Source quality is separate: a source can be reputable and still not directly prove or disprove the claim.")
         st.write("Primary-source share matters because direct records usually beat commentary, repetition, or status.")
 
 

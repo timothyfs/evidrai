@@ -407,6 +407,9 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
         else:
             reasoning["verified_confidence"] = model_confidence
 
+    if rule_verdict == "False / contradicted" and stats["contradictory_evidence"] >= 1:
+        reasoning["consensus_strength"] = "Claim unsupported; credible contradiction found"
+
     if rule_view["soft_claim"] and reasoning.get("verified_confidence") == "High" and not rule_view.get("absolute_claim"):
         reasoning["verified_confidence"] = "Medium"
     if rule_view["soft_claim"] and reasoning.get("verified_verdict") in {"Supported", "Likely supported", "Partly supported", "Not supported by credible evidence", "False / contradicted"} and not rule_view.get("absolute_claim"):
@@ -442,8 +445,12 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
         reasoning["final_explanation"] = (final_explanation + "\n\nRule-based check: " + explanation_note).strip()
 
     summary = (reasoning.get("consensus_summary") or "").strip()
+    if rule_verdict == "False / contradicted" and stats["contradictory_evidence"] >= 1 and "Claim unsupported; credible contradiction found" not in summary:
+        summary = ("Claim unsupported; credible contradiction found. " + summary).strip()
     if explanation_note and explanation_note not in summary:
         reasoning["consensus_summary"] = (summary + " " + explanation_note).strip()
+    else:
+        reasoning["consensus_summary"] = summary
 
     return reasoning
 
