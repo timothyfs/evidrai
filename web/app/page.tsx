@@ -856,6 +856,7 @@ export default function Home() {
   const [authDiagnostics, setAuthDiagnostics] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
+  const [reportsOpen, setReportsOpen] = useState(true);
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
   const [reportIdInput, setReportIdInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -923,6 +924,10 @@ export default function Home() {
       }
     }
   }
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') setReportsOpen(!window.matchMedia('(max-width: 900px)').matches);
+  }, []);
 
   useEffect(() => {
     const fallback = getAnonymousAccountProfile();
@@ -1283,10 +1288,11 @@ export default function Home() {
           {error && <p className="error errorState">{error}</p>}
         </section>
 
-        <details className="card reports" open>
+        <details className="card reports" open={reportsOpen} onToggle={(event) => setReportsOpen(event.currentTarget.open)}>
           <summary className="reportsSummary">
             <span>Your reports</span>
-            <small>{reports.length} saved to your account</small>
+            <small className="reportsDesktopCount">{reports.length} saved to your account</small>
+            <small className="reportsMobileCount">{reports.length} saved · separate history</small>
           </summary>
           <div className="reportsBody">
             <p className="muted">Reports are saved to your account and mirrored locally as a fallback.</p>

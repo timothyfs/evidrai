@@ -886,6 +886,8 @@ html:not([data-theme="light"]) .checkedClaim > div:last-child > p {
 .reportsSummary::-webkit-details-marker { display: none; }
 .reportsSummary span { font-size: 1.2rem; font-weight: 950; }
 .reportsSummary small { color: var(--muted); font-weight: 850; }
+
+.reportsMobileCount { display: none; }
 .reportsSummary::after {
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -984,10 +986,6 @@ html[data-theme="light"] .verdictPanel {
   background: white;
   color: var(--ink);
 }
-@media (max-width: 900px) {
-  .reports { order: -1; }
-}
-
 /* Verification input and loading state refinement */
 .verifyCard {
   display: grid;
@@ -1419,8 +1417,45 @@ html[data-theme="light"] .guideSteps span {
   .sourceCard { gap: 7px; }
   .sourceCard > p,
   .sourceReason { font-size: 0.9rem; }
-  .reports { order: 3; }
-  .reports:not([open]) { padding: 18px; }
+  .reports {
+    margin-top: 16px;
+    order: 3;
+  }
+  .reports:not([open]) {
+    padding: 14px 16px;
+  }
+  .reportsSummary {
+    gap: 10px;
+  }
+  .reportsSummary span {
+    font-size: 1rem;
+  }
+  .reportsDesktopCount { display: none; }
+  .reportsMobileCount {
+    display: inline;
+    font-size: 0.72rem;
+    margin-left: auto;
+    text-align: right;
+  }
+  .reports[open] .reportsBody {
+    max-height: min(62vh, 520px);
+    overflow: auto;
+    padding-right: 2px;
+  }
+  .reportsBody > .muted:first-child {
+    font-size: 0.86rem;
+    margin-top: 0;
+  }
+  .reportItem {
+    margin-top: 8px;
+    padding: 12px;
+  }
+  .reportItem span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
   .accountMenuPanel p:nth-child(3) { display: none; }
 }
 @media (max-width: 560px) {
@@ -1433,6 +1468,10 @@ html[data-theme="light"] .guideSteps span {
   .primaryInput, .verifyGuide, .speechExplainer, .selectionGuide, .youtubeFallbackBox { border-radius: 18px; }
   .checkedClaim { padding: 13px; }
   .verdict.mini { padding: 13px; }
+  .compactHero h1 { font-size: clamp(1.9rem, 11vw, 2.6rem); }
+  .compactHero .lead { font-size: 0.98rem; line-height: 1.45; }
+  .workspaceIntro p { display: none; }
+  .trustLanguageStrip { display: none; }
 }
 
 /* Trust language and admin UX polish */
