@@ -296,6 +296,47 @@ def _assessment_response_from_request(request: AssessmentCreateRequest, mode: st
     return save_report(assessment)
 
 
+def _save_speech_claim_assessment(result: Dict[str, Any], *, source_url: str, mode: str, owner_id: str = "") -> AssessmentResponse:
+    speech_claim = result.get("speech_claim") or {}
+    claim_text = (
+        speech_claim.get("normalized_claim")
+        or speech_claim.get("quote")
+        or result.get("claim")
+        or "Speech claim"
+    )
+    assessment = serialize_assessment_response(
+        result,
+        claim=str(claim_text),
+        source_url=source_url,
+        category="speech-video",
+        mode=f"speech-{mode}",
+        build=get_app_build(),
+        include_debug=False,
+        owner_id=owner_id,
+    )
+    assessment.request.settings.update(
+        {
+            "result_mode": "speech_verify",
+            "speech_claim_id": speech_claim.get("id", ""),
+            "speech_quote": speech_claim.get("quote", ""),
+            "source_url": source_url,
+            "build": get_app_build(),
+        }
+    )
+    return save_report(assessment)
+
+
+def _attach_saved_speech_assessments(checked_claims: list[Dict[str, Any]], *, source_url: str, mode: str, owner_id: str = "") -> list[Dict[str, Any]]:
+    enriched: list[Dict[str, Any]] = []
+    for item in checked_claims:
+        result = dict(item)
+        assessment = _save_speech_claim_assessment(result, source_url=source_url, mode=mode, owner_id=owner_id)
+        result["assessment"] = assessment.model_dump(mode="json")
+        result["assessment_id"] = assessment.assessment_id
+        enriched.append(result)
+    return enriched
+
+
 @app.post("/sources/extract", response_model=ExtractedSource)
 def extract_source(request: SourceExtractRequest) -> ExtractedSource:
     source_url = (request.source_url or "").strip()
@@ -592,6 +633,7 @@ def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnv
         verify_speech_claim(claim, index=idx, source_url=source_url, mode=mode, llm=llm, search=search)
         for idx, claim in enumerate(request.claims, start=1)
     ]
+    checked_claims = _attach_saved_speech_assessments(checked_claims, source_url=source_url, mode=mode, owner_id=context.owner_id)
     result = {
         "schema_version": "speech_verification.v1",
         "source_url": source_url,
@@ -623,6 +665,14 @@ def speech_audit(request: SpeechAuditRequest, http_request: Request) -> ApiEnvel
         raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "TAVILY_API_KEY is required for deep speech audit"})
 
     result = run_speech_audit(transcript, source_url, request.max_claims, llm, search, verification_mode=request.verification_mode)
+    mode = "deep" if request.verification_mode == "deep" else "fast"
+    result["claims_checked"] = _attach_saved_speech_assessments(
+        list(result.get("claims_checked") or []),
+        source_url=source_url,
+        mode=mode,
+        owner_id=context.owner_id,
+    )
+    result["claims_checked_count"] = len(result["claims_checked"])
     result["settings"] = {
         "result_mode": "speech_audit",
         "source_url": source_url,

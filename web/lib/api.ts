@@ -157,6 +157,8 @@ export type SpeechExtractionResult = {
 export type SpeechCheckedClaim = {
   speech_claim?: SpeechClaim;
   audit_index?: number;
+  assessment_id?: string;
+  assessment?: AssessmentResponse;
   verdict?: string;
   verified_verdict?: string;
   confidence?: string;

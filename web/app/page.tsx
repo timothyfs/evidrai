@@ -457,14 +457,22 @@ function SpeechResult({
                   </div>
                   <div>
                     <strong>{item.speech_claim?.normalized_claim || item.speech_claim?.quote || `Claim ${index + 1}`}</strong>
-                    {(item.summary || item.tldr) && <p>{item.summary || item.tldr}</p>}
-                    {item.sources?.length ? (
-                      <div className="sourceGrid compact">
-                        {item.sources.slice(0, 4).map((source, sourceIndex) => (
-                          <SourceCard source={source} compact key={`${source.id || source.url}-${sourceIndex}`} />
-                        ))}
+                    {item.assessment ? (
+                      <div className="embeddedAssessment">
+                        <AssessmentResult assessment={item.assessment} />
                       </div>
-                    ) : <p className="muted">No sources returned for this checked claim.</p>}
+                    ) : (
+                      <>
+                        {(item.summary || item.tldr) && <p>{item.summary || item.tldr}</p>}
+                        {item.sources?.length ? (
+                          <div className="sourceGrid compact">
+                            {item.sources.slice(0, 4).map((source, sourceIndex) => (
+                              <SourceCard source={source} compact key={`${source.id || source.url}-${sourceIndex}`} />
+                            ))}
+                          </div>
+                        ) : <p className="muted">No sources returned for this checked claim.</p>}
+                      </>
+                    )}
                   </div>
                 </article>
               );

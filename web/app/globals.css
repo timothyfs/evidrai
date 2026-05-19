@@ -272,6 +272,17 @@ summary { cursor: pointer; font-weight: 900; }
   text-align: left;
 }
 .sourceGrid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.embeddedAssessment {
+  margin-top: 4px;
+}
+.embeddedAssessment .resultCard {
+  margin-top: 0;
+  padding: 18px;
+}
+.embeddedAssessment .feedbackBox {
+  margin-top: 18px;
+}
 .reasonGrid {
   display: flex;
   flex-wrap: wrap;
@@ -839,6 +850,7 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
 .navMenu > summary span:nth-child(2) { width: 11px; }
 .navMenu > summary span:nth-child(3) { width: 7px; }
 html:not([data-theme="light"]) .claimPick,
+html:not([data-theme="light"]) .checkedClaim,
 html:not([data-theme="light"]) .checkPill,
 html:not([data-theme="light"]) .segmented button,
 html:not([data-theme="light"]) .reportItem,
@@ -849,6 +861,17 @@ html:not([data-theme="light"]) .facts span {
 html:not([data-theme="light"]) .segmented button.active {
   background: rgba(157, 183, 213, 0.22);
   color: var(--ink);
+}
+
+html:not([data-theme="light"]) .checkedClaim {
+  border-color: rgba(196, 211, 224, 0.16);
+  background: linear-gradient(180deg, rgba(24, 33, 44, 0.96), rgba(18, 25, 34, 0.94));
+}
+html:not([data-theme="light"]) .checkedClaim > div:last-child > strong {
+  color: var(--ink);
+}
+html:not([data-theme="light"]) .checkedClaim > div:last-child > p {
+  color: #b3bfca;
 }
 .reports { align-self: start; }
 .reportsSummary {
