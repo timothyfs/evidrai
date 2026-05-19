@@ -255,9 +255,9 @@ function SourceCard({ source, compact = false }: { source: AssessmentSource; com
         <span>{group}</span>
         {source.narrative_cluster && <span>Chain: {source.narrative_cluster}</span>}
       </div>
-      {compact ? <details className="sourceDetails"><summary>Source detail</summary>{detail}</details> : detail}
+      {compact ? <details className="sourceDetails"><summary><span>Source detail</span><small>Show</small></summary>{detail}</details> : detail}
       <details className="sourceScoringDetails">
-        <summary><span>Why this score?</span><small>{score > 0 ? `${score.toFixed(1)}/5` : 'Scoring detail'}</small></summary>
+        <summary><span>Why this score?</span><small>{score > 0 ? `${score.toFixed(1)}/5 · Show` : 'Show scoring detail'}</small></summary>
         {hasFactors ? (
           <div className="factorGrid">
             <FactorMeter label="Authority" value={factors.authority} />

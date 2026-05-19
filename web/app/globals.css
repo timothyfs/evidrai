@@ -1461,9 +1461,27 @@ html[data-theme="light"] .earlyAccessNotice { background: rgba(255,255,255,0.72)
   padding-top: 8px;
 }
 .sourceDetails summary {
+  align-items: center;
   color: var(--muted);
+  display: flex;
   font-size: 0.82rem;
   font-weight: 850;
+  justify-content: space-between;
+  list-style: none;
+}
+.sourceDetails summary::-webkit-details-marker { display: none; }
+.sourceDetails summary small {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  padding: 4px 7px;
+}
+.sourceDetails[open] summary small { font-size: 0; }
+.sourceDetails[open] summary small::after {
+  content: "Hide";
+  font-size: 0.72rem;
 }
 .firstRunGuide {
   border: 1px solid rgba(157,183,213,0.22);
@@ -1884,8 +1902,22 @@ html[data-theme="light"] .adminGuardRails div {
   display: flex;
   font-size: 0.9rem;
   justify-content: space-between;
+  list-style: none;
 }
-.sourceScoringDetails summary small { color: var(--muted); }
+.sourceScoringDetails summary::-webkit-details-marker { display: none; }
+.sourceScoringDetails summary small {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  padding: 4px 7px;
+}
+.sourceScoringDetails[open] summary small { font-size: 0; }
+.sourceScoringDetails[open] summary small::after {
+  content: "Hide";
+  font-size: 0.72rem;
+}
 .factorGrid {
   display: grid;
   gap: 10px;
