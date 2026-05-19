@@ -121,6 +121,16 @@ export type FeedbackRating = 'Useful' | 'Partly useful' | 'Not useful';
 export type TrustAnalyticsResponse = {
   ok: boolean;
   backend: string;
+  summary?: {
+    claim_checks?: number;
+    evidence_sources?: number;
+    trust_signals?: number;
+    counter_evidence?: number;
+    disputed_claims?: number;
+  };
+  recent_claim_checks?: Array<{ assessment_id: string; claim?: string; verdict?: string; confidence?: string; created_at?: string }>;
+  verdict_distribution?: Array<{ value?: string; verdict?: string; count: number }>;
+  top_source_domains?: Array<{ value?: string; domain?: string; count: number }>;
   top_signals: Array<{ signal_type?: string; value?: string; count: number }>;
   most_disputed_claims: Array<{ claim?: string; value?: string; count: number }>;
   source_reliability_observations?: Array<{ domain?: string; source_url?: string; reliability_delta?: number; observations?: number }>;

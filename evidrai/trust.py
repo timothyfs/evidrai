@@ -201,12 +201,27 @@ class LocalTrustStore:
     def analytics_summary(self, limit: int = 20) -> Dict[str, Any]:
         signals: Dict[str, int] = {}
         disputed: Dict[str, int] = {}
+        verdicts: Dict[str, int] = {}
+        domains: Dict[str, int] = {}
+        recent: Dict[str, Dict[str, Any]] = {}
+        source_count = 0
         if self.path.exists():
             for line in self.path.read_text(encoding="utf-8").splitlines():
                 try:
                     item = json.loads(line)
                 except Exception:
                     continue
+                if item.get("event_kind") == "assessment_snapshot":
+                    assessment_id = item.get("assessment_id") or ""
+                    if assessment_id:
+                        recent[assessment_id] = {"assessment_id": assessment_id, "claim": item.get("claim") or "", "verdict": item.get("verdict") or "", "created_at": item.get("created_at") or item.get("captured_at")}
+                    verdict = item.get("verdict") or "Unknown"
+                    verdicts[verdict] = verdicts.get(verdict, 0) + 1
+                    for source in item.get("sources") or []:
+                        if isinstance(source, dict):
+                            source_count += 1
+                            domain = source.get("domain") or "unknown"
+                            domains[domain] = domains.get(domain, 0) + 1
                 if item.get("event_kind") == "trust_signal":
                     signal = item.get("signal_type") or "unknown"
                     signals[signal] = signals.get(signal, 0) + 1
@@ -216,8 +231,13 @@ class LocalTrustStore:
         return {
             "ok": True,
             "backend": "local_jsonl",
+            "summary": {"claim_checks": len(recent), "evidence_sources": source_count, "trust_signals": sum(signals.values()), "disputed_claims": sum(disputed.values())},
+            "recent_claim_checks": sorted(recent.values(), key=lambda item: item.get("created_at") or "", reverse=True)[:limit],
+            "verdict_distribution": _top_counts(verdicts, limit),
+            "top_source_domains": _top_counts(domains, limit),
             "top_signals": _top_counts(signals, limit),
             "most_disputed_claims": _top_counts(disputed, limit),
+            "source_reliability_observations": [],
         }
 
 
@@ -341,6 +361,23 @@ class PostgresTrustStore:
         self._ensure_schema()
         with self._connect() as conn:
             with conn.cursor() as cur:
+                cur.execute("SELECT count(*) AS count FROM trust_claim_checks")
+                claim_count = int((cur.fetchone() or {}).get("count") or 0)
+                cur.execute("SELECT count(*) AS count FROM trust_evidence_sources")
+                source_count = int((cur.fetchone() or {}).get("count") or 0)
+                cur.execute("SELECT count(*) AS count FROM trust_signal_events")
+                signal_count = int((cur.fetchone() or {}).get("count") or 0)
+                cur.execute("SELECT count(*) AS count FROM trust_counter_evidence")
+                counter_count = int((cur.fetchone() or {}).get("count") or 0)
+                cur.execute("SELECT assessment_id, claim, verdict, confidence, created_at FROM trust_claim_checks ORDER BY created_at DESC NULLS LAST, captured_at DESC LIMIT %s", (limit,))
+                recent_claims = [dict(row) for row in cur.fetchall()]
+                for row in recent_claims:
+                    if hasattr(row.get("created_at"), "isoformat"):
+                        row["created_at"] = row["created_at"].isoformat()
+                cur.execute("SELECT verdict AS value, count(*) AS count FROM trust_claim_checks GROUP BY verdict ORDER BY count DESC LIMIT %s", (limit,))
+                verdict_distribution = [dict(row) for row in cur.fetchall()]
+                cur.execute("SELECT domain AS value, count(*) AS count FROM trust_evidence_sources WHERE domain IS NOT NULL AND domain <> '' GROUP BY domain ORDER BY count DESC LIMIT %s", (limit,))
+                top_domains = [dict(row) for row in cur.fetchall()]
                 cur.execute("SELECT signal_type, count(*) AS count FROM trust_signal_events GROUP BY signal_type ORDER BY count DESC LIMIT %s", (limit,))
                 top_signals = [dict(row) for row in cur.fetchall()]
                 cur.execute(
@@ -358,7 +395,7 @@ class PostgresTrustStore:
                 disputed = [dict(row) for row in cur.fetchall()]
                 cur.execute("SELECT domain, sum(reliability_delta) AS reliability_delta, count(*) AS observations FROM source_reliability_observations WHERE domain IS NOT NULL GROUP BY domain ORDER BY observations DESC LIMIT %s", (limit,))
                 source_reliability = [dict(row) for row in cur.fetchall()]
-        return {"ok": True, "backend": "postgres", "top_signals": top_signals, "most_disputed_claims": disputed, "source_reliability_observations": source_reliability}
+        return {"ok": True, "backend": "postgres", "summary": {"claim_checks": claim_count, "evidence_sources": source_count, "trust_signals": signal_count, "counter_evidence": counter_count, "disputed_claims": sum(int(row.get("count") or 0) for row in disputed)}, "recent_claim_checks": recent_claims, "verdict_distribution": verdict_distribution, "top_source_domains": top_domains, "top_signals": top_signals, "most_disputed_claims": disputed, "source_reliability_observations": source_reliability}
 
 
 def _top_counts(values: Dict[str, int], limit: int) -> List[Dict[str, Any]]:

@@ -164,6 +164,48 @@ export default function TrustAnalyticsPage() {
 
           <section className="analyticsGrid">
             <article className="card analyticsCard">
+              <p className="eyebrow">Backfilled corpus</p>
+              <h2>Saved report coverage</h2>
+              <div className="analyticsRow"><span>Claim checks</span><strong>{countLabel(analytics?.summary?.claim_checks)}</strong></div>
+              <div className="analyticsRow"><span>Evidence sources</span><strong>{countLabel(analytics?.summary?.evidence_sources)}</strong></div>
+              <div className="analyticsRow"><span>Trust signals</span><strong>{countLabel(analytics?.summary?.trust_signals)}</strong></div>
+              <div className="analyticsRow"><span>Counter-evidence</span><strong>{countLabel(analytics?.summary?.counter_evidence)}</strong></div>
+            </article>
+
+            <article className="card analyticsCard">
+              <p className="eyebrow">Claims</p>
+              <h2>Recent claim checks</h2>
+              {analytics?.recent_claim_checks?.length ? analytics.recent_claim_checks.map((item) => (
+                <div className="analyticsRow vertical" key={item.assessment_id}>
+                  <span>{item.claim || item.assessment_id}</span>
+                  <small>{[item.verdict, item.confidence].filter(Boolean).join(' · ') || 'No verdict label'}</small>
+                </div>
+              )) : <p className="muted">No claim snapshots captured yet. Use Backfill saved reports.</p>}
+            </article>
+
+            <article className="card analyticsCard">
+              <p className="eyebrow">Evidence</p>
+              <h2>Top source domains</h2>
+              {analytics?.top_source_domains?.length ? analytics.top_source_domains.map((item) => (
+                <div className="analyticsRow" key={item.domain || item.value}>
+                  <span>{item.domain || item.value || 'Unknown domain'}</span>
+                  <strong>{countLabel(item.count)}</strong>
+                </div>
+              )) : <p className="muted">No source domains captured yet.</p>}
+            </article>
+
+            <article className="card analyticsCard">
+              <p className="eyebrow">Verdicts</p>
+              <h2>Verdict distribution</h2>
+              {analytics?.verdict_distribution?.length ? analytics.verdict_distribution.map((item) => (
+                <div className="analyticsRow" key={item.verdict || item.value}>
+                  <span>{item.verdict || item.value || 'Unknown verdict'}</span>
+                  <strong>{countLabel(item.count)}</strong>
+                </div>
+              )) : <p className="muted">No verdict distribution captured yet.</p>}
+            </article>
+
+            <article className="card analyticsCard">
               <p className="eyebrow">Signals</p>
               <h2>Top trust signals</h2>
               {analytics?.top_signals?.length ? analytics.top_signals.map((item) => (
@@ -171,29 +213,18 @@ export default function TrustAnalyticsPage() {
                   <span>{signalName(item.signal_type || item.value || 'unknown')}</span>
                   <strong>{countLabel(item.count)}</strong>
                 </div>
-              )) : <p className="muted">No trust signals captured yet.</p>}
+              )) : <p className="muted">No feedback trust signals captured yet.</p>}
             </article>
 
             <article className="card analyticsCard">
-              <p className="eyebrow">Claims</p>
+              <p className="eyebrow">Disputes</p>
               <h2>Most disputed claims</h2>
               {analytics?.most_disputed_claims?.length ? analytics.most_disputed_claims.map((item) => (
                 <div className="analyticsRow vertical" key={item.claim || item.value}>
                   <span>{item.claim || item.value || 'Unknown claim'}</span>
                   <strong>{countLabel(item.count)}</strong>
                 </div>
-              )) : <p className="muted">No disputed claims captured yet.</p>}
-            </article>
-
-            <article className="card analyticsCard">
-              <p className="eyebrow">Sources</p>
-              <h2>Reliability observations</h2>
-              {analytics?.source_reliability_observations?.length ? analytics.source_reliability_observations.map((item) => (
-                <div className="analyticsRow vertical" key={item.domain || item.source_url || JSON.stringify(item)}>
-                  <span>{item.domain || item.source_url || 'Unknown source'}</span>
-                  <small>{countLabel(item.observations)} observations · delta {String(item.reliability_delta ?? 'n/a')}</small>
-                </div>
-              )) : <p className="muted">No source reliability observations captured yet.</p>}
+              )) : <p className="muted">No disputed claims captured yet. This requires feedback/challenge events, not just saved reports.</p>}
             </article>
           </section>
 
