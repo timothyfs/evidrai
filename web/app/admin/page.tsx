@@ -212,6 +212,7 @@ export default function AdminPage() {
           <span>Account: {account?.label || 'checking...'}</span>
           <span>Product plan: {me?.user?.tier_label || 'not signed in'}</span>
           <span>Admin access: {isAdmin ? 'enabled' : 'not enabled'}</span>
+          {isAdmin && <a href="/admin/trust/analytics">Trust analytics</a>}
           <a href="/">Back to product</a>
         </div>
       </section>

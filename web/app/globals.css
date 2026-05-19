@@ -2106,3 +2106,39 @@ html[data-theme="light"] .methodologyGuardrails {
   .scoringMethodIntro,
   .methodologyScoreGrid { grid-template-columns: 1fr; }
 }
+
+.analyticsGrid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 24px;
+}
+.analyticsCard {
+  align-content: start;
+  display: grid;
+  gap: 12px;
+}
+.analyticsRow {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+.analyticsRow.vertical {
+  align-items: flex-start;
+  flex-direction: column;
+}
+.analyticsRow span {
+  color: var(--ink);
+  font-weight: 800;
+}
+.analyticsRow small {
+  color: var(--muted);
+  font-weight: 750;
+}
+@media (max-width: 880px) {
+  .analyticsGrid { grid-template-columns: 1fr; }
+}

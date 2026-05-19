@@ -118,6 +118,14 @@ export type RuntimeStatus = {
 
 export type FeedbackRating = 'Useful' | 'Partly useful' | 'Not useful';
 
+export type TrustAnalyticsResponse = {
+  ok: boolean;
+  backend: string;
+  top_signals: Array<{ signal_type?: string; value?: string; count: number }>;
+  most_disputed_claims: Array<{ claim?: string; value?: string; count: number }>;
+  source_reliability_observations?: Array<{ domain?: string; source_url?: string; reliability_delta?: number; observations?: number }>;
+};
+
 export type FeedbackResponse = {
   ok: boolean;
   feedback_id: string;
@@ -316,6 +324,10 @@ export function deleteAdminUser(owner_id: string): Promise<{ ok: boolean; owner_
   return request<{ ok: boolean; owner_id: string; deleted: boolean; message: string }>(`/admin/users/${encodeURIComponent(owner_id)}`, {
     method: 'DELETE',
   });
+}
+
+export function getTrustAnalytics(limit = 20): Promise<TrustAnalyticsResponse> {
+  return request<TrustAnalyticsResponse>(`/admin/trust/analytics?limit=${encodeURIComponent(String(limit))}`);
 }
 
 export function submitFeedback(input: {
