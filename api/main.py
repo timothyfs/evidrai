@@ -258,7 +258,10 @@ def _owner_id_from_request(request: Request) -> str:
 
 def _profile_from_request(request: Request):
     context = _auth_context_from_request(request)
-    return context, get_or_create_profile(context.owner_id, email=context.email)
+    profile = get_or_create_profile(context.owner_id, email=context.email)
+    if _is_master_admin(context) and profile.tier != "researcher":
+        profile = set_user_tier(context.owner_id, "researcher", email=context.email)
+    return context, profile
 
 
 def _is_master_admin(context: AuthContext) -> bool:

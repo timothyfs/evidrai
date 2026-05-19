@@ -232,6 +232,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const account = getAccountProfile();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       'X-Evidrai-User-Id': account.owner_id,

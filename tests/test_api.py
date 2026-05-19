@@ -660,3 +660,26 @@ def test_absolute_claim_detector_keeps_claim_level_absolutes():
     assert has_absolute_claim_language("This was the first time Article 5 was invoked") is True
     assert has_absolute_claim_language("She was the only person to vote against it") is True
     assert has_absolute_claim_language("No credible evidence supports the claim") is True
+
+
+def test_master_admin_me_gets_researcher_tier(monkeypatch):
+    calls = []
+    context = api_main.AuthContext(owner_id="admin-user", auth_method="supabase_jwt", email="timfsmithson@gmail.com")
+    monkeypatch.setattr(api_main, "_auth_context_from_request", lambda request: context)
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"timfsmithson@gmail.com"})
+    monkeypatch.setattr(api_main, "get_or_create_profile", lambda owner_id, email="": UserProfile(owner_id=owner_id, email=email, tier="free"))
+
+    def fake_set_user_tier(owner_id, tier, email=""):
+        calls.append((owner_id, tier, email))
+        return UserProfile(owner_id=owner_id, email=email, tier=tier)
+
+    monkeypatch.setattr(api_main, "set_user_tier", fake_set_user_tier)
+
+    response = client.get("/me")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["is_admin"] is True
+    assert payload["user"]["tier"] == "researcher"
+    assert payload["user"]["tier_label"] == "Researcher / Journalist"
+    assert calls == [("admin-user", "researcher", "timfsmithson@gmail.com")]
