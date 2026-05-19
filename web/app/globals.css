@@ -486,12 +486,74 @@ button.danger {
 .staticNav { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .marketingPage { display: grid; gap: 18px; }
 .marketingMatrix { margin-top: 12px; }
+.pageHero { margin-bottom: 18px; }
+.pageActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.marketingGrid {
+  display: grid;
+  gap: 16px;
+  margin: 18px 0;
+}
+.threeColumns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.twoColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.infoCard {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255,255,255,0.035);
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+}
+.infoCard h2 { font-size: 1.18rem; margin: 0; }
+.infoCard p { color: var(--muted); line-height: 1.52; margin: 0; }
+.subduedCard { background: rgba(157,183,213,0.055); }
+.splitSection {
+  align-items: start;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
+}
+.principleList {
+  display: grid;
+  gap: 10px;
+}
+.principleList span,
+.boxedList li {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+  color: var(--muted);
+  line-height: 1.45;
+  padding: 12px 14px;
+}
+.cleanList {
+  color: var(--muted);
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding-left: 18px;
+}
+.boxedList {
+  list-style: none;
+  padding-left: 0;
+}
+html[data-theme="light"] .infoCard,
+html[data-theme="light"] .principleList span,
+html[data-theme="light"] .boxedList li { background: rgba(255,255,255,0.72); }
+@media (max-width: 900px) {
+  .threeColumns,
+  .twoColumns,
+  .splitSection { grid-template-columns: 1fr; }
+}
 @media (max-width: 780px) {
   .siteHeader { grid-template-columns: auto auto 1fr; }
   .accountMenu { grid-column: 1 / -1; justify-self: stretch; }
   .accountMenu > summary { justify-content: space-between; }
   .accountMenuPanel { left: 0; right: 0; }
   .staticNav { justify-content: flex-start; }
+  .pageActions { display: grid; }
 }
 
 /* Phase 1 premium trust-focused visual refinement */
