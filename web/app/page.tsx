@@ -75,6 +75,15 @@ function confidencePercent(confidence?: string | null, fallbackScore?: number | 
   return 50;
 }
 
+function numericScore(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function normaliseScore(score?: number | null, max = 5) {
   if (typeof score !== 'number' || !Number.isFinite(score)) return 0;
   return Math.max(0, Math.min(1, score / max));
@@ -155,15 +164,16 @@ function formatReasoningValue(value: unknown) {
   return String(value);
 }
 
-function FactorMeter({ label, value, max = 5, toneValue }: { label: string; value?: number | null; max?: number; toneValue?: number | null }) {
-  const raw = typeof value === 'number' && Number.isFinite(value) ? value : 0;
-  const display = Math.max(0, Math.min(max, raw));
-  const pct = normaliseScore(display, max) * 100;
-  const toneSource = typeof toneValue === 'number' && Number.isFinite(toneValue) ? toneValue : display;
+function FactorMeter({ label, value, max = 5, toneValue }: { label: string; value?: unknown; max?: number; toneValue?: unknown }) {
+  const parsed = numericScore(value);
+  const display = parsed === null ? null : Math.max(0, Math.min(max, parsed));
+  const pct = display === null ? 0 : normaliseScore(display, max) * 100;
+  const parsedTone = numericScore(toneValue);
+  const toneSource = parsedTone === null ? display : parsedTone;
   return (
-    <div className="factorMeter">
-      <div className="factorMeterLabel"><span>{label}</span><strong>{display.toFixed(1)}/{max}</strong></div>
-      <div className="factorMeterTrack" aria-label={`${label}: ${display.toFixed(1)} out of ${max}`}><span className={scoreTone(toneSource, max)} style={{ width: `${Math.max(4, pct)}%` }} /></div>
+    <div className={`factorMeter ${display === null ? 'missing' : ''}`}>
+      <div className="factorMeterLabel"><span>{label}</span><strong>{display === null ? 'Not captured' : `${display.toFixed(1)}/${max}`}</strong></div>
+      <div className="factorMeterTrack" aria-label={display === null ? `${label}: not captured` : `${label}: ${display.toFixed(1)} out of ${max}`}><span className={display === null ? 'missing' : scoreTone(toneSource, max)} style={{ width: display === null ? '0%' : `${Math.max(4, pct)}%` }} /></div>
     </div>
   );
 }
@@ -224,10 +234,12 @@ function EvidenceScorePanel({ assessment }: { assessment: AssessmentResponse }) 
 }
 
 function SourceCard({ source, compact = false }: { source: AssessmentSource; compact?: boolean }) {
-  const score = Number(source.score || 0);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [scoringOpen, setScoringOpen] = useState(false);
+  const score = numericScore(source.score) ?? 0;
   const role = source.source_role || source.evidence_category || source.stance || '';
   const factors = source.scoring_factors || {};
-  const hasFactors = Object.values(factors).some((value) => typeof value === 'number' && value > 0);
+  const hasCapturedFactors = ['authority', 'relevance', 'directness', 'recency', 'bias_risk', 'independence'].some((key) => numericScore(factors[key]) !== null);
   const quality = sourceQualityLabel(score);
   const group = sourceGroup(source);
   const detail = (
@@ -256,30 +268,40 @@ function SourceCard({ source, compact = false }: { source: AssessmentSource; com
         <span>{group}</span>
         {source.narrative_cluster && <span>Chain: {source.narrative_cluster}</span>}
       </div>
-      {compact ? <details className="sourceDetails"><summary><span>Source detail</span><small>Show</small></summary>{detail}</details> : detail}
-      <details className="sourceScoringDetails">
-        <summary><span>Why this source scored {score > 0 ? `${score.toFixed(1)}/5` : 'this way'}</span><small>Show</small></summary>
-        <div className="sourceScoringContext">
-          <span>{source.source_type || 'Source type unknown'}</span>
-          <span>{group}</span>
-          {role && <span>{role}</span>}
-          {source.domain && <span>{source.domain}</span>}
+      {compact ? (
+        <div className="sourceDetails sourceDisclosure">
+          <button aria-expanded={detailsOpen} className="sourceToggle" onClick={() => setDetailsOpen((open) => !open)} type="button">
+            <span>Source detail</span><small>{detailsOpen ? 'Hide' : 'Show'}</small>
+          </button>
+          {detailsOpen && <div className="sourceDisclosureBody">{detail}</div>}
         </div>
-        {hasFactors ? (
-          <div className="factorGrid">
-            <FactorMeter label="Source score" value={score} />
-            <FactorMeter label="Authority" value={factors.authority} />
-            <FactorMeter label="Relevance" value={factors.relevance} />
-            <FactorMeter label="Directness" value={factors.directness} />
-            <FactorMeter label="Recency" value={factors.recency} />
-            {'independence' in factors && <FactorMeter label="Independence" value={factors.independence} />}
-            <FactorMeter label="Bias risk" value={factors.bias_risk} toneValue={5 - Number(factors.bias_risk || 0)} />
+      ) : detail}
+      <div className="sourceScoringDetails sourceDisclosure">
+        <button aria-expanded={scoringOpen} className="sourceToggle" onClick={() => setScoringOpen((open) => !open)} type="button">
+          <span>Why this source scored {score > 0 ? `${score.toFixed(1)}/5` : 'this way'}</span><small>{scoringOpen ? 'Hide' : 'Show'}</small>
+        </button>
+        {scoringOpen && (
+          <div className="sourceDisclosureBody">
+            <div className="sourceScoringContext">
+              <span>{source.source_type || 'Source type unknown'}</span>
+              <span>{group}</span>
+              {role && <span>{role}</span>}
+              {source.domain && <span>{source.domain}</span>}
+            </div>
+            <div className="factorGrid">
+              <FactorMeter label="Source score" value={score} />
+              <FactorMeter label="Authority" value={factors.authority} />
+              <FactorMeter label="Relevance" value={factors.relevance} />
+              <FactorMeter label="Directness" value={factors.directness} />
+              <FactorMeter label="Recency" value={factors.recency} />
+              {'independence' in factors && <FactorMeter label="Independence" value={factors.independence} />}
+              <FactorMeter label="Bias risk" value={factors.bias_risk} toneValue={numericScore(factors.bias_risk) === null ? null : 5 - (numericScore(factors.bias_risk) || 0)} />
+            </div>
+            {!hasCapturedFactors && <p className="muted">This saved assessment did not include individual factor scores. New assessments should capture these fields when the backend returns scoring factors.</p>}
+            <p className="sourceScoringNote">Each bar uses the same 0–5 value shown beside it. For bias risk, a longer bar means more risk and the colour worsens as the value rises. The overall source score is the weighted contribution used for this claim.</p>
           </div>
-        ) : (
-          <p className="muted">Detailed scoring factors are not available for this source yet. The visible score is the source's weighted contribution to this claim.</p>
         )}
-        <p className="sourceScoringNote">Each bar uses the same 0–5 value shown beside it. For bias risk, a longer bar means more risk and the colour worsens as the value rises. The overall source score is the weighted contribution used for this claim.</p>
-      </details>
+      </div>
     </article>
   );
 }

@@ -1471,28 +1471,34 @@ html[data-theme="light"] .earlyAccessNotice { background: rgba(255,255,255,0.72)
   margin-top: 4px;
   padding-top: 8px;
 }
-.sourceDetails summary {
+.sourceToggle {
   align-items: center;
+  background: transparent;
+  border: 0;
   color: var(--muted);
+  cursor: pointer;
   display: flex;
   font-size: 0.82rem;
   font-weight: 850;
   justify-content: space-between;
-  list-style: none;
+  padding: 0;
+  text-align: left;
+  width: 100%;
 }
-.sourceDetails summary::-webkit-details-marker { display: none; }
-.sourceDetails summary small {
+.sourceToggle small {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
+  flex: 0 0 auto;
   font-size: 0.72rem;
   font-weight: 850;
+  margin-left: 10px;
   padding: 4px 7px;
 }
-.sourceDetails[open] summary small { font-size: 0; }
-.sourceDetails[open] summary small::after {
-  content: "Hide";
-  font-size: 0.72rem;
+.sourceDisclosureBody {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
 }
 .firstRunGuide {
   border: 1px solid rgba(157,183,213,0.22);
@@ -1908,26 +1914,9 @@ html[data-theme="light"] .adminGuardRails div {
   margin-top: 10px;
   padding-top: 12px;
 }
-.sourceScoringDetails summary {
-  align-items: center;
-  display: flex;
+.sourceScoringDetails .sourceToggle {
+  color: var(--ink);
   font-size: 0.9rem;
-  justify-content: space-between;
-  list-style: none;
-}
-.sourceScoringDetails summary::-webkit-details-marker { display: none; }
-.sourceScoringDetails summary small {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 850;
-  padding: 4px 7px;
-}
-.sourceScoringDetails[open] summary small { font-size: 0; }
-.sourceScoringDetails[open] summary small::after {
-  content: "Hide";
-  font-size: 0.72rem;
 }
 .sourceScoringContext {
   display: flex;
@@ -1971,6 +1960,10 @@ html[data-theme="light"] .adminGuardRails div {
   display: block;
   height: 100%;
 }
+.factorMeter.missing .factorMeterTrack {
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0 6px, rgba(255,255,255,0.09) 6px 12px);
+}
+.factorMeter.missing .factorMeterLabel strong { color: var(--muted); }
 .sourceScoringNote {
   color: var(--muted);
   font-size: 0.84rem;
