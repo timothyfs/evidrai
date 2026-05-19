@@ -140,3 +140,14 @@ Date: 2026-05-10
 - Priority: Low
 - Area: Product strategy
 - Description: Once the verification core is stable, evaluate packaging Evidrai as an API/backend service or browser extension.
+
+### Add trust intelligence feedback foundation
+- Status: Done
+- Priority: High
+- Area: Trust intelligence / Platform IP
+- Description: Add foundational architecture, schema, API, UI hooks, and tests for structured trust interaction capture.
+- Acceptance criteria:
+  - Saved assessments produce trust claim/evidence snapshots.
+  - Feedback captures verdict acceptance, trust signals, challenge text, counter-evidence, and source trust/distrust IDs.
+  - Admin trust analytics API exists.
+  - Documentation covers architecture, schema, data flow, analytics, ML-readiness, and model-agnostic orchestration.
