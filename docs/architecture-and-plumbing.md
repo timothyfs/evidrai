@@ -349,6 +349,40 @@ feedback
   rating
   payload
 
+trust_claim_checks
+  assessment_id
+  actor_hash
+  claim/source/verdict/confidence/topic
+  narrative_clusters
+  payload
+
+trust_evidence_sources
+  assessment_id
+  source_id/domain/url/stance/role/cluster
+  scoring_factors
+  payload
+
+trust_signal_events
+  event_id
+  assessment_id
+  feedback_id
+  signal_type/sentiment/target
+  details
+
+trust_counter_evidence
+  counter_evidence_id
+  assessment_id
+  feedback_id
+  url/text_excerpt/status
+  payload
+
+source_reliability_observations
+  observation_id
+  domain/source_id
+  signal_type
+  reliability_delta
+  details
+
 user_profiles
   owner_id
   email
@@ -371,6 +405,7 @@ Migrations:
 002_add_assessment_owner.sql
 003_create_user_profiles.sql
 004_user_profile_admin_trial_fields.sql
+005_create_trust_intelligence.sql
 ```
 
 Apply with:
@@ -434,14 +469,16 @@ Important security rule:
 - `SUPABASE_SERVICE_ROLE_KEY` and `EVIDRAI_ADMIN_TOKEN` belong only on the backend host.
 - They must never be exposed as `NEXT_PUBLIC_*` frontend variables.
 
-### 3.10 Feedback and review loop
+### 3.10 Feedback, trust intelligence, and review loop
 
 Files:
 
 ```text
 evidrai/feedback.py
+evidrai/trust.py
 web/app/page.tsx
 api/main.py
+docs/trust-intelligence-feedback-layer.md
 ```
 
 Feedback is linked to saved assessment IDs. Current feedback operations:
@@ -450,8 +487,16 @@ Feedback is linked to saved assessment IDs. Current feedback operations:
 - list feedback for an assessment
 - load feedback by feedback ID
 - optional Notion-backed review/task flow via integration tooling
+- capture structured trust signals, challenge text, counter-evidence, verdict acceptance/rejection, and source trust/distrust signals
 
-Feedback is an input to the future regression-review loop. Durable product direction: useful feedback should be promotable into test fixtures/regression cases.
+The trust intelligence layer captures training-quality data separately from identity data:
+
+- saved assessments become claim-check snapshots and evidence-source records
+- feedback becomes event-sourced trust signals
+- user IDs are pseudonymised before entering trust tables
+- capture is non-blocking so user-facing report/feedback paths continue if trust logging fails
+
+Feedback is an input to the future regression-review loop. Durable product direction: useful feedback should be promotable into test fixtures/regression cases and credibility-model training datasets.
 
 ## 4. Request/data flows
 
@@ -523,14 +568,25 @@ User opens report
   -> full AssessmentResponse returned
 ```
 
-### 4.6 Feedback
+### 4.6 Feedback and trust intelligence capture
 
 ```text
 User submits feedback on AssessmentResult
   -> POST /assessments/{assessment_id}/feedback
   -> backend loads report
   -> feedback record stores rating/reasons/comment plus full assessment context
+  -> trust layer captures verdict acceptance/rejection, challenge text, counter-evidence, and structured trust signals
+  -> source-level trust/distrust signals become source reliability observations
   -> feedback_id returned
+```
+
+Saved assessment flow:
+
+```text
+AssessmentResponse
+  -> save_report()
+  -> ReportStore persists report
+  -> evidrai.trust captures claim-check snapshot and evidence-source rows
 ```
 
 ### 4.7 Admin user management

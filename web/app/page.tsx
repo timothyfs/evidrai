@@ -306,9 +306,29 @@ const feedbackReasons = [
   'Other',
 ];
 
+const trustSignalOptions = [
+  ['evidence_weak', 'This evidence was weak'],
+  ['source_biased', 'This source felt biased'],
+  ['changed_view', 'This changed my view'],
+  ['needs_primary_sourcing', 'This needs stronger primary sourcing'],
+  ['balanced_explanation', 'This explanation felt balanced'],
+  ['manipulative_wording', 'This wording felt emotionally manipulative'],
+  ['overconfident', 'This feels overconfident'],
+  ['too_uncertain', 'This feels too uncertain'],
+  ['missed_context', 'This missed important context'],
+  ['has_counter_evidence', 'I have counter-evidence'],
+  ['source_unreliable', 'This source seems unreliable'],
+  ['persuasive_explanation', 'This explanation was persuasive'],
+] as const;
+
 function FeedbackControls({ assessment }: { assessment: AssessmentResponse }) {
   const [rating, setRating] = useState<FeedbackRating>('Useful');
   const [reasons, setReasons] = useState<string[]>([]);
+  const [trustSignals, setTrustSignals] = useState<string[]>([]);
+  const [acceptedVerdict, setAcceptedVerdict] = useState<'accepted' | 'rejected' | 'unsure' | ''>('');
+  const [challengeText, setChallengeText] = useState('');
+  const [counterEvidenceUrl, setCounterEvidenceUrl] = useState('');
+  const [counterEvidenceText, setCounterEvidenceText] = useState('');
   const [comment, setComment] = useState('');
   const [status, setStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -317,15 +337,34 @@ function FeedbackControls({ assessment }: { assessment: AssessmentResponse }) {
     setReasons((current) => current.includes(reason) ? current.filter((item) => item !== reason) : [...current, reason]);
   }
 
+  function toggleTrustSignal(signal: string) {
+    setTrustSignals((current) => current.includes(signal) ? current.filter((item) => item !== signal) : [...current, signal]);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setStatus('');
     try {
-      const response = await submitFeedback({ assessment_id: assessment.assessment_id, rating, reasons, comment });
-      setStatus(response.ok ? `Feedback saved. Thank you. ID: ${response.feedback_id}` : 'Feedback submitted, but response was unexpected.');
+      const counterEvidence = counterEvidenceUrl.trim() || counterEvidenceText.trim() ? [{ url: counterEvidenceUrl.trim(), text: counterEvidenceText.trim() }] : [];
+      const response = await submitFeedback({
+        assessment_id: assessment.assessment_id,
+        rating,
+        reasons,
+        trust_signals: trustSignals,
+        accepted_verdict: acceptedVerdict,
+        challenge_text: challengeText,
+        counter_evidence: counterEvidence,
+        comment,
+      });
+      setStatus(response.ok ? `Trust feedback saved. Thank you. ID: ${response.feedback_id}` : 'Feedback submitted, but response was unexpected.');
       setComment('');
       setReasons([]);
+      setTrustSignals([]);
+      setAcceptedVerdict('');
+      setChallengeText('');
+      setCounterEvidenceUrl('');
+      setCounterEvidenceText('');
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Could not save feedback.');
     } finally {
@@ -335,8 +374,8 @@ function FeedbackControls({ assessment }: { assessment: AssessmentResponse }) {
 
   return (
     <section className="feedbackBox">
-      <h3>Was this useful?</h3>
-      <p className="muted">Your feedback is linked to this exact assessment and helps improve evidence quality, caveats, and explanation clarity.</p>
+      <h3>Trust feedback</h3>
+      <p className="muted">Your feedback is linked to this exact assessment and becomes structured trust intelligence for improving evidence ranking, caveats, confidence, and source evaluation.</p>
       <form onSubmit={submit}>
         <div className="segmented" role="radiogroup" aria-label="Feedback rating">
           {(['Useful', 'Partly useful', 'Not useful'] as FeedbackRating[]).map((item) => (
@@ -350,19 +389,56 @@ function FeedbackControls({ assessment }: { assessment: AssessmentResponse }) {
             </button>
           ))}
         </div>
-        <div className="reasonGrid">
-          {feedbackReasons.map((reason) => (
-            <label className="checkPill" key={reason}>
-              <input checked={reasons.includes(reason)} onChange={() => toggleReason(reason)} type="checkbox" />
-              {reason}
-            </label>
-          ))}
+        <label>
+          Did you accept the verdict?
+          <select value={acceptedVerdict} onChange={(event) => setAcceptedVerdict(event.target.value as 'accepted' | 'rejected' | 'unsure' | '')}>
+            <option value="">No verdict signal</option>
+            <option value="accepted">Accepted the verdict</option>
+            <option value="rejected">Rejected / challenged the verdict</option>
+            <option value="unsure">Still unsure</option>
+          </select>
+        </label>
+        <div className="feedbackSubsection">
+          <strong>Structured trust signals</strong>
+          <div className="reasonGrid trustSignalGrid">
+            {trustSignalOptions.map(([signal, label]) => (
+              <label className="checkPill" key={signal}>
+                <input checked={trustSignals.includes(signal)} onChange={() => toggleTrustSignal(signal)} type="checkbox" />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="feedbackSubsection">
+          <strong>General feedback tags</strong>
+          <div className="reasonGrid">
+            {feedbackReasons.map((reason) => (
+              <label className="checkPill" key={reason}>
+                <input checked={reasons.includes(reason)} onChange={() => toggleReason(reason)} type="checkbox" />
+                {reason}
+              </label>
+            ))}
+          </div>
+        </div>
+        <label>
+          Challenge or missing context
+          <textarea className="commentBox" value={challengeText} onChange={(event) => setChallengeText(event.target.value)} placeholder="What did Evidrai miss, overstate, understate, or frame poorly?" />
+        </label>
+        <div className="formRow">
+          <label>
+            Counter-evidence URL
+            <input value={counterEvidenceUrl} onChange={(event) => setCounterEvidenceUrl(event.target.value)} placeholder="https://example.com/primary-source" />
+          </label>
+          <label>
+            Counter-evidence note
+            <input value={counterEvidenceText} onChange={(event) => setCounterEvidenceText(event.target.value)} placeholder="Short excerpt or why it matters" />
+          </label>
         </div>
         <label>
           Optional comment
-          <textarea className="commentBox" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="What was useful, confusing, missing, or wrong?" />
+          <textarea className="commentBox" value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Anything else useful, confusing, missing, or wrong?" />
         </label>
-        <button disabled={submitting} type="submit">{submitting ? 'Saving…' : 'Send feedback'}</button>
+        <button disabled={submitting} type="submit">{submitting ? 'Saving trust feedback…' : 'Send trust feedback'}</button>
       </form>
       {status && <p className={status.startsWith('Could not') ? 'error' : 'success'}>{status}</p>}
     </section>

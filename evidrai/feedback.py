@@ -191,6 +191,13 @@ def build_feedback_record(
     result: Optional[Dict[str, Any]] = None,
     source_url: str = "",
     settings: Optional[Dict[str, Any]] = None,
+    trust_signals: Optional[list[str]] = None,
+    accepted_verdict: str = "",
+    challenge_text: str = "",
+    counter_evidence: Optional[list[Dict[str, Any]]] = None,
+    persuasive_source_ids: Optional[list[str]] = None,
+    distrusted_source_ids: Optional[list[str]] = None,
+    owner_id: str = "",
 ) -> Dict[str, Any]:
     result = result or {}
     settings = settings or {}
@@ -203,6 +210,13 @@ def build_feedback_record(
         "result_key": result_key,
         "rating": rating,
         "reasons": list(reasons or []),
+        "trust_signals": list(trust_signals or []),
+        "accepted_verdict": accepted_verdict,
+        "challenge_text": (challenge_text or "").strip(),
+        "counter_evidence": list(counter_evidence or []),
+        "persuasive_source_ids": list(persuasive_source_ids or []),
+        "distrusted_source_ids": list(distrusted_source_ids or []),
+        "owner_id": owner_id or result.get("owner_id") or "",
         "comment": (comment or "").strip(),
         "claim": claim,
         "verdict": result.get("verified_verdict") or result.get("verdict") or "",
@@ -395,7 +409,15 @@ def _save_feedback_record(record: Dict[str, Any], path: Optional[Path] = None) -
 
 
 def save_feedback(record: Dict[str, Any], store: Optional[FeedbackStore] = None) -> FeedbackResult:
-    return (store or get_feedback_store()).save(record)
+    saved = (store or get_feedback_store()).save(record)
+    try:
+        from evidrai.trust import capture_feedback_trust_events
+
+        capture_feedback_trust_events(record)
+    except Exception:
+        # Trust-intelligence capture should not block explicit feedback saving.
+        pass
+    return saved
 
 
 def load_feedback_by_id(

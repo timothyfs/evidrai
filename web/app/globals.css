@@ -288,6 +288,17 @@ summary { cursor: pointer; font-weight: 900; }
   flex-wrap: wrap;
   gap: 8px;
 }
+.feedbackSubsection {
+  display: grid;
+  gap: 10px;
+}
+.feedbackSubsection > strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+.trustSignalGrid .checkPill {
+  border-radius: 16px;
+}
 .checkPill {
   align-items: center;
   background: white;

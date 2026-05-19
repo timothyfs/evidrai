@@ -694,6 +694,14 @@ Request:
 {
   "rating": "Useful",
   "reasons": ["Verdict clarity", "Source quality"],
+  "trust_signals": ["needs_primary_sourcing", "balanced_explanation"],
+  "accepted_verdict": "unsure",
+  "challenge_text": "The answer needs a primary regulatory source.",
+  "counter_evidence": [
+    {"url": "https://example.com/primary-source", "text": "Relevant excerpt"}
+  ],
+  "persuasive_source_ids": ["src_1"],
+  "distrusted_source_ids": ["src_3"],
   "comment": "Useful result, but caveat could be clearer."
 }
 ```
@@ -718,7 +726,7 @@ Response:
 }
 ```
 
-The backend loads the original report and stores feedback with assessment context.
+The backend loads the original report and stores feedback with assessment context. The extended fields are also captured by the Trust Intelligence Feedback Layer as structured training-quality trust signals. `accepted_verdict` may be `accepted`, `rejected`, `unsure`, or empty.
 
 ### 11.2 List feedback for assessment
 
@@ -762,6 +770,28 @@ Response:
 ```
 
 Returns HTTP 404 if the feedback ID is unknown.
+
+### 11.4 Admin trust analytics
+
+```http
+GET /admin/trust/analytics?limit=20
+```
+
+Requires master admin access.
+
+Response:
+
+```json
+{
+  "ok": true,
+  "backend": "postgres",
+  "top_signals": [],
+  "most_disputed_claims": [],
+  "source_reliability_observations": []
+}
+```
+
+This is the first internal endpoint for the Trust Intelligence Feedback Layer. It exposes structured feedback patterns without coupling the product to any single model provider.
 
 ## 12. Source and transcript endpoints
 
@@ -1114,6 +1144,7 @@ GET    /admin/users
 PATCH  /admin/users/tier
 POST   /admin/users/invite
 DELETE /admin/users/{owner_id}
+GET    /admin/trust/analytics
 POST   /sources/extract
 POST   /transcripts/diagnose
 POST   /claims/check

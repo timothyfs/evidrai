@@ -24,6 +24,7 @@ from evidrai.entitlements import (
 )
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, load_feedback_by_id, save_feedback
+from evidrai.trust import trust_analytics_summary
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
 from evidrai.pipeline.verification import (
     extract_speech_audit_claims,
@@ -104,6 +105,12 @@ class SourceExtractRequest(BaseModel):
 class FeedbackCreateRequest(BaseModel):
     rating: str = Field(default="Useful", pattern="^(Useful|Partly useful|Not useful)$")
     reasons: list[str] = Field(default_factory=list)
+    trust_signals: list[str] = Field(default_factory=list)
+    accepted_verdict: str = Field(default="", pattern="^(|accepted|rejected|unsure)$")
+    challenge_text: str = ""
+    counter_evidence: list[Dict[str, Any]] = Field(default_factory=list)
+    persuasive_source_ids: list[str] = Field(default_factory=list)
+    distrusted_source_ids: list[str] = Field(default_factory=list)
     comment: str = ""
 
 
@@ -454,8 +461,9 @@ def get_report(report_id: str, http_request: Request) -> AssessmentResponse:
 
 
 @app.post("/assessments/{assessment_id}/feedback", response_model=Dict[str, Any])
-def create_assessment_feedback(assessment_id: str, request: FeedbackCreateRequest) -> Dict[str, Any]:
+def create_assessment_feedback(assessment_id: str, request: FeedbackCreateRequest, http_request: Request) -> Dict[str, Any]:
     assessment = load_report(assessment_id)
+    context = _auth_context_from_request(http_request)
     payload = assessment.model_dump(mode="json")
     record = build_feedback_record(
         result_key=assessment.assessment_id,
@@ -465,6 +473,13 @@ def create_assessment_feedback(assessment_id: str, request: FeedbackCreateReques
         result=payload,
         source_url=assessment.request.source_url or "",
         settings=assessment.request.settings,
+        trust_signals=request.trust_signals,
+        accepted_verdict=request.accepted_verdict,
+        challenge_text=request.challenge_text,
+        counter_evidence=request.counter_evidence,
+        persuasive_source_ids=request.persuasive_source_ids,
+        distrusted_source_ids=request.distrusted_source_ids,
+        owner_id=context.owner_id,
     )
     saved = save_feedback(record)
     return {
@@ -499,6 +514,12 @@ def get_feedback(feedback_id: str) -> Dict[str, Any]:
         "assessment_id": feedback.get("assessment_id", ""),
         "feedback": feedback,
     }
+
+
+@app.get("/admin/trust/analytics", response_model=Dict[str, Any])
+def admin_trust_analytics(http_request: Request, limit: int = 20) -> Dict[str, Any]:
+    _require_admin(http_request)
+    return trust_analytics_summary(limit=limit)
 
 
 def runtime_status() -> Dict[str, Any]:

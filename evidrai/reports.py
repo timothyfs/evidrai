@@ -237,7 +237,15 @@ def get_report_store() -> ReportStore:
 
 
 def save_report(assessment: AssessmentResponse, store: ReportStore | None = None) -> AssessmentResponse:
-    return (store or get_report_store()).save(assessment)
+    saved = (store or get_report_store()).save(assessment)
+    try:
+        from evidrai.trust import capture_assessment_snapshot
+
+        capture_assessment_snapshot(saved)
+    except Exception:
+        # Trust-intelligence capture should never block the user-facing report path.
+        pass
+    return saved
 
 
 def load_report(report_id: str, store: ReportStore | None = None) -> AssessmentResponse:

@@ -180,6 +180,7 @@ Hand-written platform references:
 
 - [`docs/architecture-and-plumbing.md`](docs/architecture-and-plumbing.md) — current end-to-end architecture and service plumbing
 - [`docs/api-reference.md`](docs/api-reference.md) — full implemented API reference
+- [`docs/trust-intelligence-feedback-layer.md`](docs/trust-intelligence-feedback-layer.md) — trust intelligence architecture, data model, feedback loop, analytics, and ML-readiness roadmap
 - [`docs/evidence-scoring-system.md`](docs/evidence-scoring-system.md) — evidence scoring methodology
 - [`docs/early-access-readiness.md`](docs/early-access-readiness.md) — controlled early-access readiness checklist and tier gap audit
 

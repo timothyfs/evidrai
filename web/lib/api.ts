@@ -322,6 +322,12 @@ export function submitFeedback(input: {
   assessment_id: string;
   rating: FeedbackRating;
   reasons: string[];
+  trust_signals?: string[];
+  accepted_verdict?: 'accepted' | 'rejected' | 'unsure' | '';
+  challenge_text?: string;
+  counter_evidence?: Array<Record<string, string>>;
+  persuasive_source_ids?: string[];
+  distrusted_source_ids?: string[];
   comment: string;
 }): Promise<FeedbackResponse> {
   return request<FeedbackResponse>(`/assessments/${encodeURIComponent(input.assessment_id)}/feedback`, {
@@ -329,6 +335,12 @@ export function submitFeedback(input: {
     body: JSON.stringify({
       rating: input.rating,
       reasons: input.reasons,
+      trust_signals: input.trust_signals || [],
+      accepted_verdict: input.accepted_verdict || '',
+      challenge_text: input.challenge_text || '',
+      counter_evidence: input.counter_evidence || [],
+      persuasive_source_ids: input.persuasive_source_ids || [],
+      distrusted_source_ids: input.distrusted_source_ids || [],
       comment: input.comment,
     }),
   });
