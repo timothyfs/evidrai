@@ -176,6 +176,12 @@ Initial API endpoints:
 
 API docs are available locally at `http://127.0.0.1:8000/docs` when Uvicorn is running.
 
+Hand-written platform references:
+
+- [`docs/architecture-and-plumbing.md`](docs/architecture-and-plumbing.md) — current end-to-end architecture and service plumbing
+- [`docs/api-reference.md`](docs/api-reference.md) — full implemented API reference
+- [`docs/evidence-scoring-system.md`](docs/evidence-scoring-system.md) — evidence scoring methodology
+
 Backend runtime endpoints:
 
 - `GET /`

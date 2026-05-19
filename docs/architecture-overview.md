@@ -1,6 +1,7 @@
 # Evidrai Architecture Overview
 
 Date: 2026-05-16
+> Current canonical reference: [Architecture and plumbing reference](architecture-and-plumbing.md).
 Status: Current implementation map
 
 ## What Evidrai is becoming

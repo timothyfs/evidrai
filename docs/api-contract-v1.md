@@ -1,6 +1,7 @@
 # Evidrai API Contract v1 Draft
 
 Date: 2026-05-14
+> Current canonical reference: [API reference](api-reference.md).
 Status: Draft for FastAPI migration
 
 ## Purpose
