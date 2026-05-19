@@ -168,8 +168,8 @@ export default function TrustAnalyticsPage() {
               <h2>Saved report coverage</h2>
               <div className="analyticsRow"><span>Claim checks</span><strong>{countLabel(analytics?.summary?.claim_checks)}</strong></div>
               <div className="analyticsRow"><span>Evidence sources</span><strong>{countLabel(analytics?.summary?.evidence_sources)}</strong></div>
-              <div className="analyticsRow"><span>Trust signals</span><strong>{countLabel(analytics?.summary?.trust_signals)}</strong></div>
-              <div className="analyticsRow"><span>Counter-evidence</span><strong>{countLabel(analytics?.summary?.counter_evidence)}</strong></div>
+              <div className="analyticsRow vertical"><span>Trust signals</span><strong>{countLabel(analytics?.summary?.trust_signals)}</strong><small>{analytics?.summary?.trust_signals ? 'Captured from source buttons and trust feedback.' : 'Awaiting source-button or trust-feedback submissions.'}</small></div>
+              <div className="analyticsRow vertical"><span>Counter-evidence</span><strong>{countLabel(analytics?.summary?.counter_evidence)}</strong><small>{analytics?.summary?.counter_evidence ? 'User-submitted challenges captured.' : 'No user-submitted counter-evidence yet.'}</small></div>
             </article>
 
             <article className="card analyticsCard">
@@ -213,7 +213,7 @@ export default function TrustAnalyticsPage() {
                   <span>{signalName(item.signal_type || item.value || 'unknown')}</span>
                   <strong>{countLabel(item.count)}</strong>
                 </div>
-              )) : <p className="muted">No feedback trust signals captured yet.</p>}
+              )) : <p className="muted">No feedback trust signals captured yet. Use the source-card buttons or Trust feedback form on an assessment.</p>}
             </article>
 
             <article className="card analyticsCard">
@@ -224,7 +224,7 @@ export default function TrustAnalyticsPage() {
                   <span>{item.claim || item.value || 'Unknown claim'}</span>
                   <strong>{countLabel(item.count)}</strong>
                 </div>
-              )) : <p className="muted">No disputed claims captured yet. This requires feedback/challenge events, not just saved reports.</p>}
+              )) : <p className="muted">No disputed claims captured yet. This requires rejected verdicts, challenge text, or submitted counter-evidence.</p>}
             </article>
           </section>
 

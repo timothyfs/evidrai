@@ -233,9 +233,11 @@ function EvidenceScorePanel({ assessment }: { assessment: AssessmentResponse }) 
   );
 }
 
-function SourceCard({ source, compact = false }: { source: AssessmentSource; compact?: boolean }) {
+function SourceCard({ assessmentId, source, compact = false }: { assessmentId: string; source: AssessmentSource; compact?: boolean }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [scoringOpen, setScoringOpen] = useState(false);
+  const [trustStatus, setTrustStatus] = useState('');
+  const [trustBusy, setTrustBusy] = useState('');
   const score = numericScore(source.score) ?? 0;
   const role = source.source_role || source.evidence_category || source.stance || '';
   const factors = source.scoring_factors || {};
@@ -248,6 +250,35 @@ function SourceCard({ source, compact = false }: { source: AssessmentSource; com
       {source.classification_reason && source.summary && <small className="sourceReason">Why this source matters: {source.classification_reason}</small>}
     </>
   );
+
+  async function submitSourceSignal(kind: 'strong' | 'weak' | 'biased' | 'primary') {
+    const sourceId = source.id || source.url || source.domain || source.title;
+    const config = {
+      strong: { label: 'Strong source', rating: 'Useful' as FeedbackRating, signals: ['persuasive_explanation'], persuasive: [sourceId], distrusted: [] as string[], comment: `Source-level signal: strong/persuasive source (${source.title || source.domain || sourceId}).` },
+      weak: { label: 'Weak source', rating: 'Partly useful' as FeedbackRating, signals: ['evidence_weak'], persuasive: [] as string[], distrusted: [sourceId], comment: `Source-level signal: weak evidence source (${source.title || source.domain || sourceId}).` },
+      biased: { label: 'Biased / unreliable', rating: 'Not useful' as FeedbackRating, signals: ['source_biased', 'source_unreliable'], persuasive: [] as string[], distrusted: [sourceId], comment: `Source-level signal: biased or unreliable source (${source.title || source.domain || sourceId}).` },
+      primary: { label: 'Needs primary source', rating: 'Partly useful' as FeedbackRating, signals: ['needs_primary_sourcing'], persuasive: [] as string[], distrusted: [] as string[], comment: `Source-level signal: this evidence trail needs a stronger primary source near ${source.title || source.domain || sourceId}.` },
+    }[kind];
+    setTrustBusy(kind);
+    setTrustStatus('');
+    try {
+      await submitFeedback({
+        assessment_id: assessmentId,
+        rating: config.rating,
+        reasons: ['Source quality'],
+        trust_signals: config.signals,
+        persuasive_source_ids: config.persuasive,
+        distrusted_source_ids: config.distrusted,
+        comment: config.comment,
+      });
+      setTrustStatus(`Saved: ${config.label}.`);
+    } catch (err) {
+      setTrustStatus(err instanceof Error ? err.message : 'Could not save source signal.');
+    } finally {
+      setTrustBusy('');
+    }
+  }
+
   return (
     <article className={`source sourceCard scoredSource ${compact ? 'compactSource' : ''}`}>
       <div className="sourceScoreHeader">
@@ -268,6 +299,13 @@ function SourceCard({ source, compact = false }: { source: AssessmentSource; com
         <span>{group}</span>
         {source.narrative_cluster && <span>Chain: {source.narrative_cluster}</span>}
       </div>
+      <div className="sourceTrustActions" aria-label="Source feedback actions">
+        <button disabled={Boolean(trustBusy)} onClick={() => submitSourceSignal('strong')} type="button">{trustBusy === 'strong' ? 'Saving…' : 'Strong source'}</button>
+        <button disabled={Boolean(trustBusy)} onClick={() => submitSourceSignal('weak')} type="button">{trustBusy === 'weak' ? 'Saving…' : 'Weak source'}</button>
+        <button disabled={Boolean(trustBusy)} onClick={() => submitSourceSignal('biased')} type="button">{trustBusy === 'biased' ? 'Saving…' : 'Biased / unreliable'}</button>
+        <button disabled={Boolean(trustBusy)} onClick={() => submitSourceSignal('primary')} type="button">{trustBusy === 'primary' ? 'Saving…' : 'Needs primary'}</button>
+      </div>
+      {trustStatus && <p className={trustStatus.startsWith('Could not') ? 'error sourceTrustStatus' : 'success sourceTrustStatus'}>{trustStatus}</p>}
       {compact ? (
         <div className="sourceDetails sourceDisclosure">
           <button aria-expanded={detailsOpen} className="sourceToggle" onClick={() => setDetailsOpen((open) => !open)} type="button">
@@ -306,10 +344,59 @@ function SourceCard({ source, compact = false }: { source: AssessmentSource; com
   );
 }
 
+function CounterEvidencePrompt({ assessment }: { assessment: AssessmentResponse }) {
+  const [url, setUrl] = useState('');
+  const [note, setNote] = useState('');
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!url.trim() && !note.trim()) return;
+    setBusy(true);
+    setStatus('');
+    try {
+      await submitFeedback({
+        assessment_id: assessment.assessment_id,
+        rating: 'Partly useful',
+        reasons: ['Missing source'],
+        trust_signals: ['has_counter_evidence'],
+        accepted_verdict: 'unsure',
+        challenge_text: note.trim() || 'Counter-evidence submitted from evidence section.',
+        counter_evidence: [{ url: url.trim(), text: note.trim(), relationship: 'counter_evidence' }],
+        comment: 'Counter-evidence submitted from evidence section.',
+      });
+      setStatus('Counter-evidence saved. This will feed the trust review trail.');
+      setUrl('');
+      setNote('');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Could not save counter-evidence.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="counterEvidencePrompt" onSubmit={submit}>
+      <div>
+        <strong>Got a stronger source?</strong>
+        <p className="muted">Drop a primary source, contradiction, or useful context. This builds the counter-evidence trail.</p>
+      </div>
+      <div className="formRow">
+        <label>URL<input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/primary-source" /></label>
+        <label>Why it matters<input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Short note or excerpt" /></label>
+      </div>
+      <button disabled={busy || (!url.trim() && !note.trim())} type="submit">{busy ? 'Saving…' : 'Submit counter-evidence'}</button>
+      {status && <p className={status.startsWith('Could not') ? 'error' : 'success'}>{status}</p>}
+    </form>
+  );
+}
+
 function SourceList({ assessment }: { assessment: AssessmentResponse }) {
   if (!assessment.sources?.length) return <p className="muted">No sources returned for this assessment.</p>;
   return (
     <div className="evidenceGroups">
+      <CounterEvidencePrompt assessment={assessment} />
       {groupSources(assessment.sources.slice(0, 10)).map(({ group, sources }) => (
         <section className="evidenceGroup" key={group}>
           <div className="evidenceGroupHeader">
@@ -317,7 +404,7 @@ function SourceList({ assessment }: { assessment: AssessmentResponse }) {
             <span>{sources.length} source{sources.length === 1 ? '' : 's'}</span>
           </div>
           <div className="sourceGrid">
-            {sources.map((source, index) => <SourceCard source={source} compact key={`${source.id || source.url}-${index}`} />)}
+            {sources.map((source, index) => <SourceCard assessmentId={assessment.assessment_id} source={source} compact key={`${source.id || source.url}-${index}`} />)}
           </div>
         </section>
       ))}
@@ -419,15 +506,14 @@ function FeedbackControls({ assessment }: { assessment: AssessmentResponse }) {
             </button>
           ))}
         </div>
-        <label>
-          Did you accept the verdict?
-          <select value={acceptedVerdict} onChange={(event) => setAcceptedVerdict(event.target.value as 'accepted' | 'rejected' | 'unsure' | '')}>
-            <option value="">No verdict signal</option>
-            <option value="accepted">Accepted the verdict</option>
-            <option value="rejected">Rejected / challenged the verdict</option>
-            <option value="unsure">Still unsure</option>
-          </select>
-        </label>
+        <div className="feedbackSubsection">
+          <strong>Did this change your view?</strong>
+          <div className="segmented" role="radiogroup" aria-label="Verdict acceptance">
+            <button className={acceptedVerdict === 'accepted' ? 'active' : ''} onClick={() => setAcceptedVerdict(acceptedVerdict === 'accepted' ? '' : 'accepted')} type="button">Yes</button>
+            <button className={acceptedVerdict === 'rejected' ? 'active' : ''} onClick={() => setAcceptedVerdict(acceptedVerdict === 'rejected' ? '' : 'rejected')} type="button">No</button>
+            <button className={acceptedVerdict === 'unsure' ? 'active' : ''} onClick={() => setAcceptedVerdict(acceptedVerdict === 'unsure' ? '' : 'unsure')} type="button">Still unsure</button>
+          </div>
+        </div>
         <div className="feedbackSubsection">
           <strong>Structured trust signals</strong>
           <div className="reasonGrid trustSignalGrid">
@@ -573,7 +659,7 @@ function SpeechResult({
                         {item.sources?.length ? (
                           <div className="sourceGrid compact">
                             {item.sources.slice(0, 4).map((source, sourceIndex) => (
-                              <SourceCard source={source} compact key={`${source.id || source.url}-${sourceIndex}`} />
+                              <SourceCard assessmentId={item.assessment_id || `speech-${index}`} source={source} compact key={`${source.id || source.url}-${sourceIndex}`} />
                             ))}
                           </div>
                         ) : <p className="muted">No sources returned for this checked claim.</p>}

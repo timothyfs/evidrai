@@ -2149,3 +2149,51 @@ html[data-theme="light"] .methodologyGuardrails {
 @media (max-width: 880px) {
   .analyticsGrid { grid-template-columns: 1fr; }
 }
+
+.sourceTrustActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+.sourceTrustActions button {
+  background: color-mix(in srgb, var(--card) 86%, white 6%);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 850;
+  padding: 6px 9px;
+}
+.sourceTrustActions button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--ink);
+}
+.sourceTrustActions button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+.sourceTrustStatus {
+  font-size: 0.78rem;
+  margin: 6px 0 0;
+}
+.counterEvidencePrompt {
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 18px;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 14px;
+}
+.counterEvidencePrompt strong {
+  color: var(--ink);
+  display: block;
+  margin-bottom: 4px;
+}
+.counterEvidencePrompt .muted {
+  margin: 0;
+}
+.counterEvidencePrompt button {
+  justify-self: start;
+}
