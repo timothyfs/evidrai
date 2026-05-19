@@ -4,13 +4,41 @@ const featureLabels: Record<string, string> = {
   fast_claims: 'Fast claim checks',
   deep_claims: 'Deep claim checks',
   speech_audit: 'Speech/video audit',
-  feedback: 'Feedback',
+  feedback: 'Feedback loop',
   share_reports: 'Shareable reports',
   exports: 'Exports',
   evidence_ledger: 'Evidence ledger',
   source_snapshots: 'Source snapshots',
   api_access: 'API access',
 };
+
+const availableNow = new Set([
+  'fast_claims',
+  'deep_claims',
+  'speech_audit',
+  'feedback',
+]);
+
+const comingSoon = new Set([
+  'share_reports',
+  'exports',
+  'evidence_ledger',
+  'source_snapshots',
+  'api_access',
+]);
+
+function featureState(feature: string) {
+  if (availableNow.has(feature)) return 'available';
+  if (comingSoon.has(feature)) return 'soon';
+  return 'available';
+}
+
+function tierNote(tier: string) {
+  if (tier === 'free') return 'Good for lightweight early-access testing and occasional checks.';
+  if (tier === 'pro') return 'Deep checks and speech/video workflows are available now. Sharing and polished exports are next.';
+  if (tier === 'researcher') return 'Preview tier for heavier research workflows. Higher limits are active; ledger, snapshots, exports, and API access are being built out.';
+  return '';
+}
 
 export default async function PlansPage() {
   let tiers: Awaited<ReturnType<typeof getTiers>>['tiers'] = [];
@@ -25,21 +53,45 @@ export default async function PlansPage() {
       <section className="card marketingPage">
         <p className="eyebrow">Plans</p>
         <h1>Choose the level of verification you need.</h1>
-        <p className="lead">Start with fast claim checks. Upgrade when deeper evidence review, speech/video workflows, saved reports, or research-scale usage matter.</p>
+        <p className="lead">Evidrai is in controlled early access. Core verification, saved reports, feedback, and speech/video workflows are live; advanced research workflows are being added carefully rather than over-promised.</p>
+        <div className="earlyAccessNotice">
+          <strong>Early access promise</strong>
+          <span>Every plan below separates what works now from what is coming next. No fake enterprise bingo. Refreshing, frankly.</span>
+        </div>
         {tiers.length > 0 ? (
           <div className="planCards">
-            {tiers.map((tier) => (
-              <article className="planCard" key={tier.tier}>
-                <p className="eyebrow">{tier.tier}</p>
-                <h2>{tier.label}</h2>
-                <p>{tier.description}</p>
-                <ul>
-                  {Object.entries(tier.features).filter(([, enabled]) => enabled).map(([feature]) => (
-                    <li key={feature}>{featureLabels[feature] || feature}</li>
-                  ))}
-                </ul>
-              </article>
-            ))}
+            {tiers.map((tier) => {
+              const enabledFeatures = Object.entries(tier.features).filter(([, enabled]) => enabled);
+              const nowFeatures = enabledFeatures.filter(([feature]) => featureState(feature) === 'available');
+              const soonFeatures = enabledFeatures.filter(([feature]) => featureState(feature) === 'soon');
+              return (
+                <article className="planCard" key={tier.tier}>
+                  <p className="eyebrow">{tier.tier === 'researcher' ? 'researcher preview' : tier.tier}</p>
+                  <h2>{tier.label}</h2>
+                  <p>{tier.description}</p>
+                  {tierNote(tier.tier) && <p className="planNote">{tierNote(tier.tier)}</p>}
+                  <div className="featureGroup">
+                    <strong>Available now</strong>
+                    <ul>
+                      {nowFeatures.map(([feature]) => (
+                        <li key={feature}>{featureLabels[feature] || feature}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  {soonFeatures.length > 0 && (
+                    <div className="featureGroup comingSoonGroup">
+                      <strong>Coming next</strong>
+                      <ul>
+                        {soonFeatures.map(([feature]) => (
+                          <li key={feature}><span>{featureLabels[feature] || feature}</span><em>Coming soon</em></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <p className="planLimits">Saved reports: {tier.limits.saved_reports} · Speech claims/audit: {tier.limits.max_speech_claims}</p>
+                </article>
+              );
+            })}
           </div>
         ) : <p className="muted">Plan details are temporarily unavailable.</p>}
       </section>

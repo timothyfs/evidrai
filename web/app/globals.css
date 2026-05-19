@@ -1222,9 +1222,63 @@ html[data-theme="light"] .selectionGuide {
   margin: 0;
   padding-left: 18px;
 }
-html[data-theme="light"] .planCard { background: rgba(255,255,255,0.72); }
+.earlyAccessNotice {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(157,183,213,0.08);
+  display: flex;
+  gap: 12px;
+  line-height: 1.45;
+  padding: 14px 16px;
+}
+.earlyAccessNotice strong { white-space: nowrap; }
+.earlyAccessNotice span,
+.planNote,
+.planLimits { color: var(--muted); }
+.planNote {
+  border-left: 3px solid rgba(157,183,213,0.42);
+  padding-left: 10px;
+}
+.featureGroup {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 9px;
+  padding-top: 12px;
+}
+.featureGroup > strong {
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.comingSoonGroup li {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+.comingSoonGroup em {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 900;
+  padding: 3px 7px;
+  text-transform: uppercase;
+}
+.planLimits {
+  border-top: 1px solid var(--line);
+  font-size: 0.82rem;
+  padding-top: 12px;
+}
+html[data-theme="light"] .planCard,
+html[data-theme="light"] .earlyAccessNotice { background: rgba(255,255,255,0.72); }
 @media (max-width: 900px) {
   .planCards { grid-template-columns: 1fr; }
+  .earlyAccessNotice { align-items: flex-start; flex-direction: column; }
+  .comingSoonGroup li { align-items: flex-start; flex-direction: column; }
 }
 
 /* Assessment result hierarchy polish */
