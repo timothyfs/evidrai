@@ -792,12 +792,23 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
 }
 .resultSection summary::-webkit-details-marker { display: none; }
 .resultSection summary::after {
+  border: 1px solid var(--line);
+  border-radius: 999px;
   color: var(--muted);
   content: "Show";
+  flex: 0 0 auto;
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 850;
+  margin-left: 10px;
+  padding: 5px 8px;
 }
 .resultSection[open] summary::after { content: "Hide"; }
+.evidenceSourcesSection summary::after { content: "Show"; }
+.evidenceSourcesSection[open] summary small { visibility: hidden; }
+.evidenceSourcesSection[open] summary small::after {
+  content: "Hide grouped source evidence";
+  visibility: visible;
+}
 .reasoningItem {
   grid-template-columns: minmax(0, 1fr);
 }

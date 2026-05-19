@@ -807,8 +807,8 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
         </details>
       )}
 
-      <details open className="resultSection">
-        <summary><span>Evidence sources</span><small>Grouped by role in the assessment</small></summary>
+      <details className="resultSection evidenceSourcesSection">
+        <summary><span>Evidence sources</span><small>Show grouped source evidence</small></summary>
         <SourceList assessment={assessment} />
       </details>
 
