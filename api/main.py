@@ -24,7 +24,7 @@ from evidrai.entitlements import (
 )
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, load_feedback_by_id, save_feedback
-from evidrai.trust import trust_analytics_summary
+from evidrai.trust import backfill_trust_from_reports, trust_analytics_summary
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
 from evidrai.pipeline.verification import (
     extract_speech_audit_claims,
@@ -520,6 +520,14 @@ def get_feedback(feedback_id: str) -> Dict[str, Any]:
 def admin_trust_analytics(http_request: Request, limit: int = 20) -> Dict[str, Any]:
     _require_admin(http_request)
     return trust_analytics_summary(limit=limit)
+
+
+@app.post("/admin/trust/backfill", response_model=Dict[str, Any])
+def admin_trust_backfill(http_request: Request, limit: int = 1000) -> Dict[str, Any]:
+    _require_admin(http_request)
+    result = backfill_trust_from_reports(limit=limit)
+    result["analytics"] = trust_analytics_summary(limit=20)
+    return result
 
 
 def runtime_status() -> Dict[str, Any]:

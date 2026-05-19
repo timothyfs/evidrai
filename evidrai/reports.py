@@ -46,6 +46,9 @@ class ReportStore(Protocol):
     def list(self, limit: int = 50, owner_id: str = "") -> List[Dict[str, Any]]:
         ...
 
+    def iter_assessments(self, limit: int = 1000) -> List[AssessmentResponse]:
+        ...
+
 
 class LocalReportStore:
     def __init__(self, directory: Path | None = None) -> None:
@@ -102,6 +105,19 @@ class LocalReportStore:
             except Exception:
                 continue
         return items
+
+    def iter_assessments(self, limit: int = 1000) -> List[AssessmentResponse]:
+        if not self.directory.exists():
+            return []
+        assessments: List[AssessmentResponse] = []
+        for path in sorted(self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                assessments.append(AssessmentResponse.model_validate(json.loads(path.read_text(encoding="utf-8"))))
+                if len(assessments) >= limit:
+                    break
+            except Exception:
+                continue
+        return assessments
 
 
 class PostgresReportStore:
@@ -219,6 +235,31 @@ class PostgresReportStore:
         except Exception as exc:
             raise ReportStoreError("Could not list reports.", developer_detail=str(exc))
 
+    def iter_assessments(self, limit: int = 1000) -> List[AssessmentResponse]:
+        self._ensure_schema()
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT payload
+                        FROM assessments
+                        ORDER BY created_at DESC NULLS LAST, updated_at DESC
+                        LIMIT %s
+                        """,
+                        (limit,),
+                    )
+                    rows = cur.fetchall()
+            assessments: List[AssessmentResponse] = []
+            for row in rows:
+                payload = row["payload"]
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                assessments.append(AssessmentResponse.model_validate(payload))
+            return assessments
+        except Exception as exc:
+            raise ReportStoreError("Could not iterate reports.", developer_detail=str(exc))
+
 
 def report_store_dir() -> Path:
     configured = os.getenv("EVIDRAI_REPORT_STORE")
@@ -254,3 +295,7 @@ def load_report(report_id: str, store: ReportStore | None = None) -> AssessmentR
 
 def list_reports(limit: int = 50, owner_id: str = "", store: ReportStore | None = None) -> List[Dict[str, Any]]:
     return (store or get_report_store()).list(limit=limit, owner_id=owner_id)
+
+
+def iter_assessments(limit: int = 1000, store: ReportStore | None = None) -> List[AssessmentResponse]:
+    return (store or get_report_store()).iter_assessments(limit=limit)

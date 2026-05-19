@@ -793,6 +793,29 @@ Response:
 
 This is the first internal endpoint for the Trust Intelligence Feedback Layer. It exposes structured feedback patterns without coupling the product to any single model provider.
 
+### 11.5 Backfill trust analytics from saved reports
+
+```http
+POST /admin/trust/backfill?limit=1000
+```
+
+Requires master admin access.
+
+This replays existing saved reports into the Trust Intelligence claim/source tables. It is safe to run more than once because claim snapshots upsert by `assessment_id` and source rows are refreshed per assessment.
+
+Response:
+
+```json
+{
+  "ok": true,
+  "reports_seen": 25,
+  "captured": 25,
+  "failed": 0,
+  "failures": [],
+  "analytics": {}
+}
+```
+
 ## 12. Source and transcript endpoints
 
 ### 12.1 Extract source URL
@@ -1145,6 +1168,7 @@ PATCH  /admin/users/tier
 POST   /admin/users/invite
 DELETE /admin/users/{owner_id}
 GET    /admin/trust/analytics
+POST   /admin/trust/backfill
 POST   /sources/extract
 POST   /transcripts/diagnose
 POST   /claims/check

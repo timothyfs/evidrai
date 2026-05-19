@@ -326,8 +326,21 @@ export function deleteAdminUser(owner_id: string): Promise<{ ok: boolean; owner_
   });
 }
 
+export type TrustBackfillResponse = {
+  ok: boolean;
+  reports_seen: number;
+  captured: number;
+  failed: number;
+  failures: Array<{ assessment_id: string; error: string }>;
+  analytics?: TrustAnalyticsResponse;
+};
+
 export function getTrustAnalytics(limit = 20): Promise<TrustAnalyticsResponse> {
   return request<TrustAnalyticsResponse>(`/admin/trust/analytics?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export function backfillTrustAnalytics(limit = 1000): Promise<TrustBackfillResponse> {
+  return request<TrustBackfillResponse>(`/admin/trust/backfill?limit=${encodeURIComponent(String(limit))}`, { method: 'POST' });
 }
 
 export function submitFeedback(input: {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AccountProfile, MeResponse, TrustAnalyticsResponse, getAnonymousAccountProfile, getMe, getTrustAnalytics, setAccessToken, setAccountProfile } from '../../../../lib/api';
+import { AccountProfile, MeResponse, TrustAnalyticsResponse, backfillTrustAnalytics, getAnonymousAccountProfile, getMe, getTrustAnalytics, setAccessToken, setAccountProfile } from '../../../../lib/api';
 import { getCurrentSession, onAuthStateChange, profileFromSession, signInWithGoogle, signOut } from '../../../../lib/auth';
 
 function countLabel(value: unknown) {
@@ -46,6 +46,21 @@ export default function TrustAnalyticsPage() {
       setMessage('Trust analytics loaded.');
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not load trust analytics.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function backfillFromReports() {
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await backfillTrustAnalytics(1000);
+      if (payload.analytics) setAnalytics(payload.analytics);
+      else await loadAnalytics();
+      setMessage(`Backfilled ${payload.captured}/${payload.reports_seen} saved reports into trust analytics${payload.failed ? `; ${payload.failed} failed` : ''}.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not backfill trust analytics.');
     } finally {
       setBusy(false);
     }
@@ -140,6 +155,7 @@ export default function TrustAnalyticsPage() {
             </div>
             <div className="formRow">
               <button disabled={busy} onClick={loadAnalytics} type="button">{busy ? 'Refreshing…' : 'Refresh analytics'}</button>
+              <button className="secondary" disabled={busy} onClick={backfillFromReports} type="button">Backfill saved reports</button>
               <button className="secondary" disabled={busy} onClick={handleSignOut} type="button">Sign out</button>
             </div>
           </section>

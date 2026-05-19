@@ -380,5 +380,32 @@ def capture_feedback_trust_events(record: Dict[str, Any], store: Optional[TrustS
     return (store or get_trust_store()).save_feedback_events(record)
 
 
+
+
+def backfill_trust_from_reports(limit: int = 1000, store: Optional[TrustStore] = None) -> Dict[str, Any]:
+    from evidrai.reports import iter_assessments
+
+    trust_store = store or get_trust_store()
+    reports = iter_assessments(limit=limit)
+    captured = 0
+    failed = 0
+    failures: List[Dict[str, str]] = []
+    for assessment in reports:
+        try:
+            trust_store.save_assessment_snapshot(assessment)
+            captured += 1
+        except Exception as exc:
+            failed += 1
+            if len(failures) < 10:
+                failures.append({"assessment_id": assessment.assessment_id, "error": str(exc)})
+    return {
+        "ok": failed == 0,
+        "reports_seen": len(reports),
+        "captured": captured,
+        "failed": failed,
+        "failures": failures,
+    }
+
+
 def trust_analytics_summary(limit: int = 20, store: Optional[TrustStore] = None) -> Dict[str, Any]:
     return (store or get_trust_store()).analytics_summary(limit=limit)
