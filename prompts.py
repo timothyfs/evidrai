@@ -143,6 +143,7 @@ CLAIM_ANALYSIS_SYSTEM_PROMPT = dedent(
     - Identify when the input is partly or mostly opinion, prediction, motive attribution, rhetoric, or ambiguity.
     - Preserve the strongest verifyable core rather than the loudest framing.
     - Flag when the claim depends on hidden definitions, missing timeframes, unclear jurisdictions, or undefined terms.
+    - Preserve legally or professionally meaningful wording differences. For example, do not silently collapse "disclose", "declare", "report", and "register" into one conclusion; flag when the distinction may matter.
     - For absolute claims using terms like never, always, only, first, last, all, every, none, or no, add risk_flag "absolute_claim" and preserve the absolute proposition as a checkable subclaim.
 
     Guidance:
@@ -352,6 +353,7 @@ def build_claim_analysis_messages(user_input: str) -> List[Dict[str, str]]:
                 - Extract the most falsifiable version of the claim.
                 - Split factual content from opinion, motive attribution, or rhetorical framing where possible.
                 - Flag ambiguity, time sensitivity, and any terms that need definition before verification.
+                - Preserve professional/legal distinctions in verbs such as disclose, declare, report, and register. Treat them as related for retrieval, but mark them as potentially distinct obligations when relevant.
                 - For absolute wording such as never, always, only, first, last, all, every, none, or no, add risk_flag "absolute_claim" and make counterexample search requirements explicit.
                 """
             ).strip(),

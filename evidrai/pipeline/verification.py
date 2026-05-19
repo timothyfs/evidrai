@@ -13,6 +13,7 @@ from prompts import (
     build_source_summary_messages,
 )
 from evidrai.clients.llm import OpenAICompatibleClient
+from evidrai.claim_semantics import analyze_claim_semantics, merge_semantic_queries
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import SCORING_CONFIG
 from evidrai.models import (
@@ -411,7 +412,8 @@ def run_claim_pipeline_typed(user_input: str, llm: OpenAICompatibleClient, searc
     claim_payload = llm.complete_json(build_claim_analysis_messages(user_input))
     claim_analysis = parse_claim_analysis(claim_payload, user_input)
     claim_text = claim_analysis.normalized_claim or user_input
-    queries = build_search_queries(claim_analysis.subclaims)
+    claim_semantics = analyze_claim_semantics(claim_text)
+    queries = merge_semantic_queries(build_search_queries(claim_analysis.subclaims), claim_semantics)
     sources = retrieve_sources(search, queries, claim_text)
     sources = summarize_sources(llm, claim_analysis.subclaims[0], sources)
     retrieval = RetrievalResult(queries=queries, sources=sources)
@@ -450,6 +452,12 @@ def run_claim_pipeline_typed(user_input: str, llm: OpenAICompatibleClient, searc
     reasoning["subclaims"] = evidence_packet.subclaims
     reasoning["sources"] = evidence_packet.sources
     reasoning["queries"] = queries
+    reasoning["claim_semantics"] = claim_semantics.to_dict()
+    if claim_semantics.precision_note:
+        reasoning.setdefault("evidence_assessment", {})
+        reasoning["evidence_assessment"].setdefault("evidence_gaps", [])
+        if claim_semantics.precision_note not in reasoning["evidence_assessment"]["evidence_gaps"]:
+            reasoning["evidence_assessment"]["evidence_gaps"].append(claim_semantics.precision_note)
     reasoning["risk_flags"] = sorted(collect_risk_flags(claim_analysis.subclaims))
     reasoning["pendulum_band"] = reasoning.get("pendulum_band") or pendulum.band
     reasoning["pendulum_explanation"] = reasoning.get("pendulum_explanation") or pendulum.explanation

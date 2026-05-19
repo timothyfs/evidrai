@@ -961,10 +961,13 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
         </div>
       </div>
 
-      {(assessment.verdict.summary || assessment.verdict.key_caveat) && (
+      {(assessment.verdict.summary || assessment.verdict.key_caveat || typeof assessment.reasoning?.claim_semantics === 'object') && (
         <div className="assessmentNarrative">
           {assessment.verdict.summary && <p className="summary">{assessment.verdict.summary}</p>}
           {assessment.verdict.key_caveat && <p className="caveat"><strong>Key caveat</strong>{assessment.verdict.key_caveat}</p>}
+          {typeof assessment.reasoning?.claim_semantics === 'object' && assessment.reasoning.claim_semantics && 'precision_note' in assessment.reasoning.claim_semantics && Boolean((assessment.reasoning.claim_semantics as { precision_note?: string }).precision_note) && (
+            <p className="caveat"><strong>Language precision</strong>{(assessment.reasoning.claim_semantics as { precision_note?: string }).precision_note}</p>
+          )}
         </div>
       )}
 

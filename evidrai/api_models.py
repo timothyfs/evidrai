@@ -215,6 +215,7 @@ def serialize_assessment_response(
             settings={
                 "retrieval_provider": "tavily" if mode == "deep" else None,
                 "legacy_endpoint": "/claims/check",
+                "claim_semantics": result.get("claim_semantics") or {},
             },
         ),
         verdict=AssessmentVerdict(
@@ -234,6 +235,7 @@ def serialize_assessment_response(
             "evidence_assessment": result.get("evidence_assessment"),
             "rule_engine": result.get("rule_engine"),
             "amplification_warning": result.get("amplification_warning"),
+            "claim_semantics": result.get("claim_semantics"),
         },
         debug=result.get("debug_trace") if include_debug else None,
     )
