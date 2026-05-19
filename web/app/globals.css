@@ -1929,6 +1929,20 @@ html[data-theme="light"] .adminGuardRails div {
   content: "Hide";
   font-size: 0.72rem;
 }
+.sourceScoringContext {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.sourceScoringContext span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 820;
+  padding: 4px 7px;
+}
 .factorGrid {
   display: grid;
   gap: 10px;

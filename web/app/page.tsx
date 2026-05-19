@@ -155,14 +155,15 @@ function formatReasoningValue(value: unknown) {
   return String(value);
 }
 
-function FactorMeter({ label, value, max = 5, invert = false }: { label: string; value?: number | null; max?: number; invert?: boolean }) {
+function FactorMeter({ label, value, max = 5, toneValue }: { label: string; value?: number | null; max?: number; toneValue?: number | null }) {
   const raw = typeof value === 'number' && Number.isFinite(value) ? value : 0;
   const display = Math.max(0, Math.min(max, raw));
-  const pct = invert ? (1 - normaliseScore(display, max)) * 100 : normaliseScore(display, max) * 100;
+  const pct = normaliseScore(display, max) * 100;
+  const toneSource = typeof toneValue === 'number' && Number.isFinite(toneValue) ? toneValue : display;
   return (
     <div className="factorMeter">
       <div className="factorMeterLabel"><span>{label}</span><strong>{display.toFixed(1)}/{max}</strong></div>
-      <div className="factorMeterTrack"><span className={scoreTone(invert ? max - display : display, max)} style={{ width: `${Math.max(4, pct)}%` }} /></div>
+      <div className="factorMeterTrack" aria-label={`${label}: ${display.toFixed(1)} out of ${max}`}><span className={scoreTone(toneSource, max)} style={{ width: `${Math.max(4, pct)}%` }} /></div>
     </div>
   );
 }
@@ -257,20 +258,27 @@ function SourceCard({ source, compact = false }: { source: AssessmentSource; com
       </div>
       {compact ? <details className="sourceDetails"><summary><span>Source detail</span><small>Show</small></summary>{detail}</details> : detail}
       <details className="sourceScoringDetails">
-        <summary><span>Why this score?</span><small>{score > 0 ? `${score.toFixed(1)}/5 · Show` : 'Show scoring detail'}</small></summary>
+        <summary><span>Why this source scored {score > 0 ? `${score.toFixed(1)}/5` : 'this way'}</span><small>Show</small></summary>
+        <div className="sourceScoringContext">
+          <span>{source.source_type || 'Source type unknown'}</span>
+          <span>{group}</span>
+          {role && <span>{role}</span>}
+          {source.domain && <span>{source.domain}</span>}
+        </div>
         {hasFactors ? (
           <div className="factorGrid">
+            <FactorMeter label="Source score" value={score} />
             <FactorMeter label="Authority" value={factors.authority} />
             <FactorMeter label="Relevance" value={factors.relevance} />
             <FactorMeter label="Directness" value={factors.directness} />
             <FactorMeter label="Recency" value={factors.recency} />
             {'independence' in factors && <FactorMeter label="Independence" value={factors.independence} />}
-            <FactorMeter label="Bias risk" value={factors.bias_risk} invert />
+            <FactorMeter label="Bias risk" value={factors.bias_risk} toneValue={5 - Number(factors.bias_risk || 0)} />
           </div>
         ) : (
           <p className="muted">Detailed scoring factors are not available for this source yet. The visible score is the source's weighted contribution to this claim.</p>
         )}
-        <p className="sourceScoringNote">High-scoring sources are not just reputable. They must be relevant, direct, and useful for this exact claim.</p>
+        <p className="sourceScoringNote">Each bar uses the same 0–5 value shown beside it. For bias risk, a longer bar means more risk and the colour worsens as the value rises. The overall source score is the weighted contribution used for this claim.</p>
       </details>
     </article>
   );
@@ -861,7 +869,7 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
       <EvidenceScorePanel assessment={assessment} />
 
       {assessment.claim_breakdown?.length > 0 && (
-        <details open className="resultSection">
+        <details className="resultSection">
           <summary><span>Claim breakdown</span><small>Sub-claims, confidence, and rationale</small></summary>
           <div className="breakdown">
             {assessment.claim_breakdown.map((item) => (
