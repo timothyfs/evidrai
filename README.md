@@ -181,6 +181,7 @@ Hand-written platform references:
 - [`docs/architecture-and-plumbing.md`](docs/architecture-and-plumbing.md) — current end-to-end architecture and service plumbing
 - [`docs/api-reference.md`](docs/api-reference.md) — full implemented API reference
 - [`docs/evidence-scoring-system.md`](docs/evidence-scoring-system.md) — evidence scoring methodology
+- [`docs/early-access-readiness.md`](docs/early-access-readiness.md) — controlled early-access readiness checklist and tier gap audit
 
 Backend runtime endpoints:
 
