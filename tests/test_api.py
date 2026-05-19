@@ -299,7 +299,10 @@ def test_speech_audit_defaults_to_fast_without_tavily(monkeypatch):
 
 
 def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
-    def fake_run_claim_assessment(*, claim, source_url, category, mode):
+    observed = {}
+
+    def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
+        observed["output_style"] = output_style
         return {
             "verdict": "Supported",
             "confidence": "High",
@@ -323,6 +326,7 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
                 "subclaims": [{"id": "sc_1", "text": "Paris is the capital of France.", "claim_type": "factual_core"}],
             },
             "rule_engine": {"rationale": "Direct support found."},
+            "output_style": output_style,
         }
 
     monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
@@ -341,6 +345,8 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     assert payload["evidence_map"]["supports_factual_core"] == ["src_1"]
     assert payload["sources"][0]["id"] == "src_1"
     assert payload["debug"] is None
+    assert payload["request"]["settings"]["output_style"] == "standard"
+    assert observed["output_style"] == "standard"
 
     report_response = client.get(f"/reports/{payload['assessment_id']}")
     assert report_response.status_code == 200
@@ -377,6 +383,33 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     assert missing_feedback_response.status_code == 404
 
 
+def test_fast_absurdity_humour_is_fast_only(monkeypatch, tmp_path):
+    observed = []
+
+    def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
+        observed.append((mode, output_style))
+        return {
+            "verdict": "Unverified",
+            "confidence": "Low",
+            "tldr": "Evidence is thin.",
+            "humour_summary": "The claim arrives wearing a lab coat made entirely of question marks.",
+            "humour_safety_note": "Applied to claim quality only.",
+            "output_style": output_style,
+        }
+
+    grant_tier(monkeypatch, "researcher")
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
+    monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
+
+    fast = client.post("/assessments/fast", json={"claim": "A dubious but harmless claim", "output_style": "absurdity_humour"}).json()
+    deep = client.post("/assessments/deep", json={"claim": "A dubious but harmless claim", "output_style": "absurdity_humour"}).json()
+
+    assert observed == [("fast", "absurdity_humour"), ("deep", "standard")]
+    assert fast["reasoning"]["humour_summary"].startswith("The claim arrives")
+    assert fast["request"]["settings"]["output_style"] == "absurdity_humour"
+    assert deep["request"]["settings"]["output_style"] == "standard"
+
+
 def test_bearer_token_owner_overrides_spoofable_owner_header(monkeypatch):
     monkeypatch.setattr(api_main, "context_from_headers", lambda authorization, owner_header: api_main.AuthContext(owner_id="jwt-user", auth_method="supabase_jwt", email="user@example.com"))
 
@@ -386,7 +419,7 @@ def test_bearer_token_owner_overrides_spoofable_owner_header(monkeypatch):
 
 
 def test_report_history_can_be_scoped_by_owner_header(monkeypatch, tmp_path):
-    def fake_run_claim_assessment(*, claim, source_url, category, mode):
+    def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
         return {"verdict": "Supported", "confidence": "High", "summary": "ok"}
 
     monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
@@ -411,7 +444,7 @@ def test_report_history_can_be_scoped_by_owner_header(monkeypatch, tmp_path):
 
 
 def test_claim_check_embeds_assessment_contract(monkeypatch):
-    def fake_run_claim_assessment(*, claim, source_url, category, mode):
+    def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
         return {
             "verdict": "Unverified",
             "confidence": "Low",

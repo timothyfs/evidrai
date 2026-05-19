@@ -961,9 +961,12 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
         </div>
       </div>
 
-      {(assessment.verdict.summary || assessment.verdict.key_caveat || typeof assessment.reasoning?.claim_semantics === 'object') && (
+      {(assessment.verdict.summary || assessment.verdict.key_caveat || typeof assessment.reasoning?.claim_semantics === 'object' || typeof assessment.reasoning?.humour_summary === 'string') && (
         <div className="assessmentNarrative">
           {assessment.verdict.summary && <p className="summary">{assessment.verdict.summary}</p>}
+          {typeof assessment.reasoning?.humour_summary === 'string' && assessment.reasoning.humour_summary.trim() && (
+            <p className="absurdityCheck"><strong>Absurdity check</strong>{assessment.reasoning.humour_summary}</p>
+          )}
           {assessment.verdict.key_caveat && <p className="caveat"><strong>Key caveat</strong>{assessment.verdict.key_caveat}</p>}
           {typeof assessment.reasoning?.claim_semantics === 'object' && assessment.reasoning.claim_semantics && 'precision_note' in assessment.reasoning.claim_semantics && Boolean((assessment.reasoning.claim_semantics as { precision_note?: string }).precision_note) && (
             <p className="caveat"><strong>Language precision</strong>{(assessment.reasoning.claim_semantics as { precision_note?: string }).precision_note}</p>
@@ -1032,6 +1035,7 @@ export default function Home() {
   const [sourceUrl, setSourceUrl] = useState('');
   const [category, setCategory] = useState('auto-detect');
   const [mode, setMode] = useState<'fast' | 'deep'>('fast');
+  const [fastOutputStyle, setFastOutputStyle] = useState<'standard' | 'absurdity_humour'>('standard');
   const [speechTranscript, setSpeechTranscript] = useState('');
   const [speechSourceUrl, setSpeechSourceUrl] = useState('');
   const [tryYouTubeCaptions, setTryYouTubeCaptions] = useState(true);
@@ -1260,7 +1264,8 @@ export default function Home() {
     setError('');
     try {
       const requestedMode = canUseDeep ? mode : 'fast';
-      const result = await createAssessment({ claim, source_url: sourceUrl, category, mode: requestedMode });
+      const requestedStyle = requestedMode === 'fast' ? fastOutputStyle : 'standard';
+      const result = await createAssessment({ claim, source_url: sourceUrl, category, mode: requestedMode, output_style: requestedStyle });
       setAssessment(result);
       setSpeechExtraction(null);
       setSpeechVerification(null);
@@ -1432,6 +1437,13 @@ export default function Home() {
                   <select value={mode} onChange={(event) => setMode(event.target.value as 'fast' | 'deep')}>
                     <option value="fast">Fast assessment</option>
                     <option disabled={!canUseDeep} value="deep">Deep evidence review{canUseDeep ? '' : ' · Pro+'}</option>
+                  </select>
+                </label>
+                <label>
+                  Fast style
+                  <select disabled={mode !== 'fast'} value={fastOutputStyle} onChange={(event) => setFastOutputStyle(event.target.value as 'standard' | 'absurdity_humour')}>
+                    <option value="standard">Standard</option>
+                    <option value="absurdity_humour">Absurdity check · experimental</option>
                   </select>
                 </label>
               </div>

@@ -74,6 +74,7 @@ class AssessmentCreateRequest(BaseModel):
     claim: str = ""
     source_url: str = ""
     category: str = "auto-detect"
+    output_style: str = Field(default="standard", pattern="^(standard|absurdity_humour)$")
     include_debug: bool = False
 
 
@@ -234,6 +235,7 @@ def _run_claim_assessment(
     source_url: str,
     category: str,
     mode: str,
+    output_style: str = "standard",
 ) -> Dict[str, Any]:
     llm, search = _clients()
     if not llm.configured:
@@ -246,7 +248,8 @@ def _run_claim_assessment(
         if not search.configured:
             raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "TAVILY_API_KEY is required for deep mode"})
         return run_claim_pipeline(analysis_input, llm, search)
-    return run_quick_pass(analysis_input, category, llm, search)
+    fast_output_style = output_style if output_style == "absurdity_humour" else "standard"
+    return run_quick_pass(analysis_input, category, llm, search, output_style=fast_output_style)
 
 
 def _auth_context_from_request(request: Request) -> AuthContext:
@@ -292,7 +295,8 @@ def _assessment_response_from_request(request: AssessmentCreateRequest, mode: st
     claim = (request.claim or "").strip()
     source_url = (request.source_url or "").strip()
     _validate_claim_request(claim, source_url)
-    result = _run_claim_assessment(claim=claim, source_url=source_url, category=request.category, mode=mode)
+    output_style = request.output_style if mode == "fast" else "standard"
+    result = _run_claim_assessment(claim=claim, source_url=source_url, category=request.category, mode=mode, output_style=output_style)
     assessment = serialize_assessment_response(
         result,
         claim=claim,

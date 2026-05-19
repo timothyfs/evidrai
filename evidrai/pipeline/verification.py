@@ -46,10 +46,10 @@ from evidrai.utils import classify_source_type, domain_from_url, recency_score, 
 
 SPEECH_AUDIT_MAX_TRANSCRIPT_CHARS = 12000
 
-def call_legacy_model(claim: str, category: str, detail_mode: str, llm: OpenAICompatibleClient, evidence_context: str = "") -> Dict[str, Any]:
+def call_legacy_model(claim: str, category: str, detail_mode: str, llm: OpenAICompatibleClient, evidence_context: str = "", output_style: str = "standard") -> Dict[str, Any]:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": build_user_prompt(claim, category, detail_mode, evidence_context)},
+        {"role": "user", "content": build_user_prompt(claim, category, detail_mode, evidence_context, output_style)},
     ]
     payload = llm.complete_json(messages, temperature=0.1)
     return validate_model(payload, LegacyAssessmentModel)
@@ -95,11 +95,11 @@ def build_fast_evidence_context(user_input: str, search: TavilySearchClient | No
     return "\n\n".join(lines), items[:5]
 
 
-def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient, search: TavilySearchClient | None = None) -> Dict[str, Any]:
+def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient, search: TavilySearchClient | None = None, output_style: str = "standard") -> Dict[str, Any]:
     """Fast first-pass assessment with optional lightweight snippet retrieval."""
     evidence_context, fast_sources = build_fast_evidence_context(user_input, search)
     try:
-        data = call_legacy_model(user_input, category or "auto-detect", "fast", llm, evidence_context)
+        data = call_legacy_model(user_input, category or "auto-detect", "fast", llm, evidence_context, output_style)
     except Exception:
         # Fallback minimal payload so the UI can still stage the response cleanly.
         data = {}
@@ -116,6 +116,9 @@ def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient, 
             "what_would_change_verdict": "Evidence would need to show that Article 5 invocation did not constitute NATO support for the United States, which would be a much narrower interpretive claim.",
             "user_takeaway": "The broad claim is not supported as stated because Article 5 after 9/11 is a direct counterexample.",
             "evidence_types": data.get("evidence_types", []) or [],
+            "humour_summary": data.get("humour_summary", "") if output_style == "absurdity_humour" else "",
+            "humour_safety_note": data.get("humour_safety_note", "") if output_style == "absurdity_humour" else "",
+            "output_style": output_style,
             "fast_sources": fast_sources,
             "used_lightweight_search": bool(fast_sources),
         }
@@ -131,6 +134,9 @@ def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient, 
         "what_would_change_verdict": data.get("what_would_change_verdict", ""),
         "user_takeaway": data.get("user_takeaway", ""),
         "evidence_types": data.get("evidence_types", []) or [],
+        "humour_summary": data.get("humour_summary", "") if output_style == "absurdity_humour" else "",
+        "humour_safety_note": data.get("humour_safety_note", "") if output_style == "absurdity_humour" else "",
+        "output_style": output_style,
         "fast_sources": fast_sources,
         "used_lightweight_search": bool(fast_sources),
     }

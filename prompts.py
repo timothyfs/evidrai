@@ -81,7 +81,7 @@ SYSTEM_PROMPT = dedent(
 ).strip()
 
 
-def build_user_prompt(claim: str, category: str, detail_mode: str, evidence_context: str = "") -> str:
+def build_user_prompt(claim: str, category: str, detail_mode: str, evidence_context: str = "", output_style: str = "standard") -> str:
     detail_mode = (detail_mode or "fast").strip().lower()
     mode_guidance = {
         "fast": dedent(
@@ -105,6 +105,21 @@ def build_user_prompt(claim: str, category: str, detail_mode: str, evidence_cont
         ).strip(),
     }.get(detail_mode, "")
 
+    style_guidance = ""
+    if detail_mode == "fast" and output_style == "absurdity_humour":
+        style_guidance = dedent(
+            """
+            Experimental Fast-mode output style:
+            - Include humour_summary: one short, dry, original absurdity-check paragraph that uses humour to highlight overreach, contradiction, or weak evidence.
+            - The humour must never change the verdict, confidence, evidence assessment, or caveats.
+            - Do not imitate or name any specific comedian, satirist, presenter, publication, or show.
+            - Avoid cruelty, slurs, protected-class jokes, sexual content, death/violence jokes, medical jokes, or mockery of private individuals.
+            - If the claim involves serious harm, personal legal jeopardy, medical advice, death, violence, hate/harassment, or vulnerable people, leave humour_summary empty and explain briefly in humour_safety_note.
+            - Keep humour pointed at the claim quality, evidence gap, contradiction, or rhetoric, not at identity or suffering.
+            - Include humour_safety_note describing whether humour was applied or withheld.
+            """
+        ).strip()
+
     return dedent(
         f"""
         Assess the following input.
@@ -121,6 +136,8 @@ def build_user_prompt(claim: str, category: str, detail_mode: str, evidence_cont
         - If the input is primarily opinion, prediction, rhetoric, or too vague to verify directly, say that plainly in interpretation_note and caution_flags.
         - Do not confuse plausibility with proof.
         - Return a single JSON object only.
+
+        {style_guidance}
 
         Lightweight evidence context, if any:
         {evidence_context or "No external evidence context supplied."}

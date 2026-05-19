@@ -384,6 +384,8 @@ class LegacyAssessmentModel(BaseModel):
     what_would_change_verdict: str = ""
     user_takeaway: str = ""
     caution_flags: List[str] = Field(default_factory=list)
+    humour_summary: str = ""
+    humour_safety_note: str = ""
 
 
 class ClaimAnalysisItemModel(BaseModel):

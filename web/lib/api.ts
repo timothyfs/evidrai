@@ -291,7 +291,7 @@ export function getTiers(): Promise<{ ok: boolean; schema_version: string; tiers
   return request<{ ok: boolean; schema_version: string; tiers: TierDefinition[] }>('/tiers');
 }
 
-export function createAssessment(input: { claim: string; source_url?: string; category: string; mode: 'fast' | 'deep' }): Promise<AssessmentResponse> {
+export function createAssessment(input: { claim: string; source_url?: string; category: string; mode: 'fast' | 'deep'; output_style?: 'standard' | 'absurdity_humour' }): Promise<AssessmentResponse> {
   const path = input.mode === 'deep' ? '/assessments/deep' : '/assessments/fast';
   return request<AssessmentResponse>(path, {
     method: 'POST',
@@ -299,6 +299,7 @@ export function createAssessment(input: { claim: string; source_url?: string; ca
       claim: input.claim,
       source_url: input.source_url || '',
       category: input.category,
+      output_style: input.output_style || 'standard',
     }),
   });
 }
