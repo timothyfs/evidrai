@@ -286,11 +286,11 @@ export function getAccountProfile(): AccountProfile {
   return profile;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, options?: { sameOrigin?: boolean }): Promise<T> {
   const account = getAccountProfile();
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${options?.sameOrigin ? '' : API_BASE_URL}${path}`, {
       ...init,
       cache: 'no-store',
       headers: {
@@ -376,10 +376,10 @@ export function getReport(id: string): Promise<AssessmentResponse> {
 }
 
 export function createReportShare(id: string, platform = 'copy'): Promise<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }> {
-  return request<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }>(`/reports/${encodeURIComponent(id)}/share`, {
+  return request<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }>(`/api/reports/${encodeURIComponent(id)}/share`, {
     method: 'POST',
     body: JSON.stringify({ platform }),
-  });
+  }, { sameOrigin: true });
 }
 
 export async function getPublicSharedReport(token: string): Promise<PublicReportResponse> {
