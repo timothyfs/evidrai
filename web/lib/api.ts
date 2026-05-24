@@ -310,8 +310,11 @@ async function request<T>(path: string, init?: RequestInit, options?: { sameOrig
     try {
       const payload = await response.json();
       const detail = payload?.detail;
+      const upstreamDetail = typeof detail === 'object' && detail?.upstream_detail ? detail.upstream_detail : null;
+      const upstreamNested = typeof upstreamDetail === 'object' && upstreamDetail?.detail ? upstreamDetail.detail : null;
+      const upstreamMessage = typeof upstreamNested === 'string' ? upstreamNested : (typeof upstreamNested === 'object' ? upstreamNested?.message : '');
       const fallback = typeof detail === 'object' && detail?.fallback ? ` ${detail.fallback}` : '';
-      message = typeof detail === 'string' ? detail : `${detail?.message || payload?.error || message}${fallback}`;
+      message = typeof detail === 'string' ? detail : `${upstreamMessage || detail?.message || payload?.error || message}${fallback}`;
     } catch {
       // Keep HTTP status fallback.
     }

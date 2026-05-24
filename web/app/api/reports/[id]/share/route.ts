@@ -18,9 +18,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       cache: 'no-store',
     });
     const text = await upstream.text();
+    const contentType = upstream.headers.get('content-type') || 'application/json';
+    if (!upstream.ok) {
+      let detail: unknown = text;
+      try {
+        detail = JSON.parse(text);
+      } catch {
+        // Keep text detail.
+      }
+      return Response.json({
+        detail: {
+          code: 'share_upstream_error',
+          message: `Share API returned ${upstream.status}`,
+          upstream_status: upstream.status,
+          upstream_detail: detail,
+        },
+      }, { status: upstream.status });
+    }
     return new Response(text, {
       status: upstream.status,
-      headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
+      headers: { 'Content-Type': contentType },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Share proxy failed';
