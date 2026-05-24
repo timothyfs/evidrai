@@ -131,6 +131,41 @@ def _source_ids_by_role(sources: List[Dict[str, Any]], roles: set[str]) -> List[
     return [_source_id(i) for i, source in enumerate(sources) if normalize_source_role_label(source.get("source_role")) in normalized_roles]
 
 
+def _float_or_none(value: Any) -> Optional[float]:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _source_score(source: Dict[str, Any]) -> float:
+    factors = source.get("scoring_factors") if isinstance(source.get("scoring_factors"), dict) else {}
+    return _float_or_none(source.get("weighted_score")) or _float_or_none(factors.get("weighted")) or 0.0
+
+
+def _source_scoring_factors(source: Dict[str, Any]) -> Dict[str, float]:
+    supplied = source.get("scoring_factors") if isinstance(source.get("scoring_factors"), dict) else {}
+    factors: Dict[str, float] = {}
+    for key, raw_key in (
+        ("authority", "authority_score"),
+        ("relevance", "relevance_score"),
+        ("directness", "directness_score"),
+        ("recency", "recency_score"),
+        ("bias_risk", "bias_risk_score"),
+    ):
+        value = _float_or_none(supplied.get(key))
+        if value is None:
+            value = _float_or_none(source.get(raw_key))
+        if value is not None:
+            factors[key] = value
+    weighted = _source_score(source)
+    if weighted:
+        factors["weighted"] = weighted
+    return factors
+
+
 def serialize_assessment_response(
     result: Dict[str, Any],
     *,
@@ -154,15 +189,8 @@ def serialize_assessment_response(
             stance=source.get("claim_support") or "irrelevant",
             evidence_category=source.get("evidence_category") or "irrelevant",
             source_role=source.get("source_role") or "context",
-            score=float(source.get("weighted_score") or 0.0),
-            scoring_factors={
-                "authority": float(source.get("authority_score") or 0.0),
-                "relevance": float(source.get("relevance_score") or 0.0),
-                "directness": float(source.get("directness_score") or 0.0),
-                "recency": float(source.get("recency_score") or 0.0),
-                "bias_risk": float(source.get("bias_risk_score") or 0.0),
-                "weighted": float(source.get("weighted_score") or 0.0),
-            },
+            score=_source_score(source),
+            scoring_factors=_source_scoring_factors(source),
             narrative_cluster=source.get("narrative_cluster") or "",
             summary=source.get("summary") or source.get("snippet") or "",
             classification_reason=source.get("classification_reason") or source.get("evidence_category") or "",

@@ -264,7 +264,9 @@ function SourceCard({ assessmentId, source, compact = false }: { assessmentId: s
   const score = numericScore(source.score) ?? 0;
   const role = source.source_role || source.evidence_category || source.stance || '';
   const factors = source.scoring_factors || {};
-  const hasCapturedFactors = ['authority', 'relevance', 'directness', 'recency', 'bias_risk', 'independence'].some((key) => numericScore(factors[key]) !== null);
+  const factorKeys = ['authority', 'relevance', 'directness', 'recency', 'bias_risk', 'independence'];
+  const capturedFactorValues = factorKeys.map((key) => numericScore(factors[key])).filter((value): value is number => value !== null);
+  const hasCapturedFactors = capturedFactorValues.length > 0 && capturedFactorValues.some((value) => value !== 0);
   const quality = sourceQualityLabel(score);
   const group = sourceGroup(source);
   const detail = (
@@ -351,15 +353,19 @@ function SourceCard({ assessmentId, source, compact = false }: { assessmentId: s
             </div>
             <div className="factorGrid">
               <FactorMeter label="Source score" value={score} />
-              <FactorMeter label="Authority" value={factors.authority} />
-              <FactorMeter label="Relevance" value={factors.relevance} />
-              <FactorMeter label="Directness" value={factors.directness} />
-              <FactorMeter label="Recency" value={factors.recency} />
-              {'independence' in factors && <FactorMeter label="Independence" value={factors.independence} />}
-              <FactorMeter label="Bias risk" value={factors.bias_risk} toneValue={numericScore(factors.bias_risk) === null ? null : 5 - (numericScore(factors.bias_risk) || 0)} />
+              {hasCapturedFactors && (
+                <>
+                  <FactorMeter label="Authority" value={factors.authority} />
+                  <FactorMeter label="Relevance" value={factors.relevance} />
+                  <FactorMeter label="Directness" value={factors.directness} />
+                  <FactorMeter label="Recency" value={factors.recency} />
+                  {'independence' in factors && <FactorMeter label="Independence" value={factors.independence} />}
+                  <FactorMeter label="Bias risk" value={factors.bias_risk} toneValue={numericScore(factors.bias_risk) === null ? null : 5 - (numericScore(factors.bias_risk) || 0)} />
+                </>
+              )}
             </div>
-            {!hasCapturedFactors && <p className="muted">This saved assessment did not include individual factor scores. New assessments should capture these fields when the backend returns scoring factors.</p>}
-            <p className="sourceScoringNote">Each bar uses the same 0–5 value shown beside it. For bias risk, a longer bar means more risk and the colour worsens as the value rises. The overall source score is the weighted contribution used for this claim.</p>
+            {!hasCapturedFactors && <p className="muted">This assessment has an overall source score, but did not capture a reliable factor breakdown for authority, relevance, directness, recency, or bias risk. Hiding empty 0.0 factor bars to avoid implying these were measured.</p>}
+            {hasCapturedFactors && <p className="sourceScoringNote">Each bar uses the same 0–5 value shown beside it. For bias risk, a longer bar means more risk and the colour worsens as the value rises. The overall source score is the weighted contribution used for this claim.</p>}
           </div>
         )}
       </div>

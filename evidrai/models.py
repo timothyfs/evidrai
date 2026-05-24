@@ -51,6 +51,19 @@ class EvidenceSource:
             "source_role": self.source_role,
             "narrative_cluster": self.narrative_cluster,
             "weighted_score": self.weighted_score,
+            "authority_score": self.authority_score,
+            "relevance_score": self.relevance_score,
+            "directness_score": self.directness_score,
+            "recency_score": self.recency_score,
+            "bias_risk_score": self.bias_risk_score,
+            "scoring_factors": {
+                "authority": self.authority_score,
+                "relevance": self.relevance_score,
+                "directness": self.directness_score,
+                "recency": self.recency_score,
+                "bias_risk": self.bias_risk_score,
+                "weighted": self.weighted_score,
+            },
         }
 
     def to_trace_packet(self) -> Dict[str, Any]:
