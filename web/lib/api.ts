@@ -313,8 +313,12 @@ async function request<T>(path: string, init?: RequestInit, options?: { sameOrig
       const upstreamDetail = typeof detail === 'object' && detail?.upstream_detail ? detail.upstream_detail : null;
       const upstreamNested = typeof upstreamDetail === 'object' && upstreamDetail?.detail ? upstreamDetail.detail : null;
       const upstreamMessage = typeof upstreamNested === 'string' ? upstreamNested : (typeof upstreamNested === 'object' ? upstreamNested?.message : '');
+      const upstreamCode = typeof upstreamNested === 'object' ? upstreamNested?.code : '';
+      const upstreamDeveloper = typeof upstreamNested === 'object' ? upstreamNested?.developer_detail : '';
       const fallback = typeof detail === 'object' && detail?.fallback ? ` ${detail.fallback}` : '';
-      message = typeof detail === 'string' ? detail : `${upstreamMessage || detail?.message || payload?.error || message}${fallback}`;
+      const baseMessage = upstreamMessage || detail?.message || payload?.error || message;
+      const diagnostic = upstreamCode || upstreamDeveloper ? ` (${[upstreamCode, upstreamDeveloper].filter(Boolean).join(': ')})` : '';
+      message = typeof detail === 'string' ? detail : `${baseMessage}${diagnostic}${fallback}`;
     } catch {
       // Keep HTTP status fallback.
     }

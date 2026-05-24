@@ -11,7 +11,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (ownerId) headers['X-Evidrai-User-Id'] = ownerId;
 
   try {
-    const upstream = await fetch(`${API_BASE_URL}/reports/${encodeURIComponent(id)}/share`, {
+    const upstream = await fetch(`${API_BASE_URL}/reports/${encodeURIComponent(id)}/share?include_debug=true`, {
       method: 'POST',
       headers,
       body: body || '{}',
