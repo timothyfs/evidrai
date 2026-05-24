@@ -207,7 +207,9 @@ class LocalReportStore:
         if token.startswith("s1."):
             record = _decode_signed_share_token(token)
             assessment = self.load(record["assessment_id"])
-            return {"share": {"token": token, **record, "owner_id": assessment.owner_id, "created_at": assessment.created_at, "revoked_at": ""}, "assessment": assessment}
+            assessment_owner = _assessment_field(assessment, "owner_id") or ""
+            assessment_created_at = _assessment_field(assessment, "created_at") or ""
+            return {"share": {"token": token, **record, "owner_id": assessment_owner, "created_at": assessment_created_at, "revoked_at": ""}, "assessment": assessment}
         safe = "".join(ch for ch in token if ch.isalnum() or ch in {"-", "_"})
         if not safe or safe != token:
             raise ReportNotFoundError(token)
@@ -396,7 +398,9 @@ class PostgresReportStore:
         if token.startswith("s1."):
             record = _decode_signed_share_token(token)
             assessment = self.load(record["assessment_id"])
-            return {"share": {"token": token, **record, "owner_id": assessment.owner_id, "created_at": assessment.created_at, "revoked_at": ""}, "assessment": assessment}
+            assessment_owner = _assessment_field(assessment, "owner_id") or ""
+            assessment_created_at = _assessment_field(assessment, "created_at") or ""
+            return {"share": {"token": token, **record, "owner_id": assessment_owner, "created_at": assessment_created_at, "revoked_at": ""}, "assessment": assessment}
         safe = "".join(ch for ch in token if ch.isalnum() or ch in {"-", "_"})
         if not safe or safe != token:
             raise ReportNotFoundError(token)
