@@ -34,7 +34,7 @@ from evidrai.pipeline.verification import (
     run_speech_audit,
     verify_speech_claim,
 )
-from evidrai.reports import create_report_share, list_reports, load_report, load_shared_report, save_report
+from evidrai.reports import _assessment_field, create_report_share, list_reports, load_report, load_shared_report, save_report
 from evidrai.transcripts import clean_pasted_youtube_transcript, diagnose_youtube_transcript, extract_youtube_transcript, transcript_backend_status
 from evidrai.utils import build_analysis_input, is_probable_url
 
@@ -506,7 +506,8 @@ def create_report_share_endpoint(report_id: str, request: ReportShareCreateReque
         if not context.authenticated:
             raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in is required to share reports."})
         assessment = load_report(report_id)
-        if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+        assessment_owner = _assessment_field(assessment, "owner_id") or ""
+        if assessment_owner and assessment_owner != context.owner_id and not _is_master_admin(context):
             raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
         access_level = "full" if profile.features.get("share_reports") or profile.tier in {"pro", "researcher"} else "simple"
         share = create_report_share(report_id, owner_id=context.owner_id, access_level=access_level, assessment=assessment)
