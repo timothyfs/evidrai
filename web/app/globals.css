@@ -1381,6 +1381,34 @@ html[data-theme="light"] .earlyAccessNotice { background: rgba(255,255,255,0.72)
 }
 
 /* Assessment result hierarchy polish */
+
+.suppliedSourcePreview {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255,255,255,0.025);
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px;
+}
+.suppliedSourcePreviewHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.suppliedSourcePreviewHeader strong {
+  color: var(--ink);
+}
+.suppliedSourcePreviewHeader span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+.suppliedSourceLinks {
+  max-height: 220px;
+  overflow: auto;
+}
 .assessmentSnapshot {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1421,13 +1449,22 @@ html[data-theme="light"] .earlyAccessNotice { background: rgba(255,255,255,0.72)
   flex-wrap: wrap;
   gap: 8px;
 }
-.miniEvidenceMap span {
+.miniEvidenceMap span,
+.miniEvidenceMap a {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 800;
   padding: 6px 9px;
+  text-decoration: none;
+}
+.miniEvidenceMap a {
+  color: var(--text);
+}
+.miniEvidenceMap .missingSourceRef {
+  border-color: rgba(255, 190, 120, 0.55);
+  color: #ffd29a;
 }
 .sourceReason {
   border-top: 1px solid var(--line);

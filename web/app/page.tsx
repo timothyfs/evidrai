@@ -138,6 +138,26 @@ function sourceStats(sources: AssessmentSource[]) {
   return groupSources(sources).map(({ group, sources: grouped }) => `${group}: ${grouped.length}`);
 }
 
+function sourceId(source: AssessmentSource, index: number) {
+  return source.id || `src_${index + 1}`;
+}
+
+function sourceIndex(assessment: AssessmentResponse) {
+  return new Map((assessment.sources || []).map((source, index) => [sourceId(source, index), source]));
+}
+
+function citedSourceIds(assessment: AssessmentResponse) {
+  const ids = new Set<string>();
+  assessment.claim_breakdown?.forEach((item) => {
+    item.supporting_source_ids?.forEach((id) => ids.add(id));
+    item.contradicting_source_ids?.forEach((id) => ids.add(id));
+  });
+  Object.values(assessment.evidence_map || {}).forEach((value) => {
+    if (Array.isArray(value)) value.forEach((id) => typeof id === 'string' && ids.add(id));
+  });
+  return ids;
+}
+
 function evidenceStrengthLabel(score?: number | null, verdict?: string) {
   if (typeof score !== 'number' || !Number.isFinite(score)) return '';
   const magnitude = Math.abs(score);
@@ -392,16 +412,65 @@ function CounterEvidencePrompt({ assessment }: { assessment: AssessmentResponse 
   );
 }
 
+function SourceReferences({ assessment, ids }: { assessment: AssessmentResponse; ids: string[] }) {
+  const byId = sourceIndex(assessment);
+  if (!ids.length) return null;
+  return (
+    <div className="miniEvidenceMap">
+      {ids.map((id) => {
+        const source = byId.get(id);
+        if (!source) return <span className="missingSourceRef" key={id}>{id} referenced, but source details were not supplied</span>;
+        const label = source.title || source.domain || source.url || id;
+        return source.url ? (
+          <a href={sourceHref(source)} key={id} rel="noreferrer" target="_blank">{id}: {label}</a>
+        ) : (
+          <span key={id}>{id}: {label}</span>
+        );
+      })}
+    </div>
+  );
+}
+
+function SourceLinkPreview({ assessment }: { assessment: AssessmentResponse }) {
+  const sources = assessment.sources || [];
+  if (!sources.length) return <p className="muted">No source links were supplied for this assessment.</p>;
+  return (
+    <section className="suppliedSourcePreview" aria-label="Supplied source links">
+      <div className="suppliedSourcePreviewHeader">
+        <strong>Supplied sources</strong>
+        <span>{sources.length} link{sources.length === 1 ? '' : 's'} returned</span>
+      </div>
+      <div className="miniEvidenceMap suppliedSourceLinks">
+        {sources.map((source, index) => {
+          const id = sourceId(source, index);
+          const label = source.title || source.domain || source.url || id;
+          return source.url ? (
+            <a href={sourceHref(source)} key={`${id}-${source.url || index}`} rel="noreferrer" target="_blank">{id}: {label}</a>
+          ) : (
+            <span className="missingSourceRef" key={`${id}-${index}`}>{id}: {label} — no URL supplied</span>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function SourceList({ assessment }: { assessment: AssessmentResponse }) {
   if (!assessment.sources?.length) return <p className="muted">No sources returned for this assessment.</p>;
+  const citedIds = citedSourceIds(assessment);
+  const pinned = assessment.sources.filter((source, index) => citedIds.has(sourceId(source, index)));
+  const visible = [...pinned, ...assessment.sources].filter((source, index, all) => {
+    const id = source.id || source.url || source.domain || source.title || String(index);
+    return all.findIndex((candidate) => (candidate.id || candidate.url || candidate.domain || candidate.title) === id) === index;
+  }).slice(0, Math.max(10, pinned.length));
   return (
     <div className="evidenceGroups">
       <CounterEvidencePrompt assessment={assessment} />
-      {groupSources(assessment.sources.slice(0, 10)).map(({ group, sources }) => (
+      {groupSources(visible).map(({ group, sources }) => (
         <section className="evidenceGroup" key={group}>
           <div className="evidenceGroupHeader">
             <h3>{group}</h3>
-            <span>{sources.length} source{sources.length === 1 ? '' : 's'}</span>
+            <span>{sources.length} supplied source{sources.length === 1 ? '' : 's'}</span>
           </div>
           <div className="sourceGrid">
             {sources.map((source, index) => <SourceCard assessmentId={assessment.assessment_id} source={source} compact key={`${source.id || source.url}-${index}`} />)}
@@ -980,6 +1049,8 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
         {stats.length ? stats.map((item) => <span key={item}>{item}</span>) : <span>No evidence grouping available</span>}
       </div>
 
+      <SourceLinkPreview assessment={assessment} />
+
       <EvidenceScorePanel assessment={assessment} />
 
       {assessment.claim_breakdown?.length > 0 && (
@@ -994,10 +1065,7 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
                 </div>
                 {item.rationale && <p>{item.rationale}</p>}
                 {(item.supporting_source_ids?.length > 0 || item.contradicting_source_ids?.length > 0) && (
-                  <div className="miniEvidenceMap">
-                    {item.supporting_source_ids?.length > 0 && <span>{item.supporting_source_ids.length} supporting source{item.supporting_source_ids.length === 1 ? '' : 's'}</span>}
-                    {item.contradicting_source_ids?.length > 0 && <span>{item.contradicting_source_ids.length} contradicting source{item.contradicting_source_ids.length === 1 ? '' : 's'}</span>}
-                  </div>
+                  <SourceReferences assessment={assessment} ids={[...(item.supporting_source_ids || []), ...(item.contradicting_source_ids || [])]} />
                 )}
               </div>
             ))}
@@ -1005,8 +1073,8 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
         </details>
       )}
 
-      <details className="resultSection evidenceSourcesSection">
-        <summary><span>Evidence sources</span><small>Show grouped source evidence</small></summary>
+      <details className="resultSection evidenceSourcesSection" open>
+        <summary><span>Evidence sources</span><small>Grouped source evidence with links</small></summary>
         <SourceList assessment={assessment} />
       </details>
 
