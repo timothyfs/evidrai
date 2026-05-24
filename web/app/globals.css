@@ -1189,6 +1189,11 @@ html[data-theme="light"] .verdictPanel {
   font-weight: 850;
   padding: 7px 9px;
 }
+.loadingHint {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 10px 0 0;
+}
 @keyframes loadingPulse {
   0%, 100% { opacity: 0.55; transform: scale(0.86); }
   50% { opacity: 1; transform: scale(1); }

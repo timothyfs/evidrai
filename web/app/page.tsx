@@ -801,9 +801,43 @@ function LoadingState({ type }: { type: 'claim' | 'speech' | 'report' | 'speech-
         <div className="loadingSteps">
           {copy.steps.map((step) => <span key={step}>{step}</span>)}
         </div>
+        <p className="loadingHint">Keep this page open while the check runs. On supported phones, Evidrai will try to keep the screen awake.</p>
       </div>
     </section>
   );
+}
+
+function useWakeLock(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled || typeof navigator === 'undefined') return;
+    let released = false;
+    let sentinel: { release: () => Promise<void>; addEventListener?: (type: string, listener: () => void) => void } | null = null;
+    const wakeLock = (navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void>; addEventListener?: (type: string, listener: () => void) => void }> } }).wakeLock;
+
+    async function requestLock() {
+      if (!wakeLock || released || document.visibilityState !== 'visible') return;
+      try {
+        sentinel = await wakeLock.request('screen');
+        sentinel.addEventListener?.('release', () => {
+          sentinel = null;
+        });
+      } catch {
+        // Wake Lock is best-effort. Unsupported browsers still get clearer retry guidance.
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') requestLock();
+    }
+
+    requestLock();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      released = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (sentinel) sentinel.release().catch(() => undefined);
+    };
+  }, [enabled]);
 }
 
 function VerifyGuide({ mode, canUseDeep, canUseSpeech }: { mode: 'claim' | 'speech'; canUseDeep: boolean; canUseSpeech: boolean }) {
@@ -1130,6 +1164,7 @@ export default function Home() {
   const [loadingKind, setLoadingKind] = useState<'claim' | 'speech' | 'report' | 'speech-verify'>('claim');
   const [verifyingSpeech, setVerifyingSpeech] = useState(false);
   const [error, setError] = useState('');
+  useWakeLock(loading || verifyingSpeech);
 
   const signedIn = Boolean(account?.owner_id && !account.owner_id.startsWith('anon_'));
   const userFeatures = me?.user?.features || {};

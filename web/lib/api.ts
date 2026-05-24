@@ -212,6 +212,9 @@ function userFacingError(message: string): string {
   if (lower.includes('youtube blocked automatic transcript access') || (lower.includes('youtube') && lower.includes('not a bot')) || lower.includes('cookies-from-browser') || lower.includes('use --cookies')) {
     return 'YouTube blocked automatic transcript access for this video. Paste the transcript into the Transcript box and run the speech/video audit again.';
   }
+  if (lower === 'load failed' || lower.includes('failed to fetch') || lower.includes('networkerror')) {
+    return 'The check was interrupted before the result came back. Keep the page open and the phone awake while Evidrai is checking, then try again.';
+  }
   return message;
 }
 
@@ -248,16 +251,22 @@ export function getAccountProfile(): AccountProfile {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const account = getAccountProfile();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    cache: 'no-store',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Evidrai-User-Id': account.owner_id,
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(init?.headers || {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Evidrai-User-Id': account.owner_id,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(init?.headers || {}),
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Load failed';
+    throw new Error(userFacingError(message));
+  }
 
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
