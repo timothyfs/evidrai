@@ -500,15 +500,26 @@ def reports_index(http_request: Request, limit: int = 50) -> Dict[str, Any]:
 
 @app.post("/reports/{report_id}/share", response_model=Dict[str, Any])
 def create_report_share_endpoint(report_id: str, request: ReportShareCreateRequest, http_request: Request) -> Dict[str, Any]:
-    context, profile = _profile_from_request(http_request)
-    if not context.authenticated:
-        raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in is required to share reports."})
-    assessment = load_report(report_id)
-    if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
-        raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
-    access_level = "full" if profile.features.get("share_reports") or profile.tier in {"pro", "researcher"} else "simple"
-    share = create_report_share(report_id, owner_id=context.owner_id, access_level=access_level)
-    return {"ok": True, "share": share, "token": share.get("token"), "assessment_id": report_id, "access_level": access_level}
+    include_debug = (http_request.query_params.get("include_debug") or "").lower() == "true"
+    try:
+        context, profile = _profile_from_request(http_request)
+        if not context.authenticated:
+            raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in is required to share reports."})
+        assessment = load_report(report_id)
+        if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+            raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
+        access_level = "full" if profile.features.get("share_reports") or profile.tier in {"pro", "researcher"} else "simple"
+        share = create_report_share(report_id, owner_id=context.owner_id, access_level=access_level, assessment=assessment)
+        return {"ok": True, "share": share, "token": share.get("token"), "assessment_id": report_id, "access_level": access_level}
+    except HTTPException:
+        raise
+    except EvidraiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=safe_error_payload(exc, include_debug=include_debug))
+    except Exception as exc:
+        detail: Dict[str, Any] = {"code": "share_create_failed", "message": "Could not create share link."}
+        if include_debug:
+            detail["developer_detail"] = f"{type(exc).__name__}: {exc}"
+        raise HTTPException(status_code=500, detail=detail)
 
 
 @app.get("/public/reports/{token}", response_model=Dict[str, Any])

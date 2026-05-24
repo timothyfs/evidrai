@@ -94,7 +94,7 @@ class ReportStore(Protocol):
     def iter_assessments(self, limit: int = 1000) -> List[AssessmentResponse]:
         ...
 
-    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full") -> Dict[str, Any]:
+    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None) -> Dict[str, Any]:
         ...
 
     def load_shared(self, token: str) -> Dict[str, Any]:
@@ -187,8 +187,8 @@ class LocalReportStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
 
-    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full") -> Dict[str, Any]:
-        assessment = self.load(report_id)
+    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None) -> Dict[str, Any]:
+        assessment = assessment or self.load(report_id)
         access_level = "full" if access_level == "full" else "simple"
         if owner_id and assessment.owner_id and assessment.owner_id != owner_id:
             raise ReportNotFoundError(report_id)
@@ -354,23 +354,28 @@ class PostgresReportStore:
         except Exception as exc:
             raise ReportStoreError("Could not iterate reports.", developer_detail=str(exc))
 
-    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full") -> Dict[str, Any]:
-        self._ensure_schema()
+    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None) -> Dict[str, Any]:
         access_level = "full" if access_level == "full" else "simple"
+        if assessment is not None:
+            if owner_id and assessment.owner_id and assessment.owner_id != owner_id:
+                raise ReportNotFoundError(report_id)
+            token = _signed_share_token(report_id, access_level)
+            return {"token": token, "assessment_id": report_id, "owner_id": assessment.owner_id or owner_id, "access_level": access_level, "created_at": assessment.created_at, "revoked_at": ""}
+        self._ensure_schema()
         try:
             with self._connect() as conn:
                 with conn.cursor() as cur:
                     cur.execute("SELECT assessment_id, owner_id, created_at FROM assessments WHERE assessment_id = %s", (report_id,))
-                    assessment = cur.fetchone()
-            if not assessment:
+                    row = cur.fetchone()
+            if not row:
                 raise ReportNotFoundError(report_id)
-            if owner_id and assessment.get("owner_id") and assessment.get("owner_id") != owner_id:
+            if owner_id and row.get("owner_id") and row.get("owner_id") != owner_id:
                 raise ReportNotFoundError(report_id)
-            created_at = assessment.get("created_at")
+            created_at = row.get("created_at")
             if hasattr(created_at, "isoformat"):
                 created_at = created_at.isoformat()
             token = _signed_share_token(report_id, access_level)
-            return {"token": token, "assessment_id": report_id, "owner_id": assessment.get("owner_id") or owner_id, "access_level": access_level, "created_at": created_at, "revoked_at": ""}
+            return {"token": token, "assessment_id": report_id, "owner_id": row.get("owner_id") or owner_id, "access_level": access_level, "created_at": created_at, "revoked_at": ""}
         except EvidraiError:
             raise
         except Exception as exc:
@@ -454,8 +459,8 @@ def iter_assessments(limit: int = 1000, store: ReportStore | None = None) -> Lis
     return (store or get_report_store()).iter_assessments(limit=limit)
 
 
-def create_report_share(report_id: str, owner_id: str = "", access_level: str = "full", store: ReportStore | None = None) -> Dict[str, Any]:
-    return (store or get_report_store()).create_share(report_id, owner_id=owner_id, access_level=access_level)
+def create_report_share(report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None, store: ReportStore | None = None) -> Dict[str, Any]:
+    return (store or get_report_store()).create_share(report_id, owner_id=owner_id, access_level=access_level, assessment=assessment)
 
 
 def load_shared_report(token: str, store: ReportStore | None = None) -> Dict[str, Any]:
