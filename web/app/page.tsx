@@ -1054,8 +1054,17 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
       const payload = await createReportShare(assessment.assessment_id, platform);
       const url = `${window.location.origin}/share/${payload.token}`;
       setPublicUrl(url);
-      if (platform === 'copy' && navigator.clipboard) await navigator.clipboard.writeText(url);
-      setMessage(payload.access_level === 'full' ? (platform === 'copy' ? 'Full public report link copied.' : 'Full public report link ready.') : (platform === 'copy' ? 'Simple public share link copied.' : 'Simple public share link ready.'));
+      let copied = false;
+      if (platform === 'copy' && navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(url);
+          copied = true;
+        } catch (copyErr) {
+          console.warn('Could not copy share link automatically', copyErr);
+        }
+      }
+      const shareType = payload.access_level === 'full' ? 'Full public report' : 'Simple public share';
+      setMessage(copied ? `${shareType} link copied.` : `${shareType} link created. Copy it from the field below.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not create share link');
     } finally {
@@ -1067,7 +1076,7 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
   return (
     <section className="sharePanel resultSection">
       <div>
-        <p className="eyebrow">Pro shareable report</p>
+        <p className="eyebrow">Shareable report</p>
         <h3>Share this assessment</h3>
         <p className="muted">Free users can share a simple verdict/summary card. Pro users share the full evidence report.</p>
       </div>
@@ -1075,7 +1084,7 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
         <button className="secondary" disabled={busy} onClick={() => createShare('copy')} type="button">{busy ? 'Creating…' : publicUrl ? 'Copy link' : 'Create share link'}</button>
         {publicUrl && links.map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}
       </div>
-      {publicUrl && <input readOnly value={publicUrl} onFocus={(event) => event.currentTarget.select()} />}
+      {publicUrl && <div className="shareLinkRow"><input readOnly value={publicUrl} onFocus={(event) => event.currentTarget.select()} /><a className="button secondary" href={publicUrl} target="_blank" rel="noreferrer">Open</a></div>}
       {publicUrl && <p className="muted">Instagram does not allow normal web share intents. Copy the link and paste it into a bio, story sticker, caption, or DM.</p>}
       {!canShare && <p className="muted">Free share is intentionally lightweight and branded for discovery. Upgrade to Pro for full evidence-source sharing.</p>}
       {message && <p className={message.toLowerCase().includes('could not') || message.toLowerCase().includes('feature') ? 'error' : 'muted'}>{message}</p>}

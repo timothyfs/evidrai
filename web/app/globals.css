@@ -2269,3 +2269,7 @@ html[data-theme="light"] .methodologyGuardrails {
 .sharePanel input { font-size: .9rem; }
 .publicReport { max-width: 1040px; margin: 28px auto; }
 .publicReport h1 { margin: 0; font-size: clamp(2rem, 5vw, 4rem); letter-spacing: -0.05em; }
+
+.shareLinkRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.shareLinkRow .button { white-space: nowrap; }
+@media (max-width: 640px) { .shareLinkRow { grid-template-columns: 1fr; } }
