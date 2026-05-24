@@ -93,12 +93,16 @@ def api_allowed_origins() -> list[str]:
     )
     default_origins = [
         "https://evidrai.vercel.app",
+        "https://evidrai.com",
+        "https://www.evidrai.com",
+        "https://evidrai.ai",
+        "https://www.evidrai.ai",
         "https://evidrai-i74sha2rjrzchntsofrmmc.streamlit.app",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
     origins = [item.strip().rstrip("/") for item in (raw or "").split(",") if item.strip()]
-    combined = origins or default_origins
+    combined = [*default_origins, *origins]
     return list(dict.fromkeys(combined))
 
 

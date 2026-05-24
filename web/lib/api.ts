@@ -250,7 +250,7 @@ function userFacingError(message: string): string {
     return 'YouTube blocked automatic transcript access for this video. Paste the transcript into the Transcript box and run the speech/video audit again.';
   }
   if (lower === 'load failed' || lower.includes('failed to fetch') || lower.includes('networkerror')) {
-    return 'The check was interrupted before the result came back. Keep the page open and the phone awake while Evidrai is checking, then try again.';
+    return 'The request could not reach the Evidrai API. This is usually a network/CORS or deployment configuration issue, not your browser. Please try again after the latest deploy.';
   }
   return message;
 }
