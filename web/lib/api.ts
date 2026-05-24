@@ -62,8 +62,16 @@ export type ReportShare = {
   token: string;
   assessment_id: string;
   owner_id?: string | null;
+  access_level?: 'simple' | 'full';
   created_at?: string;
   revoked_at?: string;
+};
+
+export type PublicReportResponse = {
+  ok: boolean;
+  access_level: 'simple' | 'full';
+  share: ReportShare;
+  assessment: AssessmentResponse;
 };
 
 export type TierName = 'free' | 'pro' | 'researcher';
@@ -367,17 +375,17 @@ export function getReport(id: string): Promise<AssessmentResponse> {
   return request<AssessmentResponse>(`/reports/${encodeURIComponent(id)}`);
 }
 
-export function createReportShare(id: string, platform = 'copy'): Promise<{ ok: boolean; token: string; assessment_id: string; share: ReportShare }> {
-  return request<{ ok: boolean; token: string; assessment_id: string; share: ReportShare }>(`/reports/${encodeURIComponent(id)}/share`, {
+export function createReportShare(id: string, platform = 'copy'): Promise<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }> {
+  return request<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }>(`/reports/${encodeURIComponent(id)}/share`, {
     method: 'POST',
     body: JSON.stringify({ platform }),
   });
 }
 
-export async function getPublicSharedReport(token: string): Promise<AssessmentResponse> {
+export async function getPublicSharedReport(token: string): Promise<PublicReportResponse> {
   const response = await fetch(`${API_BASE_URL}/public/reports/${encodeURIComponent(token)}`, { cache: 'no-store' });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  return response.json() as Promise<AssessmentResponse>;
+  return response.json() as Promise<PublicReportResponse>;
 }
 
 export function listAdminUsers(): Promise<{ ok: boolean; users: UserProfile[]; feature_matrix: { schema_version: string; tiers: TierDefinition[] } }> {

@@ -103,4 +103,5 @@ def test_local_report_share_token_loads_public_report(tmp_path):
     loaded = store.load_shared(share["token"])
 
     assert share["assessment_id"] == assessment.assessment_id
-    assert loaded.request.claim == "Shareable claim"
+    assert share["access_level"] == "full"
+    assert loaded["assessment"].request.claim == "Shareable claim"

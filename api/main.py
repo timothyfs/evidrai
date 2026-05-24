@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from evidrai.api_models import AssessmentResponse, serialize_assessment_response
+from evidrai.api_models import AssessmentResponse, EvidenceMap, serialize_assessment_response
 from evidrai.assessment_jobs import AssessmentJob, get_assessment_job_store
 from evidrai.auth import AuthContext, context_from_headers, decode_supabase_access_token, unverified_token_diagnostics
 from evidrai.clients.llm import OpenAICompatibleClient
@@ -452,6 +452,35 @@ def auth_diagnostics(http_request: Request) -> Dict[str, Any]:
 
 
 
+def _simple_public_assessment(assessment: AssessmentResponse) -> AssessmentResponse:
+    reasoning: Dict[str, Any] = {}
+    if isinstance(assessment.reasoning, dict):
+        for key in ("humour_summary", "claim_semantics"):
+            value = assessment.reasoning.get(key)
+            if value:
+                reasoning[key] = value
+    return assessment.model_copy(
+        update={
+            "owner_id": None,
+            "claim_breakdown": [],
+            "evidence_map": EvidenceMap(),
+            "sources": [],
+            "reasoning": reasoning,
+        }
+    )
+
+
+def _public_shared_payload(shared: Dict[str, Any]) -> Dict[str, Any]:
+    share = dict(shared.get("share") or {})
+    assessment = shared.get("assessment")
+    if not isinstance(assessment, AssessmentResponse):
+        assessment = AssessmentResponse.model_validate(assessment)
+    access_level = share.get("access_level") or "full"
+    public_assessment = assessment.model_copy(update={"owner_id": None}) if access_level == "full" else _simple_public_assessment(assessment)
+    share.pop("owner_id", None)
+    return {"ok": True, "share": share, "access_level": access_level, "assessment": public_assessment}
+
+
 @app.post("/transcripts/diagnose", response_model=Dict[str, Any])
 def diagnose_transcript_source(request: SourceExtractRequest) -> Dict[str, Any]:
     if not request.source_url or not is_probable_url(request.source_url):
@@ -472,17 +501,19 @@ def reports_index(http_request: Request, limit: int = 50) -> Dict[str, Any]:
 @app.post("/reports/{report_id}/share", response_model=Dict[str, Any])
 def create_report_share_endpoint(report_id: str, request: ReportShareCreateRequest, http_request: Request) -> Dict[str, Any]:
     context, profile = _profile_from_request(http_request)
-    require_feature(profile, "share_reports", authenticated=context.authenticated)
+    if not context.authenticated:
+        raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in is required to share reports."})
     assessment = load_report(report_id)
     if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
         raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
-    share = create_report_share(report_id, owner_id=context.owner_id)
-    return {"ok": True, "share": share, "token": share.get("token"), "assessment_id": report_id}
+    access_level = "full" if profile.features.get("share_reports") or profile.tier in {"pro", "researcher"} else "simple"
+    share = create_report_share(report_id, owner_id=context.owner_id, access_level=access_level)
+    return {"ok": True, "share": share, "token": share.get("token"), "assessment_id": report_id, "access_level": access_level}
 
 
-@app.get("/public/reports/{token}", response_model=AssessmentResponse)
-def get_public_shared_report(token: str) -> AssessmentResponse:
-    return load_shared_report(token).model_copy(update={"owner_id": None})
+@app.get("/public/reports/{token}", response_model=Dict[str, Any])
+def get_public_shared_report(token: str) -> Dict[str, Any]:
+    return _public_shared_payload(load_shared_report(token))
 
 
 @app.get("/tiers", response_model=Dict[str, Any])

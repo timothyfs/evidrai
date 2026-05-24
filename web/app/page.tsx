@@ -1048,10 +1048,6 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
   const [busy, setBusy] = useState(false);
 
   async function createShare(platform = 'copy') {
-    if (!canShare) {
-      setMessage('Shareable reports are a Pro feature. Upgrade to Pro to create public report links.');
-      return;
-    }
     setBusy(true);
     setMessage('');
     try {
@@ -1059,7 +1055,7 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
       const url = `${window.location.origin}/share/${payload.token}`;
       setPublicUrl(url);
       if (platform === 'copy' && navigator.clipboard) await navigator.clipboard.writeText(url);
-      setMessage(platform === 'copy' ? 'Public report link copied.' : 'Public report link ready.');
+      setMessage(payload.access_level === 'full' ? (platform === 'copy' ? 'Full public report link copied.' : 'Full public report link ready.') : (platform === 'copy' ? 'Simple public share link copied.' : 'Simple public share link ready.'));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not create share link');
     } finally {
@@ -1073,7 +1069,7 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
       <div>
         <p className="eyebrow">Pro shareable report</p>
         <h3>Share this assessment</h3>
-        <p className="muted">Creates a public read-only report link without exposing your account history or private controls.</p>
+        <p className="muted">Free users can share a simple verdict/summary card. Pro users share the full evidence report.</p>
       </div>
       <div className="shareActions">
         <button className="secondary" disabled={busy} onClick={() => createShare('copy')} type="button">{busy ? 'Creating…' : publicUrl ? 'Copy link' : 'Create share link'}</button>
@@ -1081,7 +1077,7 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
       </div>
       {publicUrl && <input readOnly value={publicUrl} onFocus={(event) => event.currentTarget.select()} />}
       {publicUrl && <p className="muted">Instagram does not allow normal web share intents. Copy the link and paste it into a bio, story sticker, caption, or DM.</p>}
-      {!canShare && <p className="muted">Available on Pro and Researcher plans.</p>}
+      {!canShare && <p className="muted">Free share is intentionally lightweight and branded for discovery. Upgrade to Pro for full evidence-source sharing.</p>}
       {message && <p className={message.toLowerCase().includes('could not') || message.toLowerCase().includes('feature') ? 'error' : 'muted'}>{message}</p>}
     </section>
   );

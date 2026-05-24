@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
-import { API_BASE_URL, AssessmentResponse } from '../../../lib/api';
+import { API_BASE_URL, PublicReportResponse } from '../../../lib/api';
 
-async function loadSharedReport(token: string): Promise<AssessmentResponse | null> {
+async function loadSharedReport(token: string): Promise<PublicReportResponse | null> {
   try {
     const response = await fetch(`${API_BASE_URL}/public/reports/${encodeURIComponent(token)}`, { cache: 'no-store' });
     if (!response.ok) return null;
@@ -31,8 +31,8 @@ function shareLinks(url: string, title: string) {
 
 export default async function SharedReportPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const report = await loadSharedReport(token);
-  if (!report) {
+  const payload = await loadSharedReport(token);
+  if (!payload) {
     return (
       <main>
         <header className="siteHeader"><a className="brand" href="/">Evidrai</a><nav className="staticNav"><a href="/product">Product</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/">Verify</a></nav></header>
@@ -40,6 +40,8 @@ export default async function SharedReportPage({ params }: { params: Promise<{ t
       </main>
     );
   }
+  const report = payload.assessment;
+  const isSimple = payload.access_level !== 'full';
   const title = `Evidrai report: ${report.verdict.label}`;
   const headerList = await headers();
   const host = headerList.get('x-forwarded-host') || headerList.get('host') || '';
@@ -51,9 +53,9 @@ export default async function SharedReportPage({ params }: { params: Promise<{ t
       <section className="card resultCard assessmentCard publicReport">
         <div className="resultHeader assessmentHeader">
           <div>
-            <p className="eyebrow">Shared Evidrai report</p>
+            <p className="eyebrow">{isSimple ? 'Shared Evidrai verdict' : 'Shared Evidrai report'}</p>
             <h1>{report.request.claim || 'Untitled claim'}</h1>
-            <p className="resultSubcopy">Public read-only assessment. Evidence should be inspected, not just forwarded like internet confetti.</p>
+            <p className="resultSubcopy">{isSimple ? 'A simple public Evidrai verdict card. Run your own check to inspect the full evidence trail.' : 'Public read-only assessment. Evidence should be inspected, not just forwarded like internet confetti.'}</p>
           </div>
           <div className="verdict verdictPanel">
             <span>Verdict</span>
@@ -63,26 +65,35 @@ export default async function SharedReportPage({ params }: { params: Promise<{ t
         </div>
         <div className="assessmentNarrative">
           {report.verdict.summary && <p className="summary">{report.verdict.summary}</p>}
+          {typeof report.reasoning?.humour_summary === 'string' && report.reasoning.humour_summary.trim() && <p className="absurdityCheck"><strong>Absurdity check</strong>{report.reasoning.humour_summary}</p>}
           {report.verdict.key_caveat && <p className="caveat"><strong>Key caveat</strong>{report.verdict.key_caveat}</p>}
         </div>
-        <div className="facts assessmentFacts"><span>Assessment ID: {report.assessment_id}</span><span>{formatDate(report.created_at)}</span><span>{report.mode}</span><span>{report.sources?.length || 0} sources</span></div>
+        <div className="facts assessmentFacts"><span>Assessment ID: {report.assessment_id}</span><span>{formatDate(report.created_at)}</span><span>{report.mode}</span>{isSimple ? <span>Simple share</span> : <span>{report.sources?.length || 0} sources</span>}</div>
         <section className="sharePanel resultSection">
           <p className="eyebrow">Share</p>
           <div className="shareActions">{shareLinks(publicUrl, title).map(([label, href]) => <a className="button secondary" href={href} key={label} rel="noreferrer" target="_blank">{label}</a>)}</div>
           <p className="muted">For Instagram, copy this page URL and paste it into a story sticker, caption, bio, or DM.</p>
         </section>
-        <section className="resultSection evidenceSourcesSection">
-          <h2>Evidence sources</h2>
-          <div className="sourceGrid">
-            {(report.sources || []).map((source, index) => (
-              <article className="sourceCard" key={source.id || source.url || index}>
-                <div className="sourceTopline"><strong>{source.title || source.domain || 'Untitled source'}</strong><span>{source.source_type}</span></div>
-                <p>{source.summary || source.classification_reason || source.url}</p>
-                {source.url && <a href={source.url} rel="noreferrer" target="_blank">Open source</a>}
-              </article>
-            ))}
-          </div>
-        </section>
+        {isSimple ? (
+          <section className="resultSection evidenceSourcesSection">
+            <h2>Want the evidence trail?</h2>
+            <p className="muted">This free share is deliberately lightweight. Use Evidrai to run your own check and inspect sources, scoring, caveats, and claim breakdown.</p>
+            <a className="button secondary" href="/">Verify this yourself</a>
+          </section>
+        ) : (
+          <section className="resultSection evidenceSourcesSection">
+            <h2>Evidence sources</h2>
+            <div className="sourceGrid">
+              {(report.sources || []).map((source, index) => (
+                <article className="sourceCard" key={source.id || source.url || index}>
+                  <div className="sourceTopline"><strong>{source.title || source.domain || 'Untitled source'}</strong><span>{source.source_type}</span></div>
+                  <p>{source.summary || source.classification_reason || source.url}</p>
+                  {source.url && <a href={source.url} rel="noreferrer" target="_blank">Open source</a>}
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
       </section>
     </main>
   );

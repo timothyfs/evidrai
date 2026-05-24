@@ -5,7 +5,8 @@ const featureLabels: Record<string, string> = {
   deep_claims: 'Deep claim checks',
   speech_audit: 'Speech/video audit',
   feedback: 'Feedback loop',
-  share_reports: 'Shareable reports',
+  simple_share_reports: 'Simple branded shares',
+  share_reports: 'Full evidence report shares',
   exports: 'Exports',
   evidence_ledger: 'Evidence ledger',
   source_snapshots: 'Source snapshots',
@@ -17,6 +18,7 @@ const availableNow = new Set([
   'deep_claims',
   'speech_audit',
   'feedback',
+  'simple_share_reports',
   'share_reports',
 ]);
 
@@ -34,7 +36,7 @@ function featureState(feature: string) {
 }
 
 function tierNote(tier: string) {
-  if (tier === 'free') return 'Good for lightweight early-access testing and occasional checks.';
+  if (tier === 'free') return 'Good for lightweight early-access testing, occasional checks, and simple branded sharing.';
   if (tier === 'pro') return 'Deep checks, speech/video workflows, and shareable public reports are available now. Polished exports are next.';
   if (tier === 'researcher') return 'Preview tier for heavier research workflows. Higher limits are active; ledger, snapshots, exports, and API access are being built out.';
   return '';
