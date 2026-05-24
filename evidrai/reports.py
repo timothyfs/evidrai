@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
-import secrets
 from pathlib import Path
 from typing import Any, Dict, List, Protocol
 
 from evidrai.api_models import AssessmentResponse
-from evidrai.config import database_url
+from evidrai.config import admin_token, database_url
 from evidrai.db import run_migrations
 from evidrai.errors import EvidraiError
 
@@ -20,6 +22,48 @@ class ReportNotFoundError(EvidraiError):
 class ReportStoreError(EvidraiError):
     def __init__(self, message: str, *, developer_detail: str = "") -> None:
         super().__init__(message, code="report_store_error", status_code=500, developer_detail=developer_detail)
+
+
+def _share_secret() -> bytes:
+    secret = os.getenv("EVIDRAI_SHARE_SECRET") or admin_token() or os.getenv("EVIDRAI_ADMIN_TOKEN") or "evidrai-dev-share-secret"
+    return secret.encode("utf-8")
+
+
+def _b64_encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def _b64_decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode((value + padding).encode("ascii"))
+
+
+def _signed_share_token(report_id: str, access_level: str) -> str:
+    payload = json.dumps({"rid": report_id, "lvl": access_level}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    encoded = _b64_encode(payload)
+    signature = _b64_encode(hmac.new(_share_secret(), encoded.encode("ascii"), hashlib.sha256).digest())
+    return f"s1.{encoded}.{signature}"
+
+
+def _decode_signed_share_token(token: str) -> Dict[str, str]:
+    try:
+        version, encoded, signature = token.split(".", 2)
+    except ValueError:
+        raise ReportNotFoundError(token)
+    if version != "s1":
+        raise ReportNotFoundError(token)
+    expected = _b64_encode(hmac.new(_share_secret(), encoded.encode("ascii"), hashlib.sha256).digest())
+    if not hmac.compare_digest(signature, expected):
+        raise ReportNotFoundError(token)
+    try:
+        payload = json.loads(_b64_decode(encoded).decode("utf-8"))
+    except Exception:
+        raise ReportNotFoundError(token)
+    report_id = str(payload.get("rid") or "")
+    access_level = "full" if payload.get("lvl") == "full" else "simple"
+    if not report_id:
+        raise ReportNotFoundError(token)
+    return {"assessment_id": report_id, "access_level": access_level}
 
 
 def _psycopg():
@@ -148,17 +192,14 @@ class LocalReportStore:
         access_level = "full" if access_level == "full" else "simple"
         if owner_id and assessment.owner_id and assessment.owner_id != owner_id:
             raise ReportNotFoundError(report_id)
-        data = self._read_shares()
-        for token, record in data.items():
-            if record.get("assessment_id") == report_id and record.get("access_level", "full") == access_level and not record.get("revoked_at"):
-                return {"token": token, **record}
-        token = secrets.token_urlsafe(18)
-        record = {"assessment_id": report_id, "owner_id": assessment.owner_id or owner_id, "access_level": access_level, "created_at": assessment.created_at, "revoked_at": ""}
-        data[token] = record
-        self._write_shares(data)
-        return {"token": token, **record}
+        token = _signed_share_token(report_id, access_level)
+        return {"token": token, "assessment_id": report_id, "owner_id": assessment.owner_id or owner_id, "access_level": access_level, "created_at": assessment.created_at, "revoked_at": ""}
 
     def load_shared(self, token: str) -> Dict[str, Any]:
+        if token.startswith("s1."):
+            record = _decode_signed_share_token(token)
+            assessment = self.load(record["assessment_id"])
+            return {"share": {"token": token, **record, "owner_id": assessment.owner_id, "created_at": assessment.created_at, "revoked_at": ""}, "assessment": assessment}
         safe = "".join(ch for ch in token if ch.isalnum() or ch in {"-", "_"})
         if not safe or safe != token:
             raise ReportNotFoundError(token)
@@ -316,31 +357,20 @@ class PostgresReportStore:
     def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full") -> Dict[str, Any]:
         self._ensure_schema()
         access_level = "full" if access_level == "full" else "simple"
-        token = secrets.token_urlsafe(18)
         try:
             with self._connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT assessment_id, owner_id FROM assessments WHERE assessment_id = %s", (report_id,))
+                    cur.execute("SELECT assessment_id, owner_id, created_at FROM assessments WHERE assessment_id = %s", (report_id,))
                     assessment = cur.fetchone()
-                    if not assessment:
-                        raise ReportNotFoundError(report_id)
-                    if owner_id and assessment.get("owner_id") and assessment.get("owner_id") != owner_id:
-                        raise ReportNotFoundError(report_id)
-                    cur.execute(
-                        """
-                        INSERT INTO report_shares (token, assessment_id, owner_id, access_level, created_at, updated_at)
-                        VALUES (%s, %s, %s, %s, now(), now())
-                        ON CONFLICT (assessment_id, access_level) WHERE revoked_at IS NULL DO UPDATE SET updated_at = now()
-                        RETURNING token, assessment_id, owner_id, access_level, created_at, revoked_at
-                        """,
-                        (token, report_id, assessment.get("owner_id") or owner_id, access_level),
-                    )
-                    row = dict(cur.fetchone())
-                conn.commit()
-            for key in ("created_at", "revoked_at"):
-                if hasattr(row.get(key), "isoformat"):
-                    row[key] = row[key].isoformat()
-            return row
+            if not assessment:
+                raise ReportNotFoundError(report_id)
+            if owner_id and assessment.get("owner_id") and assessment.get("owner_id") != owner_id:
+                raise ReportNotFoundError(report_id)
+            created_at = assessment.get("created_at")
+            if hasattr(created_at, "isoformat"):
+                created_at = created_at.isoformat()
+            token = _signed_share_token(report_id, access_level)
+            return {"token": token, "assessment_id": report_id, "owner_id": assessment.get("owner_id") or owner_id, "access_level": access_level, "created_at": created_at, "revoked_at": ""}
         except EvidraiError:
             raise
         except Exception as exc:
@@ -348,6 +378,10 @@ class PostgresReportStore:
 
     def load_shared(self, token: str) -> Dict[str, Any]:
         self._ensure_schema()
+        if token.startswith("s1."):
+            record = _decode_signed_share_token(token)
+            assessment = self.load(record["assessment_id"])
+            return {"share": {"token": token, **record, "owner_id": assessment.owner_id, "created_at": assessment.created_at, "revoked_at": ""}, "assessment": assessment}
         safe = "".join(ch for ch in token if ch.isalnum() or ch in {"-", "_"})
         if not safe or safe != token:
             raise ReportNotFoundError(token)
