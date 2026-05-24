@@ -24,6 +24,12 @@ class ReportStoreError(EvidraiError):
         super().__init__(message, code="report_store_error", status_code=500, developer_detail=developer_detail)
 
 
+def _assessment_field(assessment: AssessmentResponse | Dict[str, Any], field: str, default: Any = "") -> Any:
+    if isinstance(assessment, dict):
+        return assessment.get(field, default)
+    return getattr(assessment, field, default)
+
+
 def _share_secret() -> bytes:
     secret = os.getenv("EVIDRAI_SHARE_SECRET") or admin_token() or os.getenv("EVIDRAI_ADMIN_TOKEN") or "evidrai-dev-share-secret"
     return secret.encode("utf-8")
@@ -190,10 +196,12 @@ class LocalReportStore:
     def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None) -> Dict[str, Any]:
         assessment = assessment or self.load(report_id)
         access_level = "full" if access_level == "full" else "simple"
-        if owner_id and assessment.owner_id and assessment.owner_id != owner_id:
+        assessment_owner = _assessment_field(assessment, "owner_id") or ""
+        assessment_created_at = _assessment_field(assessment, "created_at") or ""
+        if owner_id and assessment_owner and assessment_owner != owner_id:
             raise ReportNotFoundError(report_id)
         token = _signed_share_token(report_id, access_level)
-        return {"token": token, "assessment_id": report_id, "owner_id": assessment.owner_id or owner_id, "access_level": access_level, "created_at": assessment.created_at, "revoked_at": ""}
+        return {"token": token, "assessment_id": report_id, "owner_id": assessment_owner or owner_id, "access_level": access_level, "created_at": assessment_created_at, "revoked_at": ""}
 
     def load_shared(self, token: str) -> Dict[str, Any]:
         if token.startswith("s1."):
@@ -357,10 +365,12 @@ class PostgresReportStore:
     def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None) -> Dict[str, Any]:
         access_level = "full" if access_level == "full" else "simple"
         if assessment is not None:
-            if owner_id and assessment.owner_id and assessment.owner_id != owner_id:
+            assessment_owner = _assessment_field(assessment, "owner_id") or ""
+            assessment_created_at = _assessment_field(assessment, "created_at") or ""
+            if owner_id and assessment_owner and assessment_owner != owner_id:
                 raise ReportNotFoundError(report_id)
             token = _signed_share_token(report_id, access_level)
-            return {"token": token, "assessment_id": report_id, "owner_id": assessment.owner_id or owner_id, "access_level": access_level, "created_at": assessment.created_at, "revoked_at": ""}
+            return {"token": token, "assessment_id": report_id, "owner_id": assessment_owner or owner_id, "access_level": access_level, "created_at": assessment_created_at, "revoked_at": ""}
         self._ensure_schema()
         try:
             with self._connect() as conn:
