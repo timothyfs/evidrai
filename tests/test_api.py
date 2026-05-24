@@ -716,3 +716,31 @@ def test_master_admin_me_gets_researcher_tier(monkeypatch):
     assert payload["user"]["tier"] == "researcher"
     assert payload["user"]["tier_label"] == "Researcher / Journalist"
     assert calls == [("admin-user", "researcher", "timfsmithson@gmail.com")]
+
+
+def test_assessment_job_completes_and_returns_assessment(monkeypatch, tmp_path):
+    def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
+        return {
+            "verdict": "Supported",
+            "confidence": "High",
+            "tldr": "The evidence supports it.",
+            "claim_analysis": {"subclaims": [{"id": "sc_1", "text": claim}]},
+            "sources": [{"title": "Source", "url": "https://example.com", "claim_support": "supports", "source_role": "evidence"}],
+        }
+
+    grant_tier(monkeypatch, "researcher")
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
+    monkeypatch.setenv("EVIDRAI_JOB_STORE", str(tmp_path / "jobs"))
+    monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
+
+    create_response = client.post("/assessment-jobs/deep", json={"claim": "Paris is the capital of France."})
+    assert create_response.status_code == 200
+    job = create_response.json()
+    assert job["job_id"]
+
+    status_response = client.get(f"/assessment-jobs/{job['job_id']}", headers={"X-Evidrai-User-Id": "test-user"})
+    assert status_response.status_code == 200
+    status = status_response.json()
+    assert status["status"] == "completed"
+    assert status["assessment"]["mode"] == "deep"
+    assert status["assessment"]["sources"][0]["url"] == "https://example.com"

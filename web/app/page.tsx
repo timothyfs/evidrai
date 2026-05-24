@@ -13,7 +13,7 @@ import {
   SpeechClaim,
   SpeechExtractionResult,
   SpeechVerificationResult,
-  createAssessment,
+  createAssessmentJob,
   extractSpeechClaims,
   getMe,
   getAuthDiagnostics,
@@ -21,6 +21,7 @@ import {
   listReports,
   getAnonymousAccountProfile,
   getReport,
+  getAssessmentJob,
   setAccessToken,
   setAccountProfile,
   submitFeedback,
@@ -43,6 +44,8 @@ function verdictTone(label: string) {
 }
 
 type ThemeMode = 'dark' | 'light';
+
+const PENDING_ASSESSMENT_JOB_KEY = 'evidrai_pending_assessment_job';
 
 function applyTheme(theme: ThemeMode) {
   if (typeof document === 'undefined') return;
@@ -1207,6 +1210,35 @@ export default function Home() {
     }
   }
 
+  async function pollAssessmentJob(jobId: string) {
+    setLoadingKind('claim');
+    setLoading(true);
+    setError('');
+    try {
+      for (;;) {
+        const status = await getAssessmentJob(jobId);
+        if (status.status === 'completed' && status.assessment) {
+          setAssessment(status.assessment);
+          setSpeechExtraction(null);
+          setSpeechVerification(null);
+          rememberReport(status.assessment);
+          window.localStorage.removeItem(PENDING_ASSESSMENT_JOB_KEY);
+          refreshReports();
+          return;
+        }
+        if (status.status === 'failed') {
+          window.localStorage.removeItem(PENDING_ASSESSMENT_JOB_KEY);
+          throw new Error(status.error || 'Assessment job failed');
+        }
+        await new Promise((resolve) => setTimeout(resolve, document.visibilityState === 'visible' ? 2500 : 8000));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load assessment job');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function refreshMe() {
     try {
       const payload = await getMe();
@@ -1265,6 +1297,8 @@ export default function Home() {
     try {
       const saved = window.localStorage.getItem('evidrai_recent_reports');
       if (saved) setReports(JSON.parse(saved));
+      const pendingJobId = window.localStorage.getItem(PENDING_ASSESSMENT_JOB_KEY);
+      if (pendingJobId) pollAssessmentJob(pendingJobId);
     } catch (err) {
       console.warn(err);
     }
@@ -1368,15 +1402,11 @@ export default function Home() {
     try {
       const requestedMode = canUseDeep ? mode : 'fast';
       const requestedStyle = requestedMode === 'fast' ? fastOutputStyle : 'standard';
-      const result = await createAssessment({ claim, source_url: sourceUrl, category, mode: requestedMode, output_style: requestedStyle });
-      setAssessment(result);
-      setSpeechExtraction(null);
-      setSpeechVerification(null);
-      rememberReport(result);
-      refreshReports();
+      const job = await createAssessmentJob({ claim, source_url: sourceUrl, category, mode: requestedMode, output_style: requestedStyle });
+      window.localStorage.setItem(PENDING_ASSESSMENT_JOB_KEY, job.job_id);
+      await pollAssessmentJob(job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Assessment failed');
-    } finally {
       setLoading(false);
     }
   }

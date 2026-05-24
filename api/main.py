@@ -3,12 +3,13 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 import requests
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from evidrai.api_models import AssessmentResponse, serialize_assessment_response
+from evidrai.assessment_jobs import AssessmentJob, get_assessment_job_store
 from evidrai.auth import AuthContext, context_from_headers, decode_supabase_access_token, unverified_token_diagnostics
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
@@ -134,6 +135,26 @@ class ApiEnvelope(BaseModel):
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
+
+class AssessmentJobCreateResponse(BaseModel):
+    ok: bool = True
+    job_id: str
+    status: str
+    mode: str
+    created_at: str
+
+
+class AssessmentJobStatusResponse(BaseModel):
+    ok: bool = True
+    job_id: str
+    status: str
+    mode: str
+    created_at: str
+    updated_at: str
+    completed_at: str = ""
+    assessment_id: str = ""
+    assessment: Optional[AssessmentResponse] = None
+    error: str = ""
 
 
 
@@ -308,6 +329,45 @@ def _assessment_response_from_request(request: AssessmentCreateRequest, mode: st
         owner_id=owner_id,
     )
     return save_report(assessment)
+
+
+def _job_status_response(job: AssessmentJob, context: AuthContext) -> AssessmentJobStatusResponse:
+    if job.owner_id and job.owner_id != context.owner_id and not _is_master_admin(context):
+        raise HTTPException(status_code=403, detail={"code": "assessment_job_forbidden", "message": "This assessment job belongs to another account."})
+    assessment = None
+    assessment_id = ""
+    if job.status == "completed" and job.result:
+        assessment = AssessmentResponse.model_validate(job.result)
+        assessment_id = assessment.assessment_id
+    return AssessmentJobStatusResponse(
+        job_id=job.job_id,
+        status=job.status,
+        mode=job.mode,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        completed_at=job.completed_at,
+        assessment_id=assessment_id,
+        assessment=assessment,
+        error=job.error,
+    )
+
+
+def _run_assessment_job(job_id: str) -> None:
+    store = get_assessment_job_store()
+    try:
+        job = store.mark_running(job_id)
+        request = AssessmentCreateRequest.model_validate(job.request)
+        assessment = _assessment_response_from_request(request, job.mode, owner_id=job.owner_id)
+        store.mark_completed(job_id, assessment.model_dump(mode="json"))
+    except HTTPException as exc:
+        detail = exc.detail
+        if isinstance(detail, dict):
+            message = str(detail.get("message") or detail.get("code") or detail)
+        else:
+            message = str(detail)
+        store.mark_failed(job_id, message)
+    except Exception as exc:
+        store.mark_failed(job_id, str(exc))
 
 
 def _save_speech_claim_assessment(result: Dict[str, Any], *, source_url: str, mode: str, owner_id: str = "") -> AssessmentResponse:
@@ -622,6 +682,26 @@ def create_deep_assessment(request: AssessmentCreateRequest, http_request: Reque
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims", authenticated=context.authenticated)
     return _assessment_response_from_request(request, "deep", owner_id=context.owner_id)
+
+
+@app.post("/assessment-jobs/{mode}", response_model=AssessmentJobCreateResponse)
+def create_assessment_job(mode: str, request: AssessmentCreateRequest, http_request: Request, background_tasks: BackgroundTasks) -> AssessmentJobCreateResponse:
+    if mode not in {"fast", "deep"}:
+        raise HTTPException(status_code=404, detail="Not Found")
+    context, profile = _profile_from_request(http_request)
+    require_feature(profile, "deep_claims" if mode == "deep" else "fast_claims", authenticated=context.authenticated)
+    _validate_claim_request((request.claim or "").strip(), (request.source_url or "").strip())
+    store = get_assessment_job_store()
+    job = store.create(owner_id=context.owner_id, mode=mode, request=request.model_dump(mode="json"))
+    background_tasks.add_task(_run_assessment_job, job.job_id)
+    return AssessmentJobCreateResponse(job_id=job.job_id, status=job.status, mode=job.mode, created_at=job.created_at)
+
+
+@app.get("/assessment-jobs/{job_id}", response_model=AssessmentJobStatusResponse)
+def get_assessment_job(job_id: str, http_request: Request) -> AssessmentJobStatusResponse:
+    context = _auth_context_from_request(http_request)
+    job = get_assessment_job_store().load(job_id)
+    return _job_status_response(job, context)
 
 
 @app.post("/speech/extract", response_model=ApiEnvelope)

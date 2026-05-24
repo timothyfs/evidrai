@@ -144,6 +144,27 @@ export type FeedbackResponse = {
   message: string;
 };
 
+export type AssessmentJobCreateResponse = {
+  ok: boolean;
+  job_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  mode: 'fast' | 'deep';
+  created_at: string;
+};
+
+export type AssessmentJobStatusResponse = {
+  ok: boolean;
+  job_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  mode: 'fast' | 'deep';
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+  assessment_id?: string;
+  assessment?: AssessmentResponse | null;
+  error?: string;
+};
+
 export type SpeechClaim = {
   id: string;
   quote: string;
@@ -311,6 +332,22 @@ export function createAssessment(input: { claim: string; source_url?: string; ca
       output_style: input.output_style || 'standard',
     }),
   });
+}
+
+export function createAssessmentJob(input: { claim: string; source_url?: string; category: string; mode: 'fast' | 'deep'; output_style?: 'standard' | 'absurdity_humour' }): Promise<AssessmentJobCreateResponse> {
+  return request<AssessmentJobCreateResponse>(`/assessment-jobs/${input.mode}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      claim: input.claim,
+      source_url: input.source_url || '',
+      category: input.category,
+      output_style: input.output_style || 'standard',
+    }),
+  });
+}
+
+export function getAssessmentJob(jobId: string): Promise<AssessmentJobStatusResponse> {
+  return request<AssessmentJobStatusResponse>(`/assessment-jobs/${encodeURIComponent(jobId)}`);
 }
 
 export async function listReports(): Promise<ReportSummary[]> {
