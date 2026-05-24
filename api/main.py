@@ -34,7 +34,7 @@ from evidrai.pipeline.verification import (
     run_speech_audit,
     verify_speech_claim,
 )
-from evidrai.reports import list_reports, load_report, save_report
+from evidrai.reports import create_report_share, list_reports, load_report, load_shared_report, save_report
 from evidrai.transcripts import clean_pasted_youtube_transcript, diagnose_youtube_transcript, extract_youtube_transcript, transcript_backend_status
 from evidrai.utils import build_analysis_input, is_probable_url
 
@@ -114,6 +114,10 @@ class FeedbackCreateRequest(BaseModel):
     persuasive_source_ids: list[str] = Field(default_factory=list)
     distrusted_source_ids: list[str] = Field(default_factory=list)
     comment: str = ""
+
+
+class ReportShareCreateRequest(BaseModel):
+    platform: str = "copy"
 
 
 class AdminSetTierRequest(BaseModel):
@@ -461,6 +465,24 @@ def diagnose_transcript_source(request: SourceExtractRequest) -> Dict[str, Any]:
 def reports_index(http_request: Request, limit: int = 50) -> Dict[str, Any]:
     owner_id = _owner_id_from_request(http_request)
     return {"ok": True, "owner_id": owner_id or None, "reports": list_reports(limit=limit, owner_id=owner_id)}
+
+
+
+
+@app.post("/reports/{report_id}/share", response_model=Dict[str, Any])
+def create_report_share_endpoint(report_id: str, request: ReportShareCreateRequest, http_request: Request) -> Dict[str, Any]:
+    context, profile = _profile_from_request(http_request)
+    require_feature(profile, "share_reports", authenticated=context.authenticated)
+    assessment = load_report(report_id)
+    if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+        raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
+    share = create_report_share(report_id, owner_id=context.owner_id)
+    return {"ok": True, "share": share, "token": share.get("token"), "assessment_id": report_id}
+
+
+@app.get("/public/reports/{token}", response_model=AssessmentResponse)
+def get_public_shared_report(token: str) -> AssessmentResponse:
+    return load_shared_report(token).model_copy(update={"owner_id": None})
 
 
 @app.get("/tiers", response_model=Dict[str, Any])

@@ -17,10 +17,10 @@ const availableNow = new Set([
   'deep_claims',
   'speech_audit',
   'feedback',
+  'share_reports',
 ]);
 
 const comingSoon = new Set([
-  'share_reports',
   'exports',
   'evidence_ledger',
   'source_snapshots',
@@ -35,7 +35,7 @@ function featureState(feature: string) {
 
 function tierNote(tier: string) {
   if (tier === 'free') return 'Good for lightweight early-access testing and occasional checks.';
-  if (tier === 'pro') return 'Deep checks and speech/video workflows are available now. Sharing and polished exports are next.';
+  if (tier === 'pro') return 'Deep checks, speech/video workflows, and shareable public reports are available now. Polished exports are next.';
   if (tier === 'researcher') return 'Preview tier for heavier research workflows. Higher limits are active; ledger, snapshots, exports, and API access are being built out.';
   return '';
 }

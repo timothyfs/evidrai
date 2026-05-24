@@ -418,6 +418,38 @@ def test_bearer_token_owner_overrides_spoofable_owner_header(monkeypatch):
     assert api_main._owner_id_from_request(request) == "jwt-user"
 
 
+def test_pro_user_can_create_public_report_share(monkeypatch, tmp_path):
+    def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
+        return {"verdict": "Supported", "confidence": "High", "summary": "ok"}
+
+    grant_tier(monkeypatch, "pro", owner_id="alice")
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
+    monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
+
+    assessment = client.post("/assessments/fast", json={"claim": "Shareable claim"}, headers={"X-Evidrai-User-Id": "alice"}).json()
+    share = client.post(f"/reports/{assessment['assessment_id']}/share", json={"platform": "copy"}, headers={"X-Evidrai-User-Id": "alice"})
+
+    assert share.status_code == 200
+    token = share.json()["token"]
+    public = client.get(f"/public/reports/{token}")
+    assert public.status_code == 200
+    assert public.json()["request"]["claim"] == "Shareable claim"
+
+
+def test_free_user_cannot_create_public_report_share(monkeypatch, tmp_path):
+    def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
+        return {"verdict": "Supported", "confidence": "High", "summary": "ok"}
+
+    grant_tier(monkeypatch, "free", owner_id="alice")
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
+    monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
+
+    assessment = client.post("/assessments/fast", json={"claim": "Free share claim"}, headers={"X-Evidrai-User-Id": "alice"}).json()
+    share = client.post(f"/reports/{assessment['assessment_id']}/share", json={"platform": "copy"}, headers={"X-Evidrai-User-Id": "alice"})
+
+    assert share.status_code == 403
+
+
 def test_report_history_can_be_scoped_by_owner_header(monkeypatch, tmp_path):
     def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
         return {"verdict": "Supported", "confidence": "High", "summary": "ok"}

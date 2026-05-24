@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 from pathlib import Path
 from typing import Any, Dict, List, Protocol
 
@@ -47,6 +48,12 @@ class ReportStore(Protocol):
         ...
 
     def iter_assessments(self, limit: int = 1000) -> List[AssessmentResponse]:
+        ...
+
+    def create_share(self, report_id: str, owner_id: str = "") -> Dict[str, Any]:
+        ...
+
+    def load_shared(self, token: str) -> AssessmentResponse:
         ...
 
 
@@ -118,6 +125,46 @@ class LocalReportStore:
             except Exception:
                 continue
         return assessments
+
+    def _shares_path(self) -> Path:
+        return self.directory.parent / "report_shares.json"
+
+    def _read_shares(self) -> Dict[str, Dict[str, Any]]:
+        path = self._shares_path()
+        if not path.exists():
+            return {}
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def _write_shares(self, data: Dict[str, Dict[str, Any]]) -> None:
+        path = self._shares_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+
+    def create_share(self, report_id: str, owner_id: str = "") -> Dict[str, Any]:
+        assessment = self.load(report_id)
+        if owner_id and assessment.owner_id and assessment.owner_id != owner_id:
+            raise ReportNotFoundError(report_id)
+        data = self._read_shares()
+        for token, record in data.items():
+            if record.get("assessment_id") == report_id and not record.get("revoked_at"):
+                return {"token": token, **record}
+        token = secrets.token_urlsafe(18)
+        record = {"assessment_id": report_id, "owner_id": assessment.owner_id or owner_id, "created_at": assessment.created_at, "revoked_at": ""}
+        data[token] = record
+        self._write_shares(data)
+        return {"token": token, **record}
+
+    def load_shared(self, token: str) -> AssessmentResponse:
+        safe = "".join(ch for ch in token if ch.isalnum() or ch in {"-", "_"})
+        if not safe or safe != token:
+            raise ReportNotFoundError(token)
+        record = self._read_shares().get(token)
+        if not record or record.get("revoked_at"):
+            raise ReportNotFoundError(token)
+        return self.load(record.get("assessment_id") or "")
 
 
 class PostgresReportStore:
@@ -260,6 +307,67 @@ class PostgresReportStore:
         except Exception as exc:
             raise ReportStoreError("Could not iterate reports.", developer_detail=str(exc))
 
+    def create_share(self, report_id: str, owner_id: str = "") -> Dict[str, Any]:
+        self._ensure_schema()
+        token = secrets.token_urlsafe(18)
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT assessment_id, owner_id FROM assessments WHERE assessment_id = %s", (report_id,))
+                    assessment = cur.fetchone()
+                    if not assessment:
+                        raise ReportNotFoundError(report_id)
+                    if owner_id and assessment.get("owner_id") and assessment.get("owner_id") != owner_id:
+                        raise ReportNotFoundError(report_id)
+                    cur.execute(
+                        """
+                        INSERT INTO report_shares (token, assessment_id, owner_id, created_at, updated_at)
+                        VALUES (%s, %s, %s, now(), now())
+                        ON CONFLICT (assessment_id) WHERE revoked_at IS NULL DO UPDATE SET updated_at = now()
+                        RETURNING token, assessment_id, owner_id, created_at, revoked_at
+                        """,
+                        (token, report_id, assessment.get("owner_id") or owner_id),
+                    )
+                    row = dict(cur.fetchone())
+                conn.commit()
+            for key in ("created_at", "revoked_at"):
+                if hasattr(row.get(key), "isoformat"):
+                    row[key] = row[key].isoformat()
+            return row
+        except EvidraiError:
+            raise
+        except Exception as exc:
+            raise ReportStoreError("Could not create report share.", developer_detail=str(exc))
+
+    def load_shared(self, token: str) -> AssessmentResponse:
+        self._ensure_schema()
+        safe = "".join(ch for ch in token if ch.isalnum() or ch in {"-", "_"})
+        if not safe or safe != token:
+            raise ReportNotFoundError(token)
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT a.payload
+                        FROM report_shares s
+                        JOIN assessments a ON a.assessment_id = s.assessment_id
+                        WHERE s.token = %s AND s.revoked_at IS NULL
+                        """,
+                        (token,),
+                    )
+                    row = cur.fetchone()
+            if not row:
+                raise ReportNotFoundError(token)
+            payload = row["payload"]
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            return AssessmentResponse.model_validate(payload)
+        except EvidraiError:
+            raise
+        except Exception as exc:
+            raise ReportStoreError("Could not load shared report.", developer_detail=str(exc))
+
 
 def report_store_dir() -> Path:
     configured = os.getenv("EVIDRAI_REPORT_STORE")
@@ -299,3 +407,11 @@ def list_reports(limit: int = 50, owner_id: str = "", store: ReportStore | None 
 
 def iter_assessments(limit: int = 1000, store: ReportStore | None = None) -> List[AssessmentResponse]:
     return (store or get_report_store()).iter_assessments(limit=limit)
+
+
+def create_report_share(report_id: str, owner_id: str = "", store: ReportStore | None = None) -> Dict[str, Any]:
+    return (store or get_report_store()).create_share(report_id, owner_id=owner_id)
+
+
+def load_shared_report(token: str, store: ReportStore | None = None) -> AssessmentResponse:
+    return (store or get_report_store()).load_shared(token)

@@ -86,3 +86,21 @@ def test_local_report_store_can_be_injected(tmp_path):
 
     assert load_report(assessment.assessment_id, store=store).request.claim == "Injected store claim"
     assert list_reports(store=store)[0]["mode"] == "deep"
+
+
+def test_local_report_share_token_loads_public_report(tmp_path):
+    store = LocalReportStore(tmp_path / "reports")
+    assessment = AssessmentResponse(
+        build="test-build",
+        mode="fast",
+        owner_id="alice",
+        request=AssessmentRequestRecord(claim="Shareable claim"),
+        verdict=AssessmentVerdict(label="Supported", confidence="High"),
+    )
+    save_report(assessment, store=store)
+
+    share = store.create_share(assessment.assessment_id, owner_id="alice")
+    loaded = store.load_shared(share["token"])
+
+    assert share["assessment_id"] == assessment.assessment_id
+    assert loaded.request.claim == "Shareable claim"

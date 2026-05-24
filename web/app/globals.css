@@ -2254,3 +2254,18 @@ html[data-theme="light"] .methodologyGuardrails {
 .counterEvidencePrompt button {
   justify-self: start;
 }
+
+.sharePanel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 18px;
+  background: rgba(255,255,255,.04);
+}
+.sharePanel h3 { margin: 0; }
+.shareActions { display: flex; flex-wrap: wrap; gap: 10px; }
+.shareActions .button, .shareActions button { width: auto; }
+.sharePanel input { font-size: .9rem; }
+.publicReport { max-width: 1040px; margin: 28px auto; }
+.publicReport h1 { margin: 0; font-size: clamp(2rem, 5vw, 4rem); letter-spacing: -0.05em; }

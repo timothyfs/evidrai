@@ -14,6 +14,7 @@ import {
   SpeechExtractionResult,
   SpeechVerificationResult,
   createAssessmentJob,
+  createReportShare,
   extractSpeechClaims,
   getMe,
   getAuthDiagnostics,
@@ -1027,7 +1028,66 @@ function SiteHeader({ account, me, signedIn, theme, onToggleTheme, onSignOut, au
   );
 }
 
-function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
+
+function shareUrls(publicUrl: string, assessment: AssessmentResponse) {
+  const title = `Evidrai report: ${assessment.verdict.label}`;
+  const text = `${assessment.verdict.label}: ${assessment.request.claim || 'Evidence report'} — ${publicUrl}`;
+  return [
+    { key: 'email', label: 'Email', href: `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}` },
+    { key: 'linkedin', label: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(publicUrl)}` },
+    { key: 'facebook', label: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}` },
+    { key: 'reddit', label: 'Reddit', href: `https://www.reddit.com/submit?url=${encodeURIComponent(publicUrl)}&title=${encodeURIComponent(title)}` },
+    { key: 'x', label: 'X', href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(title)}` },
+    { key: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/?text=${encodeURIComponent(text)}` },
+  ];
+}
+
+function ShareReportControls({ assessment, canShare }: { assessment: AssessmentResponse; canShare: boolean }) {
+  const [publicUrl, setPublicUrl] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function createShare(platform = 'copy') {
+    if (!canShare) {
+      setMessage('Shareable reports are a Pro feature. Upgrade to Pro to create public report links.');
+      return;
+    }
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await createReportShare(assessment.assessment_id, platform);
+      const url = `${window.location.origin}/share/${payload.token}`;
+      setPublicUrl(url);
+      if (platform === 'copy' && navigator.clipboard) await navigator.clipboard.writeText(url);
+      setMessage(platform === 'copy' ? 'Public report link copied.' : 'Public report link ready.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not create share link');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const links = publicUrl ? shareUrls(publicUrl, assessment) : [];
+  return (
+    <section className="sharePanel resultSection">
+      <div>
+        <p className="eyebrow">Pro shareable report</p>
+        <h3>Share this assessment</h3>
+        <p className="muted">Creates a public read-only report link without exposing your account history or private controls.</p>
+      </div>
+      <div className="shareActions">
+        <button className="secondary" disabled={busy} onClick={() => createShare('copy')} type="button">{busy ? 'Creating…' : publicUrl ? 'Copy link' : 'Create share link'}</button>
+        {publicUrl && links.map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}
+      </div>
+      {publicUrl && <input readOnly value={publicUrl} onFocus={(event) => event.currentTarget.select()} />}
+      {publicUrl && <p className="muted">Instagram does not allow normal web share intents. Copy the link and paste it into a bio, story sticker, caption, or DM.</p>}
+      {!canShare && <p className="muted">Available on Pro and Researcher plans.</p>}
+      {message && <p className={message.toLowerCase().includes('could not') || message.toLowerCase().includes('feature') ? 'error' : 'muted'}>{message}</p>}
+    </section>
+  );
+}
+
+function AssessmentResult({ assessment, canShare = false }: { assessment: AssessmentResponse; canShare?: boolean }) {
   const tone = verdictTone(assessment.verdict.label);
   const confidence = confidencePercent(assessment.verdict.confidence, assessment.verdict.evidence_strength_score);
   const evidenceStrength = evidenceStrengthLabel(assessment.verdict.evidence_strength_score, assessment.verdict.label);
@@ -1135,6 +1195,7 @@ function AssessmentResult({ assessment }: { assessment: AssessmentResponse }) {
         </details>
       )}
 
+      <ShareReportControls assessment={assessment} canShare={canShare} />
       <FeedbackControls assessment={assessment} />
     </section>
   );
@@ -1180,6 +1241,7 @@ export default function Home() {
   const userLimits = me?.user?.limits || {};
   const canUseDeep = Boolean(userFeatures.deep_claims);
   const canUseSpeech = Boolean(userFeatures.speech_audit);
+  const canShareReports = Boolean(userFeatures.share_reports);
   const ready = useMemo(() => signedIn && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, claim, sourceUrl]);
   const speechReady = useMemo(() => signedIn && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
 
@@ -1660,7 +1722,7 @@ export default function Home() {
         </details>
       </div>}
 
-      {signedIn && assessment && <AssessmentResult assessment={assessment} />}
+      {signedIn && assessment && <AssessmentResult assessment={assessment} canShare={canShareReports} />}
       {signedIn && speechExtraction && (
         <SpeechResult
           extraction={speechExtraction}
