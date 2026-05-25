@@ -1029,16 +1029,36 @@ function SiteHeader({ account, me, signedIn, theme, onToggleTheme, onSignOut, au
 }
 
 
+function truncateShareText(value: string, max = 140) {
+  const text = value.replace(/\s+/g, ' ').trim();
+  return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
+}
+
+function shareSubject(assessment: AssessmentResponse) {
+  const claim = truncateShareText(assessment.request.claim || 'Evidence report', 96);
+  return `Evidrai report: ${claim} — ${assessment.verdict.label}`;
+}
+
+function shareAbstract(assessment: AssessmentResponse) {
+  const parts = [`Evidrai assessed this claim as ${assessment.verdict.label.toLowerCase()} with ${assessment.verdict.confidence.toLowerCase()} confidence.`];
+  if (assessment.verdict.summary) parts.push(truncateShareText(assessment.verdict.summary, 220));
+  if (assessment.verdict.key_caveat) parts.push(`Key caveat: ${truncateShareText(assessment.verdict.key_caveat, 180)}`);
+  parts.push(`The report reviewed ${assessment.sources?.length || 0} source${(assessment.sources?.length || 0) === 1 ? '' : 's'}.`);
+  return parts.join(' ');
+}
+
 function shareUrls(publicUrl: string, assessment: AssessmentResponse) {
-  const title = `Evidrai report: ${assessment.verdict.label}`;
-  const text = `${assessment.verdict.label}: ${assessment.request.claim || 'Evidence report'} — ${publicUrl}`;
+  const title = shareSubject(assessment);
+  const abstract = shareAbstract(assessment);
+  const body = `${abstract}\n\n${publicUrl}`;
+  const socialText = `${title}\n\n${abstract}`;
   return [
-    { key: 'email', label: 'Email', href: `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}` },
+    { key: 'email', label: 'Email', href: `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}` },
     { key: 'linkedin', label: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(publicUrl)}` },
     { key: 'facebook', label: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}` },
     { key: 'reddit', label: 'Reddit', href: `https://www.reddit.com/submit?url=${encodeURIComponent(publicUrl)}&title=${encodeURIComponent(title)}` },
-    { key: 'x', label: 'X', href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(title)}` },
-    { key: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/?text=${encodeURIComponent(text)}` },
+    { key: 'x', label: 'X', href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(socialText)}` },
+    { key: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/?text=${encodeURIComponent(`${socialText}\n${publicUrl}`)}` },
   ];
 }
 
