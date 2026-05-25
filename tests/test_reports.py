@@ -23,6 +23,47 @@ def test_save_load_and_list_report(tmp_path, monkeypatch):
     assert reports[0]["verdict"] == "Supported"
 
 
+def test_postgres_report_store_load_returns_assessment(monkeypatch):
+    store = PostgresReportStore("postgresql://example")
+    store._schema_ready = True
+    assessment = AssessmentResponse(
+        build="test-build",
+        mode="fast",
+        request=AssessmentRequestRecord(claim="Postgres load claim"),
+        verdict=AssessmentVerdict(label="Supported", confidence="High"),
+    )
+
+    class FakeCursor:
+        def execute(self, *_args):
+            pass
+
+        def fetchone(self):
+            return {"payload": assessment.model_dump(mode="json")}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(store, "_connect", lambda: FakeConnection())
+
+    loaded = store.load(assessment.assessment_id)
+
+    assert isinstance(loaded, AssessmentResponse)
+    assert loaded.request.claim == "Postgres load claim"
+
+
 def test_postgres_report_store_list_serializes_datetime(monkeypatch):
     store = PostgresReportStore("postgresql://example")
     store._schema_ready = True

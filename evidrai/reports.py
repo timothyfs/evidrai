@@ -291,11 +291,7 @@ class PostgresReportStore:
             payload = row["payload"]
             if isinstance(payload, str):
                 payload = json.loads(payload)
-            share = {key: row.get(key) for key in ("token", "assessment_id", "owner_id", "access_level", "created_at", "revoked_at")}
-            for key in ("created_at", "revoked_at"):
-                if hasattr(share.get(key), "isoformat"):
-                    share[key] = share[key].isoformat()
-            return {"share": share, "assessment": AssessmentResponse.model_validate(payload)}
+            return AssessmentResponse.model_validate(payload)
         except EvidraiError:
             raise
         except Exception as exc:
