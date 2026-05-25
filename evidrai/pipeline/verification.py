@@ -46,6 +46,63 @@ from evidrai.utils import classify_source_type, domain_from_url, recency_score, 
 
 SPEECH_AUDIT_MAX_TRANSCRIPT_CHARS = 12000
 
+_HUMOUR_WITHHOLD_KEYWORDS = {
+    "abuse",
+    "assault",
+    "cancer",
+    "death",
+    "die",
+    "died",
+    "genocide",
+    "harassment",
+    "hate",
+    "murder",
+    "rape",
+    "suicide",
+    "terrorism",
+    "violence",
+    "war crime",
+}
+
+
+def _should_withhold_humour(user_input: str, data: Dict[str, Any]) -> bool:
+    text = " ".join(
+        str(value or "")
+        for value in (
+            user_input,
+            data.get("summary"),
+            data.get("tldr"),
+            data.get("evidence_access_note"),
+            " ".join(data.get("caution_flags", []) or []),
+        )
+    ).lower()
+    return any(keyword in text for keyword in _HUMOUR_WITHHOLD_KEYWORDS)
+
+
+def _normalise_humour_summary(user_input: str, data: Dict[str, Any], output_style: str) -> tuple[str, str]:
+    if output_style != "absurdity_humour":
+        return "", ""
+    if _should_withhold_humour(user_input, data):
+        return "", "Humour withheld because the claim appears to involve serious harm or vulnerable people."
+
+    supplied = str(data.get("humour_summary") or "").strip()
+    note = str(data.get("humour_safety_note") or "").strip()
+    if supplied:
+        summary = re.sub(r"\s+", " ", supplied)
+        if len(summary) > 280:
+            summary = summary[:279].rstrip() + "…"
+        return summary, note or "Applied to claim quality only."
+
+    verdict = str(data.get("verdict") or "Unverified").lower()
+    if "support" in verdict and "not" not in verdict and "false" not in verdict:
+        summary = "Absurdity check: this one is less clown car and more paperwork; the available evidence broadly does what the claim says it does."
+    elif "false" in verdict or "contradict" in verdict or "not supported" in verdict:
+        summary = "Absurdity check: the claim is trying to sprint past a contradiction wearing evidence-proof shoes."
+    else:
+        summary = "Absurdity check: the claim is making a confident entrance, but the evidence has not found its name on the guest list."
+    return summary, "Fallback applied because the model omitted the requested absurdity check; humour targets claim quality only."
+
+
 def call_legacy_model(claim: str, category: str, detail_mode: str, llm: OpenAICompatibleClient, evidence_context: str = "", output_style: str = "standard") -> Dict[str, Any]:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -105,7 +162,7 @@ def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient, 
         data = {}
     known_contradictions = [source for source in fast_sources if source.get("claim_support") == "contradicts" and source.get("evidence_category") == "credible_contradiction"]
     if known_contradictions:
-        return {
+        contradiction_payload = {
             "verdict": "Not supported by credible evidence",
             "confidence": "High",
             "tldr": "The claim is contradicted by a clear counterexample in the reviewed evidence.",
@@ -116,14 +173,16 @@ def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient, 
             "what_would_change_verdict": "Evidence would need to show that Article 5 invocation did not constitute NATO support for the United States, which would be a much narrower interpretive claim.",
             "user_takeaway": "The broad claim is not supported as stated because Article 5 after 9/11 is a direct counterexample.",
             "evidence_types": data.get("evidence_types", []) or [],
-            "humour_summary": data.get("humour_summary", "") if output_style == "absurdity_humour" else "",
-            "humour_safety_note": data.get("humour_safety_note", "") if output_style == "absurdity_humour" else "",
             "output_style": output_style,
             "fast_sources": fast_sources,
             "used_lightweight_search": bool(fast_sources),
         }
+        humour_summary, humour_safety_note = _normalise_humour_summary(user_input, {**data, **contradiction_payload}, output_style)
+        contradiction_payload["humour_summary"] = humour_summary
+        contradiction_payload["humour_safety_note"] = humour_safety_note
+        return contradiction_payload
 
-    return {
+    result = {
         "verdict": data.get("verdict", "Unverified"),
         "confidence": data.get("confidence", "Low"),
         "tldr": data.get("tldr") or data.get("summary") or "Initial assessment generated.",
@@ -134,12 +193,14 @@ def run_quick_pass(user_input: str, category: str, llm: OpenAICompatibleClient, 
         "what_would_change_verdict": data.get("what_would_change_verdict", ""),
         "user_takeaway": data.get("user_takeaway", ""),
         "evidence_types": data.get("evidence_types", []) or [],
-        "humour_summary": data.get("humour_summary", "") if output_style == "absurdity_humour" else "",
-        "humour_safety_note": data.get("humour_safety_note", "") if output_style == "absurdity_humour" else "",
         "output_style": output_style,
         "fast_sources": fast_sources,
         "used_lightweight_search": bool(fast_sources),
     }
+    humour_summary, humour_safety_note = _normalise_humour_summary(user_input, {**data, **result}, output_style)
+    result["humour_summary"] = humour_summary
+    result["humour_safety_note"] = humour_safety_note
+    return result
 
 
 # -----------------------------

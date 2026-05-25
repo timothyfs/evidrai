@@ -110,7 +110,8 @@ def build_user_prompt(claim: str, category: str, detail_mode: str, evidence_cont
         style_guidance = dedent(
             """
             Experimental Fast-mode output style:
-            - Include humour_summary: one short, dry, original absurdity-check paragraph that uses humour to highlight overreach, contradiction, or weak evidence.
+            - Include humour_summary: one short, dry, original absurdity-check sentence that highlights overreach, contradiction, or weak evidence.
+            - Keep it grounded in the evidence assessment. Do not produce surreal skits, invented scenes, or random satire.
             - The humour must never change the verdict, confidence, evidence assessment, or caveats.
             - Do not imitate or name any specific comedian, satirist, presenter, publication, or show.
             - Avoid cruelty, slurs, protected-class jokes, sexual content, death/violence jokes, medical jokes, or mockery of private individuals.
