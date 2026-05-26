@@ -141,6 +141,20 @@ Date: 2026-05-10
 - Area: Product strategy
 - Description: Once the verification core is stable, evaluate packaging Evidrai as an API/backend service or browser extension.
 
+### Scale admin UI and account management
+- Status: Backlog
+- Priority: High
+- Area: Admin / Accounts / Billing
+- Description: Current admin UI works for the first small cohort but needs search, filtering, group edits, support actions, company accounts, granular permissions, and billing integration before user volume expands.
+- Acceptance criteria:
+  - Admin can search/filter/paginate users.
+  - Admin can resend invite/welcome and password reset emails.
+  - Admin can update access without deleting accounts.
+  - Company/business accounts support multiple users under one billable account.
+  - Billing state is visible and wired to the payment provider.
+  - Admin actions affecting access or billing are auditable.
+- Detail: `docs/admin-ui-scale-roadmap.md`.
+
 ### Add trust intelligence feedback foundation
 - Status: Done
 - Priority: High

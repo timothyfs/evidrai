@@ -293,6 +293,29 @@ Acceptance criteria:
 
 - Tim can invite users with confidence that the live app matches the repo state.
 
+### F. Admin UI scale-up
+
+Goal: make admin usable beyond the first small early-access cohort.
+
+Tasks:
+
+1. Add admin user search, filtering, and pagination.
+2. Add group/bulk edit flows for tier, invite resend, company assignment, and future suspend/reactivate.
+3. Add support actions: update profile where safe, trigger password reset, resend confirmation/invite email, and resend welcome email.
+4. Add granular customer permissions and feature flags at user/account level.
+5. Introduce company/business accounts with multiple users under one billable account.
+6. Wire billing state into users/company accounts, including subscription status, billing owner, trials, and payment provider IDs.
+7. Add audit logging for access and billing-impacting admin actions.
+
+Reference: `docs/admin-ui-scale-roadmap.md`.
+
+Acceptance criteria:
+
+- Admin can manage expanding user cohorts without scanning a flat list.
+- Admin can support users without manual Supabase console work.
+- Business accounts can group multiple users on one billable account.
+- Billing and access state are visible, auditable, and source-of-truth-driven.
+
 ## 6. Immediate next tasks
 
 Priority order:
