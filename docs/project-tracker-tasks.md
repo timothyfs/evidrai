@@ -141,6 +141,20 @@ Date: 2026-05-10
 - Area: Product strategy
 - Description: Once the verification core is stable, evaluate packaging Evidrai as an API/backend service or browser extension.
 
+### Report history, retention, and sharing management
+- Status: Backlog
+- Priority: High
+- Area: Reports / Product / Growth
+- Description: Keep the main evidence UI clean by collapsing reports by default, adding tier-based report limits, protected/do-not-delete reports, delete actions, dedicated report views/new-tab opening, and optional share-recipient email capture.
+- Acceptance criteria:
+  - Reports/history section is collapsed by default.
+  - Free users retain up to 5 reports, Pro up to 10, Researcher / Journalist up to 100.
+  - Users can delete reports and mark reports as protected/do-not-delete.
+  - Retention cycling never deletes protected reports.
+  - Reports can open in a dedicated report page/new tab and be shared.
+  - Optional share-recipient email capture is stored safely and not exposed publicly.
+- Detail: `docs/report-management-roadmap.md`.
+
 ### Full QA and security audit gate
 - Status: Backlog
 - Priority: Critical

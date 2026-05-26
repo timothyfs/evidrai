@@ -293,7 +293,30 @@ Acceptance criteria:
 
 - Tim can invite users with confidence that the live app matches the repo state.
 
-### F. QA and security audit gate
+### F. Report history, retention, and sharing
+
+Goal: keep the main evidence UI clean while making saved reports useful, bounded, and shareable.
+
+Tasks:
+
+1. Collapse the report/history section by default.
+2. Add tier-based report retention limits: Free 5, Pro 10, Researcher / Journalist 100.
+3. Add delete and protected/do-not-delete actions for each report.
+4. Auto-cycle older non-protected reports when tier limits are exceeded.
+5. Open saved reports in a dedicated report page/new tab, similar to public share links.
+6. Capture optional share-recipient email addresses for future marketing/customer follow-up, subject to consent/compliance.
+7. Clarify the report marking/status taxonomy Tim started to describe.
+
+Reference: `docs/report-management-roadmap.md`.
+
+Acceptance criteria:
+
+- Reports do not clutter the main evidence UI by default.
+- Tier limits are enforced without deleting protected reports.
+- Users can view, delete, protect, and share reports cleanly.
+- Share recipient emails are stored safely and not exposed publicly.
+
+### G. QA and security audit gate
 
 Goal: perform a full QA and security audit before promoting new code beyond controlled testing.
 
@@ -314,7 +337,7 @@ Acceptance criteria:
 - Any accepted risk is explicitly documented.
 - Tim has a clear pass/fail summary before code is promoted.
 
-### G. Admin UI scale-up
+### H. Admin UI scale-up
 
 Goal: make admin usable beyond the first small early-access cohort.
 
