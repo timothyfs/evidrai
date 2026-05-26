@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Protocol
 
@@ -97,6 +98,15 @@ class ReportStore(Protocol):
     def list(self, limit: int = 50, owner_id: str = "") -> List[Dict[str, Any]]:
         ...
 
+    def delete(self, report_id: str, owner_id: str = "") -> Dict[str, Any]:
+        ...
+
+    def set_metadata(self, report_id: str, owner_id: str = "", *, protected: bool | None = None) -> Dict[str, Any]:
+        ...
+
+    def enforce_retention(self, owner_id: str, limit: int) -> Dict[str, Any]:
+        ...
+
     def iter_assessments(self, limit: int = 1000) -> List[AssessmentResponse]:
         ...
 
@@ -117,6 +127,27 @@ class LocalReportStore:
             raise ReportNotFoundError(report_id)
         return self.directory / f"{safe}.json"
 
+    def _metadata_path(self) -> Path:
+        return self.directory.parent / "report_metadata.json"
+
+    def _read_metadata(self) -> Dict[str, Dict[str, Any]]:
+        path = self._metadata_path()
+        if not path.exists():
+            return {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            return payload if isinstance(payload, dict) else {}
+        except Exception:
+            return {}
+
+    def _write_metadata(self, data: Dict[str, Dict[str, Any]]) -> None:
+        path = self._metadata_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+
+    def _metadata_for(self, report_id: str) -> Dict[str, Any]:
+        return self._read_metadata().get(report_id, {})
+
     def save(self, assessment: AssessmentResponse) -> AssessmentResponse:
         try:
             self.directory.mkdir(parents=True, exist_ok=True)
@@ -132,6 +163,8 @@ class LocalReportStore:
         path = self.path_for(report_id)
         if not path.exists():
             raise ReportNotFoundError(report_id)
+        if self._metadata_for(report_id).get("deleted_at"):
+            raise ReportNotFoundError(report_id)
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
             return AssessmentResponse.model_validate(payload)
@@ -145,6 +178,9 @@ class LocalReportStore:
         for path in sorted(self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
+                metadata = self._metadata_for(payload.get("assessment_id") or path.stem)
+                if metadata.get("deleted_at"):
+                    continue
                 if owner_id and payload.get("owner_id") != owner_id:
                     continue
                 items.append(
@@ -155,6 +191,8 @@ class LocalReportStore:
                         "claim": (payload.get("request") or {}).get("claim"),
                         "verdict": (payload.get("verdict") or {}).get("label"),
                         "owner_id": payload.get("owner_id"),
+                        "protected": bool(metadata.get("protected")),
+                        "deleted_at": metadata.get("deleted_at") or "",
                     }
                 )
                 if len(items) >= limit:
@@ -163,12 +201,56 @@ class LocalReportStore:
                 continue
         return items
 
+    def delete(self, report_id: str, owner_id: str = "") -> Dict[str, Any]:
+        assessment = self.load(report_id)
+        assessment_owner = _assessment_field(assessment, "owner_id") or ""
+        if owner_id and assessment_owner and assessment_owner != owner_id:
+            raise ReportNotFoundError(report_id)
+        metadata = self._read_metadata()
+        record = metadata.setdefault(report_id, {})
+        record["deleted_at"] = datetime.now(timezone.utc).isoformat()
+        self._write_metadata(metadata)
+        return {"assessment_id": report_id, "deleted": True, "deleted_at": record["deleted_at"], "protected": bool(record.get("protected"))}
+
+    def set_metadata(self, report_id: str, owner_id: str = "", *, protected: bool | None = None) -> Dict[str, Any]:
+        assessment = self.load(report_id)
+        assessment_owner = _assessment_field(assessment, "owner_id") or ""
+        if owner_id and assessment_owner and assessment_owner != owner_id:
+            raise ReportNotFoundError(report_id)
+        metadata = self._read_metadata()
+        record = metadata.setdefault(report_id, {})
+        if protected is not None:
+            record["protected"] = bool(protected)
+        self._write_metadata(metadata)
+        return {"assessment_id": report_id, "protected": bool(record.get("protected")), "deleted_at": record.get("deleted_at") or ""}
+
+    def enforce_retention(self, owner_id: str, limit: int) -> Dict[str, Any]:
+        if not owner_id or limit <= 0:
+            return {"owner_id": owner_id, "limit": limit, "deleted": []}
+        reports = self.list(limit=10000, owner_id=owner_id)
+        deleted: list[str] = []
+        active_count = len(reports)
+        for item in reversed(reports):
+            if active_count <= limit:
+                break
+            if item.get("protected"):
+                continue
+            report_id = str(item.get("assessment_id") or "")
+            if not report_id:
+                continue
+            self.delete(report_id, owner_id=owner_id)
+            deleted.append(report_id)
+            active_count -= 1
+        return {"owner_id": owner_id, "limit": limit, "deleted": deleted, "remaining": active_count}
+
     def iter_assessments(self, limit: int = 1000) -> List[AssessmentResponse]:
         if not self.directory.exists():
             return []
         assessments: List[AssessmentResponse] = []
         for path in sorted(self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
             try:
+                if self._metadata_for(path.stem).get("deleted_at"):
+                    continue
                 assessments.append(AssessmentResponse.model_validate(json.loads(path.read_text(encoding="utf-8"))))
                 if len(assessments) >= limit:
                     break
@@ -284,7 +366,7 @@ class PostgresReportStore:
         try:
             with self._connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT payload FROM assessments WHERE assessment_id = %s", (report_id,))
+                    cur.execute("SELECT payload FROM assessments WHERE assessment_id = %s AND deleted_at IS NULL", (report_id,))
                     row = cur.fetchone()
             if not row:
                 raise ReportNotFoundError(report_id)
@@ -305,9 +387,9 @@ class PostgresReportStore:
                     if owner_id:
                         cur.execute(
                             """
-                            SELECT assessment_id, created_at, mode, claim, verdict, owner_id
+                            SELECT assessment_id, created_at, mode, claim, verdict, owner_id, report_protected AS protected, deleted_at
                             FROM assessments
-                            WHERE owner_id = %s
+                            WHERE owner_id = %s AND deleted_at IS NULL
                             ORDER BY created_at DESC NULLS LAST, updated_at DESC
                             LIMIT %s
                             """,
@@ -316,8 +398,9 @@ class PostgresReportStore:
                     else:
                         cur.execute(
                             """
-                            SELECT assessment_id, created_at, mode, claim, verdict, owner_id
+                            SELECT assessment_id, created_at, mode, claim, verdict, owner_id, report_protected AS protected, deleted_at
                             FROM assessments
+                            WHERE deleted_at IS NULL
                             ORDER BY created_at DESC NULLS LAST, updated_at DESC
                             LIMIT %s
                             """,
@@ -327,13 +410,130 @@ class PostgresReportStore:
             items: List[Dict[str, Any]] = []
             for row in rows:
                 item = dict(row)
-                created_at = item.get("created_at")
-                if hasattr(created_at, "isoformat"):
-                    item["created_at"] = created_at.isoformat()
+                for key in ("created_at", "deleted_at"):
+                    if hasattr(item.get(key), "isoformat"):
+                        item[key] = item[key].isoformat()
                 items.append(item)
             return items
         except Exception as exc:
             raise ReportStoreError("Could not list reports.", developer_detail=str(exc))
+
+    def delete(self, report_id: str, owner_id: str = "") -> Dict[str, Any]:
+        self._ensure_schema()
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    if owner_id:
+                        cur.execute(
+                            """
+                            UPDATE assessments
+                            SET deleted_at = now(), updated_at = now()
+                            WHERE assessment_id = %s AND (owner_id = %s OR owner_id IS NULL OR owner_id = '') AND deleted_at IS NULL
+                            RETURNING assessment_id, report_protected AS protected, deleted_at
+                            """,
+                            (report_id, owner_id),
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            UPDATE assessments
+                            SET deleted_at = now(), updated_at = now()
+                            WHERE assessment_id = %s AND deleted_at IS NULL
+                            RETURNING assessment_id, report_protected AS protected, deleted_at
+                            """,
+                            (report_id,),
+                        )
+                    row = cur.fetchone()
+                conn.commit()
+            if not row:
+                raise ReportNotFoundError(report_id)
+            item = dict(row)
+            if hasattr(item.get("deleted_at"), "isoformat"):
+                item["deleted_at"] = item["deleted_at"].isoformat()
+            item["deleted"] = True
+            return item
+        except EvidraiError:
+            raise
+        except Exception as exc:
+            raise ReportStoreError("Could not delete report.", developer_detail=str(exc))
+
+    def set_metadata(self, report_id: str, owner_id: str = "", *, protected: bool | None = None) -> Dict[str, Any]:
+        self._ensure_schema()
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    if protected is None:
+                        cur.execute(
+                            "SELECT assessment_id, report_protected AS protected, deleted_at FROM assessments WHERE assessment_id = %s AND deleted_at IS NULL",
+                            (report_id,),
+                        )
+                    elif owner_id:
+                        cur.execute(
+                            """
+                            UPDATE assessments
+                            SET report_protected = %s, updated_at = now()
+                            WHERE assessment_id = %s AND (owner_id = %s OR owner_id IS NULL OR owner_id = '') AND deleted_at IS NULL
+                            RETURNING assessment_id, report_protected AS protected, deleted_at
+                            """,
+                            (bool(protected), report_id, owner_id),
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            UPDATE assessments
+                            SET report_protected = %s, updated_at = now()
+                            WHERE assessment_id = %s AND deleted_at IS NULL
+                            RETURNING assessment_id, report_protected AS protected, deleted_at
+                            """,
+                            (bool(protected), report_id),
+                        )
+                    row = cur.fetchone()
+                conn.commit()
+            if not row:
+                raise ReportNotFoundError(report_id)
+            item = dict(row)
+            if hasattr(item.get("deleted_at"), "isoformat"):
+                item["deleted_at"] = item["deleted_at"].isoformat()
+            return item
+        except EvidraiError:
+            raise
+        except Exception as exc:
+            raise ReportStoreError("Could not update report metadata.", developer_detail=str(exc))
+
+    def enforce_retention(self, owner_id: str, limit: int) -> Dict[str, Any]:
+        self._ensure_schema()
+        if not owner_id or limit <= 0:
+            return {"owner_id": owner_id, "limit": limit, "deleted": []}
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT assessment_id, report_protected
+                        FROM assessments
+                        WHERE owner_id = %s AND deleted_at IS NULL
+                        ORDER BY created_at DESC NULLS LAST, updated_at DESC
+                        """,
+                        (owner_id,),
+                    )
+                    rows = cur.fetchall()
+                    active_count = len(rows)
+                    deleted: list[str] = []
+                    for row in reversed(rows):
+                        if active_count <= limit:
+                            break
+                        if row.get("report_protected"):
+                            continue
+                        cur.execute(
+                            "UPDATE assessments SET deleted_at = now(), updated_at = now() WHERE assessment_id = %s AND deleted_at IS NULL",
+                            (row.get("assessment_id"),),
+                        )
+                        deleted.append(str(row.get("assessment_id")))
+                        active_count -= 1
+                conn.commit()
+            return {"owner_id": owner_id, "limit": limit, "deleted": deleted, "remaining": active_count}
+        except Exception as exc:
+            raise ReportStoreError("Could not enforce report retention.", developer_detail=str(exc))
 
     def iter_assessments(self, limit: int = 1000) -> List[AssessmentResponse]:
         self._ensure_schema()
@@ -344,6 +544,7 @@ class PostgresReportStore:
                         """
                         SELECT payload
                         FROM assessments
+                        WHERE deleted_at IS NULL
                         ORDER BY created_at DESC NULLS LAST, updated_at DESC
                         LIMIT %s
                         """,
@@ -373,7 +574,7 @@ class PostgresReportStore:
         try:
             with self._connect() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT assessment_id, owner_id, created_at FROM assessments WHERE assessment_id = %s", (report_id,))
+                    cur.execute("SELECT assessment_id, owner_id, created_at FROM assessments WHERE assessment_id = %s AND deleted_at IS NULL", (report_id,))
                     row = cur.fetchone()
             if not row:
                 raise ReportNotFoundError(report_id)
@@ -463,6 +664,18 @@ def load_report(report_id: str, store: ReportStore | None = None) -> AssessmentR
 
 def list_reports(limit: int = 50, owner_id: str = "", store: ReportStore | None = None) -> List[Dict[str, Any]]:
     return (store or get_report_store()).list(limit=limit, owner_id=owner_id)
+
+
+def delete_report(report_id: str, owner_id: str = "", store: ReportStore | None = None) -> Dict[str, Any]:
+    return (store or get_report_store()).delete(report_id, owner_id=owner_id)
+
+
+def set_report_metadata(report_id: str, owner_id: str = "", *, protected: bool | None = None, store: ReportStore | None = None) -> Dict[str, Any]:
+    return (store or get_report_store()).set_metadata(report_id, owner_id=owner_id, protected=protected)
+
+
+def enforce_report_retention(owner_id: str, limit: int, store: ReportStore | None = None) -> Dict[str, Any]:
+    return (store or get_report_store()).enforce_retention(owner_id, limit=limit)
 
 
 def iter_assessments(limit: int = 1000, store: ReportStore | None = None) -> List[AssessmentResponse]:

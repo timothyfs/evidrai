@@ -34,7 +34,7 @@ from evidrai.pipeline.verification import (
     run_speech_audit,
     verify_speech_claim,
 )
-from evidrai.reports import _assessment_field, create_report_share, list_reports, load_report, load_shared_report, save_report
+from evidrai.reports import _assessment_field, create_report_share, delete_report, enforce_report_retention, list_reports, load_report, load_shared_report, save_report, set_report_metadata
 from evidrai.transcripts import clean_pasted_youtube_transcript, diagnose_youtube_transcript, extract_youtube_transcript, transcript_backend_status
 from evidrai.utils import build_analysis_input, is_probable_url
 
@@ -123,6 +123,10 @@ class FeedbackCreateRequest(BaseModel):
 
 class ReportShareCreateRequest(BaseModel):
     platform: str = "copy"
+
+
+class ReportMetadataUpdateRequest(BaseModel):
+    protected: Optional[bool] = None
 
 
 class AdminSetTierRequest(BaseModel):
@@ -351,7 +355,21 @@ def _require_admin(request: Request) -> None:
     raise HTTPException(status_code=403, detail={"code": "admin_forbidden", "message": "Master admin access is required"})
 
 
-def _assessment_response_from_request(request: AssessmentCreateRequest, mode: str, owner_id: str = "") -> AssessmentResponse:
+def _apply_report_retention(owner_id: str, profile: Any | None = None) -> None:
+    if not owner_id:
+        return
+    try:
+        effective_profile = profile or get_or_create_profile(owner_id)
+        profile_payload = effective_profile.to_dict() if hasattr(effective_profile, "to_dict") else {}
+        limit = int((profile_payload.get("limits") or {}).get("saved_reports") or 0)
+        if limit > 0:
+            enforce_report_retention(owner_id, limit)
+    except Exception:
+        # Retention cleanup should not block assessment delivery.
+        pass
+
+
+def _assessment_response_from_request(request: AssessmentCreateRequest, mode: str, owner_id: str = "", profile: Any | None = None) -> AssessmentResponse:
     claim = (request.claim or "").strip()
     source_url = (request.source_url or "").strip()
     _validate_claim_request(claim, source_url)
@@ -367,7 +385,9 @@ def _assessment_response_from_request(request: AssessmentCreateRequest, mode: st
         include_debug=request.include_debug,
         owner_id=owner_id,
     )
-    return save_report(assessment)
+    saved = save_report(assessment)
+    _apply_report_retention(owner_id, profile=profile)
+    return saved
 
 
 def _job_status_response(job: AssessmentJob, context: AuthContext) -> AssessmentJobStatusResponse:
@@ -409,7 +429,7 @@ def _run_assessment_job(job_id: str) -> None:
         store.mark_failed(job_id, str(exc))
 
 
-def _save_speech_claim_assessment(result: Dict[str, Any], *, source_url: str, mode: str, owner_id: str = "") -> AssessmentResponse:
+def _save_speech_claim_assessment(result: Dict[str, Any], *, source_url: str, mode: str, owner_id: str = "", profile: Any | None = None) -> AssessmentResponse:
     speech_claim = result.get("speech_claim") or {}
     claim_text = (
         speech_claim.get("normalized_claim")
@@ -436,14 +456,16 @@ def _save_speech_claim_assessment(result: Dict[str, Any], *, source_url: str, mo
             "build": get_app_build(),
         }
     )
-    return save_report(assessment)
+    saved = save_report(assessment)
+    _apply_report_retention(owner_id, profile=profile)
+    return saved
 
 
-def _attach_saved_speech_assessments(checked_claims: list[Dict[str, Any]], *, source_url: str, mode: str, owner_id: str = "") -> list[Dict[str, Any]]:
+def _attach_saved_speech_assessments(checked_claims: list[Dict[str, Any]], *, source_url: str, mode: str, owner_id: str = "", profile: Any | None = None) -> list[Dict[str, Any]]:
     enriched: list[Dict[str, Any]] = []
     for item in checked_claims:
         result = dict(item)
-        assessment = _save_speech_claim_assessment(result, source_url=source_url, mode=mode, owner_id=owner_id)
+        assessment = _save_speech_claim_assessment(result, source_url=source_url, mode=mode, owner_id=owner_id, profile=profile)
         result["assessment"] = assessment.model_dump(mode="json")
         result["assessment_id"] = assessment.assessment_id
         enriched.append(result)
@@ -527,8 +549,12 @@ def diagnose_transcript_source(request: SourceExtractRequest) -> Dict[str, Any]:
 
 @app.get("/reports", response_model=Dict[str, Any])
 def reports_index(http_request: Request, limit: int = 50) -> Dict[str, Any]:
-    context = _require_authenticated(http_request)
-    return {"ok": True, "owner_id": context.owner_id, "reports": list_reports(limit=limit, owner_id=context.owner_id)}
+    context, profile = _profile_from_request(http_request)
+    if not context.authenticated:
+        raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in with an email address before using Evidrai."})
+    profile_payload = profile.to_dict() if hasattr(profile, "to_dict") else {}
+    report_limit = int((profile_payload.get("limits") or {}).get("saved_reports") or limit)
+    return {"ok": True, "owner_id": context.owner_id, "report_limit": report_limit, "reports": list_reports(limit=max(limit, report_limit), owner_id=context.owner_id)}
 
 
 
@@ -622,6 +648,28 @@ def get_report(report_id: str, http_request: Request) -> AssessmentResponse:
     if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
         raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
     return assessment
+
+
+@app.patch("/reports/{report_id}/metadata", response_model=Dict[str, Any])
+def update_report_metadata(report_id: str, request: ReportMetadataUpdateRequest, http_request: Request) -> Dict[str, Any]:
+    context = _require_authenticated(http_request)
+    assessment = load_report(report_id)
+    if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+        raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
+    owner_id = assessment.owner_id or context.owner_id
+    metadata = set_report_metadata(report_id, owner_id=owner_id, protected=request.protected)
+    return {"ok": True, "report": metadata}
+
+
+@app.delete("/reports/{report_id}", response_model=Dict[str, Any])
+def delete_report_endpoint(report_id: str, http_request: Request) -> Dict[str, Any]:
+    context = _require_authenticated(http_request)
+    assessment = load_report(report_id)
+    if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+        raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
+    owner_id = assessment.owner_id or context.owner_id
+    result = delete_report(report_id, owner_id=owner_id)
+    return {"ok": True, "report": result}
 
 
 @app.post("/assessments/{assessment_id}/feedback", response_model=Dict[str, Any])
@@ -778,7 +826,7 @@ def create_fast_assessment(request: AssessmentCreateRequest, http_request: Reque
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "fast_claims", authenticated=context.authenticated)
     _require_bot_check(http_request, request.bot_token)
-    return _assessment_response_from_request(request, "fast", owner_id=context.owner_id)
+    return _assessment_response_from_request(request, "fast", owner_id=context.owner_id, profile=profile)
 
 
 @app.post("/assessments/deep", response_model=AssessmentResponse)
@@ -786,7 +834,7 @@ def create_deep_assessment(request: AssessmentCreateRequest, http_request: Reque
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims", authenticated=context.authenticated)
     _require_bot_check(http_request, request.bot_token)
-    return _assessment_response_from_request(request, "deep", owner_id=context.owner_id)
+    return _assessment_response_from_request(request, "deep", owner_id=context.owner_id, profile=profile)
 
 
 @app.post("/assessment-jobs/{mode}", response_model=AssessmentJobCreateResponse)
@@ -857,7 +905,7 @@ def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnv
         verify_speech_claim(claim, index=idx, source_url=source_url, mode=mode, llm=llm, search=search)
         for idx, claim in enumerate(request.claims, start=1)
     ]
-    checked_claims = _attach_saved_speech_assessments(checked_claims, source_url=source_url, mode=mode, owner_id=context.owner_id)
+    checked_claims = _attach_saved_speech_assessments(checked_claims, source_url=source_url, mode=mode, owner_id=context.owner_id, profile=profile)
     result = {
         "schema_version": "speech_verification.v1",
         "source_url": source_url,
@@ -896,6 +944,7 @@ def speech_audit(request: SpeechAuditRequest, http_request: Request) -> ApiEnvel
         source_url=source_url,
         mode=mode,
         owner_id=context.owner_id,
+        profile=profile,
     )
     result["claims_checked_count"] = len(result["claims_checked"])
     result["settings"] = {

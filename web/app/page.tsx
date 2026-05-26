@@ -15,6 +15,7 @@ import {
   SpeechVerificationResult,
   createAssessmentJob,
   createReportShare,
+  deleteReport,
   extractSpeechClaims,
   getMe,
   getAuthDiagnostics,
@@ -26,6 +27,7 @@ import {
   setAccessToken,
   setAccountProfile,
   submitFeedback,
+  updateReportMetadata,
   verifySpeechClaims,
 } from '../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, sendPasswordReset, signInWithEmailPassword, signInWithGoogle, signOut, signUpWithEmailPassword, updatePassword } from '../lib/auth';
@@ -1347,7 +1349,7 @@ export default function Home() {
   const [authBusy, setAuthBusy] = useState(false);
   const [botToken, setBotToken] = useState('');
   const [reports, setReports] = useState<ReportSummary[]>([]);
-  const [reportsOpen, setReportsOpen] = useState(true);
+  const [reportsOpen, setReportsOpen] = useState(false);
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
   const [reportIdInput, setReportIdInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -1374,9 +1376,11 @@ export default function Home() {
       claim: result.request.claim,
       verdict: result.verdict.label,
       owner_id: result.owner_id,
+      protected: false,
     };
     setReports((current) => {
-      const next = [summary, ...current.filter((item) => item.assessment_id !== summary.assessment_id)].slice(0, 8);
+      const savedLimit = Number(userLimits.saved_reports || 8);
+      const next = [summary, ...current.filter((item) => item.assessment_id !== summary.assessment_id)].slice(0, Math.max(savedLimit, 8));
       window.localStorage.setItem('evidrai_recent_reports', JSON.stringify(next));
       return next;
     });
@@ -1385,7 +1389,8 @@ export default function Home() {
   async function refreshReports() {
     try {
       const serverReports = await listReports();
-      const recent = serverReports.slice(0, 8);
+      const savedLimit = Number(userLimits.saved_reports || 8);
+      const recent = serverReports.slice(0, Math.max(savedLimit, 8));
       setReports(recent);
       if (typeof window !== 'undefined') window.localStorage.setItem('evidrai_recent_reports', JSON.stringify(recent));
     } catch (err) {
@@ -1447,10 +1452,6 @@ export default function Home() {
       }
     }
   }
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') setReportsOpen(!window.matchMedia('(max-width: 900px)').matches);
-  }, []);
 
   useEffect(() => {
     const fallback = getAnonymousAccountProfile();
@@ -1667,6 +1668,33 @@ export default function Home() {
     }
   }
 
+  function openReportInNewTab(id: string) {
+    if (!id || typeof window === 'undefined') return;
+    window.open(`/reports/${encodeURIComponent(id)}`, '_blank', 'noopener,noreferrer');
+  }
+
+  async function toggleReportProtected(report: ReportSummary) {
+    setError('');
+    try {
+      const payload = await updateReportMetadata(report.assessment_id, { protected: !report.protected });
+      setReports((current) => current.map((item) => item.assessment_id === report.assessment_id ? { ...item, protected: Boolean(payload.report.protected) } : item));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update report');
+    }
+  }
+
+  async function removeReport(report: ReportSummary) {
+    if (typeof window !== 'undefined' && !window.confirm('Delete this saved report from your account history?')) return;
+    setError('');
+    try {
+      await deleteReport(report.assessment_id);
+      setReports((current) => current.filter((item) => item.assessment_id !== report.assessment_id));
+      if (assessment?.assessment_id === report.assessment_id) setAssessment(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete report');
+    }
+  }
+
   function toggleTheme() {
     setTheme((current) => {
       const next = current === 'dark' ? 'light' : 'dark';
@@ -1845,12 +1873,20 @@ export default function Home() {
               </label>
               <button className="secondary" type="submit" disabled={!reportIdInput.trim() || loading}>Load report</button>
             </form>
-            {reports.length === 0 ? <p className="muted">No saved reports yet. Run a check to start your account history.</p> : reports.slice(0, 8).map((report) => (
-              <button className="reportItem" key={report.assessment_id} onClick={() => loadReport(report.assessment_id)} type="button">
-                <strong>{report.verdict || 'Unverified'}</strong>
-                <span>{report.claim || 'Untitled claim'}</span>
-                <small>{formatDate(report.created_at)} · {report.mode}</small>
-              </button>
+            {reports.length === 0 ? <p className="muted">No saved reports yet. Run a check to start your account history.</p> : reports.map((report) => (
+              <article className="reportItem" key={report.assessment_id}>
+                <button className="reportMain" onClick={() => openReportInNewTab(report.assessment_id)} type="button">
+                  <strong>{report.verdict || 'Unverified'}{report.protected ? ' · protected' : ''}</strong>
+                  <span>{report.claim || 'Untitled claim'}</span>
+                  <small>{formatDate(report.created_at)} · {report.mode}</small>
+                </button>
+                <div className="reportActions">
+                  <button className="secondary" onClick={() => openReportInNewTab(report.assessment_id)} type="button">View</button>
+                  <button className="secondary" onClick={() => loadReport(report.assessment_id)} type="button">Load here</button>
+                  <button className="secondary" onClick={() => toggleReportProtected(report)} type="button">{report.protected ? 'Allow cycling' : 'Do not delete'}</button>
+                  <button className="secondary dangerAction" onClick={() => removeReport(report)} type="button">Delete</button>
+                </div>
+              </article>
             ))}
           </div>
         </details>

@@ -66,7 +66,7 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
             "source_snapshots": False,
             "api_access": False,
         },
-        limits={"saved_reports": 10, "max_speech_claims": 0, "monthly_fast_checks": 25, "monthly_deep_checks": 0, "monthly_speech_audits": 0},
+        limits={"saved_reports": 5, "max_speech_claims": 0, "monthly_fast_checks": 25, "monthly_deep_checks": 0, "monthly_speech_audits": 0},
     ),
     "pro": TierDefinition(
         tier="pro",
@@ -84,7 +84,7 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
             "source_snapshots": False,
             "api_access": False,
         },
-        limits={"saved_reports": 250, "max_speech_claims": 5, "monthly_fast_checks": 500, "monthly_deep_checks": 100, "monthly_speech_audits": 25},
+        limits={"saved_reports": 10, "max_speech_claims": 5, "monthly_fast_checks": 500, "monthly_deep_checks": 100, "monthly_speech_audits": 25},
     ),
     "researcher": TierDefinition(
         tier="researcher",
@@ -102,7 +102,7 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
             "source_snapshots": True,
             "api_access": True,
         },
-        limits={"saved_reports": 2000, "max_speech_claims": 20, "monthly_fast_checks": 5000, "monthly_deep_checks": 1000, "monthly_speech_audits": 250},
+        limits={"saved_reports": 100, "max_speech_claims": 20, "monthly_fast_checks": 5000, "monthly_deep_checks": 1000, "monthly_speech_audits": 250},
     ),
 }
 

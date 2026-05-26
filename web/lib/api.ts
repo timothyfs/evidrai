@@ -56,6 +56,8 @@ export type ReportSummary = {
   claim: string;
   verdict: string;
   owner_id?: string | null;
+  protected?: boolean;
+  deleted_at?: string;
 };
 
 export type ReportShare = {
@@ -376,12 +378,23 @@ export function getAssessmentJob(jobId: string): Promise<AssessmentJobStatusResp
 }
 
 export async function listReports(): Promise<ReportSummary[]> {
-  const payload = await request<{ ok: boolean; reports: ReportSummary[] }>('/reports');
+  const payload = await request<{ ok: boolean; reports: ReportSummary[]; report_limit?: number }>('/reports');
   return payload.reports || [];
 }
 
 export function getReport(id: string): Promise<AssessmentResponse> {
   return request<AssessmentResponse>(`/reports/${encodeURIComponent(id)}`);
+}
+
+export function updateReportMetadata(id: string, input: { protected?: boolean }): Promise<{ ok: boolean; report: ReportSummary }> {
+  return request<{ ok: boolean; report: ReportSummary }>(`/reports/${encodeURIComponent(id)}/metadata`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteReport(id: string): Promise<{ ok: boolean; report: ReportSummary & { deleted?: boolean } }> {
+  return request<{ ok: boolean; report: ReportSummary & { deleted?: boolean } }>(`/reports/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export function createReportShare(id: string, platform = 'copy'): Promise<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }> {

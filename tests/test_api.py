@@ -461,6 +461,48 @@ def test_free_user_can_create_simple_public_report_share(monkeypatch, tmp_path):
     assert payload["assessment"]["sources"] == []
 
 
+def test_report_delete_and_protect_metadata(monkeypatch, tmp_path):
+    def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
+        return {"verdict": "Supported", "confidence": "High", "summary": "ok"}
+
+    grant_tier(monkeypatch, "pro", owner_id="alice")
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
+    monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
+
+    assessment = client.post("/assessments/fast", json={"claim": "Managed report"}, headers={"X-Evidrai-User-Id": "alice"}).json()
+    report_id = assessment["assessment_id"]
+
+    metadata = client.patch(f"/reports/{report_id}/metadata", json={"protected": True}, headers={"X-Evidrai-User-Id": "alice"})
+    assert metadata.status_code == 200
+    assert metadata.json()["report"]["protected"] is True
+    assert client.get("/reports", headers={"X-Evidrai-User-Id": "alice"}).json()["reports"][0]["protected"] is True
+
+    deleted = client.delete(f"/reports/{report_id}", headers={"X-Evidrai-User-Id": "alice"})
+    assert deleted.status_code == 200
+    assert deleted.json()["report"]["deleted"] is True
+    assert client.get(f"/reports/{report_id}", headers={"X-Evidrai-User-Id": "alice"}).status_code == 404
+    assert client.get("/reports", headers={"X-Evidrai-User-Id": "alice"}).json()["reports"] == []
+
+
+def test_report_retention_cycles_old_unprotected_reports(monkeypatch, tmp_path):
+    def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
+        return {"verdict": "Supported", "confidence": "High", "summary": "ok"}
+
+    grant_tier(monkeypatch, "free", owner_id="alice")
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
+    monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
+
+    protected = client.post("/assessments/fast", json={"claim": "Protected oldest"}, headers={"X-Evidrai-User-Id": "alice"}).json()
+    client.patch(f"/reports/{protected['assessment_id']}/metadata", json={"protected": True}, headers={"X-Evidrai-User-Id": "alice"})
+    for index in range(6):
+        client.post("/assessments/fast", json={"claim": f"Report {index}"}, headers={"X-Evidrai-User-Id": "alice"})
+
+    reports = client.get("/reports", headers={"X-Evidrai-User-Id": "alice"}).json()["reports"]
+    assert len(reports) == 5
+    assert protected["assessment_id"] in [item["assessment_id"] for item in reports]
+    assert reports[-1]["protected"] is True
+
+
 def test_report_history_can_be_scoped_by_owner_header(monkeypatch, tmp_path):
     def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
         return {"verdict": "Supported", "confidence": "High", "summary": "ok"}
