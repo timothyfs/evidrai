@@ -293,7 +293,28 @@ Acceptance criteria:
 
 - Tim can invite users with confidence that the live app matches the repo state.
 
-### F. Admin UI scale-up
+### F. QA and security audit gate
+
+Goal: perform a full QA and security audit before promoting new code beyond controlled testing.
+
+Tasks:
+
+1. Run automated backend/API/auth tests.
+2. Run frontend build and dependency checks.
+3. Run production smoke checks against Vercel + Render.
+4. Run signed-in user-path smoke checks with a test account token.
+5. Validate auth, report ownership, admin access, bot protection, public sharing, and secret handling.
+6. Record findings by severity and make an explicit ship/no-ship decision.
+
+Reference: `docs/qa-security-audit-gate.md`.
+
+Acceptance criteria:
+
+- No blocker security issues remain open.
+- Any accepted risk is explicitly documented.
+- Tim has a clear pass/fail summary before code is promoted.
+
+### G. Admin UI scale-up
 
 Goal: make admin usable beyond the first small early-access cohort.
 

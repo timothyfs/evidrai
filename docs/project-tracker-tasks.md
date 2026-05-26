@@ -141,6 +141,20 @@ Date: 2026-05-10
 - Area: Product strategy
 - Description: Once the verification core is stable, evaluate packaging Evidrai as an API/backend service or browser extension.
 
+### Full QA and security audit gate
+- Status: Backlog
+- Priority: Critical
+- Area: QA / Security / Release readiness
+- Description: Before promoting new code beyond controlled testing, run a full QA and security audit covering auth, ownership, admin access, bot protection, secrets, production smoke, dependency checks, and core user flows.
+- Acceptance criteria:
+  - Backend/API/auth tests pass.
+  - Frontend build passes.
+  - Production smoke checks pass.
+  - Signed-in test-account smoke checks pass.
+  - No blocker security issues remain open.
+  - Findings and ship/no-ship decision are documented.
+- Detail: `docs/qa-security-audit-gate.md`.
+
 ### Scale admin UI and account management
 - Status: Backlog
 - Priority: High
