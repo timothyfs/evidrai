@@ -70,6 +70,38 @@ function sourceHref(source: { url?: string }) {
   return source.url || '';
 }
 
+function hostnameFromUrl(value?: string) {
+  if (!value) return '';
+  try {
+    return new URL(value).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+function sourceDisplayName(source: AssessmentSource) {
+  const host = (source.domain || hostnameFromUrl(source.url)).replace(/^www\./, '').toLowerCase();
+  if (host.includes('theguardian.com')) return 'The Guardian';
+  if (host.includes('lemonde.fr')) return 'Le Monde';
+  if (host.includes('bbc.co.uk') || host.includes('bbc.com')) return 'bbc.co.uk';
+  if (host) return host;
+  return source.title || 'Unknown source';
+}
+
+function sourceDisplayLabel(index: number, source: AssessmentSource) {
+  return `Source ${index + 1} · ${sourceDisplayName(source)}`;
+}
+
+function sourcePosition(assessment: AssessmentResponse, source: AssessmentSource) {
+  const sources = assessment.sources || [];
+  return Math.max(0, sources.findIndex((candidate) => (
+    candidate === source ||
+    (candidate.id && candidate.id === source.id) ||
+    (candidate.url && candidate.url === source.url) ||
+    (candidate.domain && candidate.domain === source.domain && candidate.title === source.title)
+  )));
+}
+
 function confidencePercent(confidence?: string | null, fallbackScore?: number | null) {
   const text = (confidence || '').toLowerCase();
   if (text.includes('high')) return 86;
@@ -215,14 +247,29 @@ function ScoreOrb({ score, max = 5, label = 'Source score' }: { score?: number |
 }
 
 function EvidenceScorePanel({ assessment }: { assessment: AssessmentResponse }) {
+  const evidenceScore = assessment.verdict.evidence_strength_score ?? null;
+  if (typeof evidenceScore !== 'number' || !Number.isFinite(evidenceScore)) {
+    return (
+      <section className="scoreConstellation scoreConstellationMissing" aria-label="Evidence scoring missing">
+        <div className="scoreConstellationHeader">
+          <div>
+            <p className="eyebrow">Evidence scorecard</p>
+            <h3>Evidence score not calculated</h3>
+          </div>
+          <span>Diagnostic</span>
+        </div>
+        <p className="muted">Detail mode should produce an evidence strength score. This report is missing that value, so the scoring panel cannot be rendered.</p>
+      </section>
+    );
+  }
+
   const sources = assessment.sources || [];
   const averageScore = sources.length ? sources.reduce((sum, source) => sum + Number(source.score || 0), 0) / sources.length : 0;
   const primaryCount = sources.filter((source) => (source.source_type || '').toLowerCase().includes('primary')).length;
   const contradictionCount = sources.filter((source) => sourceGroup(source) === 'Contradicting').length;
   const supportCount = sources.filter((source) => sourceGroup(source) === 'Corroborating').length;
-  const evidenceScore = assessment.verdict.evidence_strength_score ?? null;
-  const displayEvidenceScore = typeof evidenceScore === 'number' ? Math.abs(evidenceScore) : null;
-  const contradicted = assessment.verdict.label.toLowerCase().includes('contradict') || (typeof evidenceScore === 'number' && evidenceScore < 0);
+  const displayEvidenceScore = Math.abs(evidenceScore);
+  const contradicted = assessment.verdict.label.toLowerCase().includes('contradict') || evidenceScore < 0;
   const confidence = confidencePercent(assessment.verdict.confidence, displayEvidenceScore);
   return (
     <section className="scoreConstellation" aria-label="Evidence scoring overview">
@@ -257,7 +304,7 @@ function EvidenceScorePanel({ assessment }: { assessment: AssessmentResponse }) 
   );
 }
 
-function SourceCard({ assessmentId, source, compact = false }: { assessmentId: string; source: AssessmentSource; compact?: boolean }) {
+function SourceCard({ assessmentId, source, compact = false, displayIndex = 0 }: { assessmentId: string; source: AssessmentSource; compact?: boolean; displayIndex?: number }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [scoringOpen, setScoringOpen] = useState(false);
   const [trustStatus, setTrustStatus] = useState('');
@@ -270,6 +317,8 @@ function SourceCard({ assessmentId, source, compact = false }: { assessmentId: s
   const hasCapturedFactors = capturedFactorValues.length > 0 && capturedFactorValues.some((value) => value !== 0);
   const quality = sourceQualityLabel(score);
   const group = sourceGroup(source);
+  const displayLabel = sourceDisplayLabel(displayIndex, source);
+  const articleTitle = source.title && source.title !== sourceDisplayName(source) ? source.title : '';
   const detail = (
     <>
       <p>{source.summary || source.classification_reason || 'No source summary was returned.'}</p>
@@ -316,12 +365,12 @@ function SourceCard({ assessmentId, source, compact = false }: { assessmentId: s
         {score > 0 && <ScoreOrb score={score} />}
       </div>
       {source.url ? (
-        <a href={sourceHref(source)} target="_blank" rel="noreferrer" className="sourceTitle">{source.title || source.domain || source.url}</a>
+        <a href={sourceHref(source)} target="_blank" rel="noreferrer" className="sourceTitle" title={source.title || source.url}>{displayLabel}</a>
       ) : (
-        <strong className="sourceTitle">{source.title || 'Untitled source'}</strong>
+        <strong className="sourceTitle" title={source.title || undefined}>{displayLabel}</strong>
       )}
       <div className="sourceMetaRow">
-        {source.domain && <span>{source.domain}</span>}
+        {articleTitle && <span className="sourceArticleTitle">{articleTitle}</span>}
         <span>{group}</span>
         {source.narrative_cluster && <span>Chain: {source.narrative_cluster}</span>}
       </div>
@@ -429,12 +478,12 @@ function SourceReferences({ assessment, ids }: { assessment: AssessmentResponse;
     <div className="miniEvidenceMap">
       {ids.map((id) => {
         const source = byId.get(id);
-        if (!source) return <span className="missingSourceRef" key={id}>{id} referenced, but source details were not supplied</span>;
-        const label = source.title || source.domain || source.url || id;
+        if (!source) return <span className="missingSourceRef" key={id}>Source reference missing details</span>;
+        const label = sourceDisplayLabel(sourcePosition(assessment, source), source);
         return source.url ? (
-          <a href={sourceHref(source)} key={id} rel="noreferrer" target="_blank">{id}: {label}</a>
+          <a href={sourceHref(source)} key={id} rel="noreferrer" target="_blank" title={source.title || source.url}>{label}</a>
         ) : (
-          <span key={id}>{id}: {label}</span>
+          <span key={id} title={source.title || undefined}>{label}</span>
         );
       })}
     </div>
@@ -453,11 +502,11 @@ function SourceLinkPreview({ assessment }: { assessment: AssessmentResponse }) {
       <div className="miniEvidenceMap suppliedSourceLinks">
         {sources.map((source, index) => {
           const id = sourceId(source, index);
-          const label = source.title || source.domain || source.url || id;
+          const label = sourceDisplayLabel(index, source);
           return source.url ? (
-            <a href={sourceHref(source)} key={`${id}-${source.url || index}`} rel="noreferrer" target="_blank">{id}: {label}</a>
+            <a href={sourceHref(source)} key={`${id}-${source.url || index}`} rel="noreferrer" target="_blank" title={source.title || source.url}>{label}</a>
           ) : (
-            <span className="missingSourceRef" key={`${id}-${index}`}>{id}: {label} — no URL supplied</span>
+            <span className="missingSourceRef" key={`${id}-${index}`} title={source.title || undefined}>{label} · no URL supplied</span>
           );
         })}
       </div>
@@ -483,7 +532,7 @@ function SourceList({ assessment }: { assessment: AssessmentResponse }) {
             <span>{sources.length} supplied source{sources.length === 1 ? '' : 's'}</span>
           </div>
           <div className="sourceGrid">
-            {sources.map((source, index) => <SourceCard assessmentId={assessment.assessment_id} source={source} compact key={`${source.id || source.url}-${index}`} />)}
+            {sources.map((source, index) => <SourceCard assessmentId={assessment.assessment_id} source={source} compact displayIndex={sourcePosition(assessment, source)} key={`${source.id || source.url}-${index}`} />)}
           </div>
         </section>
       ))}
@@ -738,7 +787,7 @@ function SpeechResult({
                         {item.sources?.length ? (
                           <div className="sourceGrid compact">
                             {item.sources.slice(0, 4).map((source, sourceIndex) => (
-                              <SourceCard assessmentId={item.assessment_id || `speech-${index}`} source={source} compact key={`${source.id || source.url}-${sourceIndex}`} />
+                              <SourceCard assessmentId={item.assessment_id || `speech-${index}`} source={source} compact displayIndex={sourceIndex} key={`${source.id || source.url}-${sourceIndex}`} />
                             ))}
                           </div>
                         ) : <p className="muted">No sources returned for this checked claim.</p>}
@@ -1118,6 +1167,7 @@ function AssessmentResult({ assessment, canShare = false }: { assessment: Assess
   const evidenceStrength = evidenceStrengthLabel(assessment.verdict.evidence_strength_score, assessment.verdict.label);
   const stats = sourceStats(assessment.sources || []);
   const reasoning = assessment.reasoning ? reasoningEntries(assessment.reasoning) : [];
+  const isFastMode = assessment.mode.toLowerCase() === 'fast';
   return (
     <section className="card resultCard assessmentCard">
       <div className="resultHeader assessmentHeader">
@@ -1179,7 +1229,7 @@ function AssessmentResult({ assessment, canShare = false }: { assessment: Assess
 
       <SourceLinkPreview assessment={assessment} />
 
-      <EvidenceScorePanel assessment={assessment} />
+      {!isFastMode && <EvidenceScorePanel assessment={assessment} />}
 
       {assessment.claim_breakdown?.length > 0 && (
         <details className="resultSection">
@@ -1201,7 +1251,7 @@ function AssessmentResult({ assessment, canShare = false }: { assessment: Assess
         </details>
       )}
 
-      <details className="resultSection evidenceSourcesSection" open>
+      <details className="resultSection evidenceSourcesSection">
         <summary><span>Evidence sources</span><small>Grouped source evidence with links</small></summary>
         <SourceList assessment={assessment} />
       </details>
