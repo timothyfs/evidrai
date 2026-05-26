@@ -18,3 +18,5 @@ services:
         sync: false
       - key: API_ALLOWED_ORIGINS
         value: http://localhost:3000
+      - key: TURNSTILE_SECRET_KEY
+        sync: false

@@ -83,6 +83,8 @@ ADMIN_TOKEN_SECRET_PATHS = (("admin", "token"), ("EVIDRAI_ADMIN_TOKEN",))
 ADMIN_TOKEN_ENV_NAMES = ("EVIDRAI_ADMIN_TOKEN",)
 MASTER_ADMIN_EMAILS_SECRET_PATHS = (("admin", "master_emails"), ("EVIDRAI_MASTER_ADMIN_EMAILS",))
 MASTER_ADMIN_EMAILS_ENV_NAMES = ("EVIDRAI_MASTER_ADMIN_EMAILS",)
+TURNSTILE_SECRET_KEY_SECRET_PATHS = (("turnstile", "secret_key"), ("TURNSTILE_SECRET_KEY",), ("CLOUDFLARE_TURNSTILE_SECRET_KEY",))
+TURNSTILE_SECRET_KEY_ENV_NAMES = ("TURNSTILE_SECRET_KEY", "CLOUDFLARE_TURNSTILE_SECRET_KEY")
 
 
 def api_allowed_origins() -> list[str]:
@@ -156,6 +158,17 @@ def master_admin_emails() -> set[str]:
         default="timfsmithson@gmail.com",
     )
     return {item.strip().lower() for item in (raw or "").split(",") if item.strip()}
+
+
+def turnstile_secret_key() -> Optional[str]:
+    return read_config_value(
+        secret_paths=TURNSTILE_SECRET_KEY_SECRET_PATHS,
+        env_names=TURNSTILE_SECRET_KEY_ENV_NAMES,
+    )
+
+
+def turnstile_configured() -> bool:
+    return bool(turnstile_secret_key())
 
 
 def config_presence_diagnostics() -> dict[str, Any]:

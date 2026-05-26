@@ -329,6 +329,7 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
             "output_style": output_style,
         }
 
+    grant_tier(monkeypatch, "free")
     monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
     monkeypatch.setenv("FEEDBACK_LOG_PATH", str(tmp_path / "feedback.jsonl"))
     monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
@@ -339,7 +340,7 @@ def test_fast_assessment_endpoint_returns_contract_shape(monkeypatch, tmp_path):
     payload = response.json()
     assert payload["schema_version"] == "assessment_response.v1"
     assert payload["mode"] == "fast"
-    assert payload["owner_id"] is None
+    assert payload["owner_id"] == "test-user"
     assert payload["verdict"]["label"] == "Supported"
     assert payload["claim_breakdown"][0]["id"] == "sc_1"
     assert payload["evidence_map"]["supports_factual_core"] == ["src_1"]
@@ -467,6 +468,15 @@ def test_report_history_can_be_scoped_by_owner_header(monkeypatch, tmp_path):
     monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
     monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
 
+    def profile_from_owner_header(request):
+        owner_id = request.headers.get("x-evidrai-user-id") or "alice"
+        return (
+            api_main.AuthContext(owner_id=owner_id, auth_method="supabase_jwt", email=f"{owner_id}@example.com"),
+            UserProfile(owner_id=owner_id, email=f"{owner_id}@example.com", tier="free"),
+        )
+
+    monkeypatch.setattr(api_main, "_profile_from_request", profile_from_owner_header)
+
     alice = client.post("/assessments/fast", json={"claim": "Alice claim"}, headers={"X-Evidrai-User-Id": "alice"}).json()
     client.post("/assessments/fast", json={"claim": "Bob claim"}, headers={"X-Evidrai-User-Id": "bob"})
 
@@ -494,6 +504,7 @@ def test_claim_check_embeds_assessment_contract(monkeypatch):
             "debug_trace": {"schema_version": "pipeline_trace.v1", "normalized_claim": claim},
         }
 
+    grant_tier(monkeypatch, "free")
     monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
 
     response = client.post("/claims/check", json={"claim": "Test claim", "mode": "fast", "include_debug": True})
@@ -502,7 +513,7 @@ def test_claim_check_embeds_assessment_contract(monkeypatch):
     payload = response.json()
     assessment = payload["result"]["assessment"]
     assert assessment["schema_version"] == "assessment_response.v1"
-    assert assessment["owner_id"] is None
+    assert assessment["owner_id"] == "test-user"
     assert assessment["debug"]["schema_version"] == "pipeline_trace.v1"
 
 

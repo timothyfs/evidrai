@@ -13,7 +13,7 @@ from evidrai.assessment_jobs import AssessmentJob, get_assessment_job_store
 from evidrai.auth import AuthContext, context_from_headers, decode_supabase_access_token, unverified_token_diagnostics
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, master_admin_emails, supabase_auth_configured, supabase_service_role_key, supabase_url
+from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, master_admin_emails, supabase_auth_configured, supabase_service_role_key, supabase_url, turnstile_configured, turnstile_secret_key
 from evidrai.entitlements import (
     delete_user_profile,
     enforce_speech_claim_limit,
@@ -69,6 +69,7 @@ class ClaimCheckRequest(BaseModel):
     category: str = "auto-detect"
     mode: str = Field(default="deep", pattern="^(fast|deep)$")
     include_debug: bool = False
+    bot_token: str = ""
 
 
 class AssessmentCreateRequest(BaseModel):
@@ -77,6 +78,7 @@ class AssessmentCreateRequest(BaseModel):
     category: str = "auto-detect"
     output_style: str = Field(default="standard", pattern="^(standard|absurdity_humour)$")
     include_debug: bool = False
+    bot_token: str = ""
 
 
 class SpeechAuditRequest(BaseModel):
@@ -85,6 +87,7 @@ class SpeechAuditRequest(BaseModel):
     max_claims: int = Field(default=3, ge=1, le=20)
     verification_mode: str = Field(default="fast", pattern="^(fast|deep)$")
     try_youtube_captions: bool = True
+    bot_token: str = ""
 
 
 class SpeechExtractRequest(BaseModel):
@@ -92,12 +95,14 @@ class SpeechExtractRequest(BaseModel):
     source_url: str = ""
     max_claims: int = Field(default=3, ge=1, le=20)
     try_youtube_captions: bool = True
+    bot_token: str = ""
 
 
 class SpeechVerifyRequest(BaseModel):
     claims: list[Dict[str, Any]] = Field(default_factory=list)
     source_url: str = ""
     verification_mode: str = Field(default="fast", pattern="^(fast|deep)$")
+    bot_token: str = ""
 
 
 class SourceExtractRequest(BaseModel):
@@ -303,6 +308,36 @@ def _is_master_admin(context: AuthContext) -> bool:
     return context.authenticated and context.email.strip().lower() in master_admin_emails()
 
 
+def _require_authenticated(request: Request) -> AuthContext:
+    context, _profile = _profile_from_request(request)
+    if not context.authenticated:
+        raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in with an email address before using Evidrai."})
+    return context
+
+
+def _require_bot_check(request: Request, bot_token: str = "") -> None:
+    if not turnstile_configured():
+        return
+    token = (bot_token or request.headers.get("x-turnstile-token") or "").strip()
+    if not token:
+        raise HTTPException(status_code=403, detail={"code": "bot_check_required", "message": "Bot protection check is required before running this action."})
+    try:
+        response = requests.post(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            data={
+                "secret": turnstile_secret_key(),
+                "response": token,
+                "remoteip": request.client.host if request.client else "",
+            },
+            timeout=8,
+        )
+        payload = response.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={"code": "bot_check_unavailable", "message": "Bot protection could not be verified. Please try again."}) from exc
+    if not payload.get("success"):
+        raise HTTPException(status_code=403, detail={"code": "bot_check_failed", "message": "Bot protection check failed. Please try again."})
+
+
 def _require_admin(request: Request) -> None:
     context = _auth_context_from_request(request)
     if _is_master_admin(context):
@@ -492,8 +527,8 @@ def diagnose_transcript_source(request: SourceExtractRequest) -> Dict[str, Any]:
 
 @app.get("/reports", response_model=Dict[str, Any])
 def reports_index(http_request: Request, limit: int = 50) -> Dict[str, Any]:
-    owner_id = _owner_id_from_request(http_request)
-    return {"ok": True, "owner_id": owner_id or None, "reports": list_reports(limit=limit, owner_id=owner_id)}
+    context = _require_authenticated(http_request)
+    return {"ok": True, "owner_id": context.owner_id, "reports": list_reports(limit=limit, owner_id=context.owner_id)}
 
 
 
@@ -583,7 +618,7 @@ def admin_delete_user(owner_id: str, http_request: Request) -> Dict[str, Any]:
 @app.get("/reports/{report_id}", response_model=AssessmentResponse)
 def get_report(report_id: str, http_request: Request) -> AssessmentResponse:
     assessment = load_report(report_id)
-    context = _auth_context_from_request(http_request)
+    context = _require_authenticated(http_request)
     if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
         raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
     return assessment
@@ -592,7 +627,9 @@ def get_report(report_id: str, http_request: Request) -> AssessmentResponse:
 @app.post("/assessments/{assessment_id}/feedback", response_model=Dict[str, Any])
 def create_assessment_feedback(assessment_id: str, request: FeedbackCreateRequest, http_request: Request) -> Dict[str, Any]:
     assessment = load_report(assessment_id)
-    context = _auth_context_from_request(http_request)
+    context = _require_authenticated(http_request)
+    if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+        raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
     payload = assessment.model_dump(mode="json")
     record = build_feedback_record(
         result_key=assessment.assessment_id,
@@ -708,6 +745,7 @@ def runtime() -> Dict[str, Any]:
 
 @app.post("/claims/check", response_model=ApiEnvelope)
 def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelope:
+    _require_bot_check(http_request, request.bot_token)
     claim = (request.claim or "").strip()
     source_url = (request.source_url or "").strip()
     _validate_claim_request(claim, source_url)
@@ -737,6 +775,7 @@ def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelop
 
 @app.post("/assessments/fast", response_model=AssessmentResponse)
 def create_fast_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
+    _require_bot_check(http_request, request.bot_token)
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "fast_claims", authenticated=context.authenticated)
     return _assessment_response_from_request(request, "fast", owner_id=context.owner_id)
@@ -744,6 +783,7 @@ def create_fast_assessment(request: AssessmentCreateRequest, http_request: Reque
 
 @app.post("/assessments/deep", response_model=AssessmentResponse)
 def create_deep_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
+    _require_bot_check(http_request, request.bot_token)
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims", authenticated=context.authenticated)
     return _assessment_response_from_request(request, "deep", owner_id=context.owner_id)
@@ -751,6 +791,7 @@ def create_deep_assessment(request: AssessmentCreateRequest, http_request: Reque
 
 @app.post("/assessment-jobs/{mode}", response_model=AssessmentJobCreateResponse)
 def create_assessment_job(mode: str, request: AssessmentCreateRequest, http_request: Request, background_tasks: BackgroundTasks) -> AssessmentJobCreateResponse:
+    _require_bot_check(http_request, request.bot_token)
     if mode not in {"fast", "deep"}:
         raise HTTPException(status_code=404, detail="Not Found")
     context, profile = _profile_from_request(http_request)
@@ -771,6 +812,7 @@ def get_assessment_job(job_id: str, http_request: Request) -> AssessmentJobStatu
 
 @app.post("/speech/extract", response_model=ApiEnvelope)
 def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiEnvelope:
+    _require_bot_check(http_request, request.bot_token)
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
     enforce_speech_claim_limit(profile, request.max_claims)
@@ -794,6 +836,7 @@ def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiE
 
 @app.post("/speech/verify", response_model=ApiEnvelope)
 def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnvelope:
+    _require_bot_check(http_request, request.bot_token)
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
     enforce_speech_claim_limit(profile, len(request.claims))
@@ -833,6 +876,7 @@ def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnv
 
 @app.post("/speech/audit", response_model=ApiEnvelope)
 def speech_audit(request: SpeechAuditRequest, http_request: Request) -> ApiEnvelope:
+    _require_bot_check(http_request, request.bot_token)
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
     enforce_speech_claim_limit(profile, request.max_claims)

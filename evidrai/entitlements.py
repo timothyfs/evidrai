@@ -338,7 +338,7 @@ def delete_user_profile(owner_id: str, store: UserProfileStore | None = None) ->
 
 def require_feature(profile: UserProfile, feature: str, *, authenticated: bool = True) -> None:
     definition = tier_definition(profile.tier)
-    if not authenticated and feature != "fast_claims":
+    if not authenticated:
         raise EntitlementError("Sign in is required for this feature.", code="auth_required", status_code=401)
     if not definition.features.get(feature, False):
         raise EntitlementError(

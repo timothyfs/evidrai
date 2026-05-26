@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties, FormEvent } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccountProfile,
   AssessmentResponse,
@@ -47,6 +47,7 @@ function verdictTone(label: string) {
 type ThemeMode = 'dark' | 'light';
 
 const PENDING_ASSESSMENT_JOB_KEY = 'evidrai_pending_assessment_job';
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
 
 function applyTheme(theme: ThemeMode) {
   if (typeof document === 'undefined') return;
@@ -973,6 +974,44 @@ function SpeechInputState({ transcript, sourceUrl, tryYouTubeCaptions }: { trans
   return <p className="speechState weakState">Paste a transcript to start. YouTube URL-only extraction is experimental and may be blocked by YouTube.</p>;
 }
 
+function TurnstileCheck({ token, setToken }: { token: string; setToken: (value: string) => void }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const widgetIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || typeof window === 'undefined') return;
+    const scriptId = 'cloudflare-turnstile-script';
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+    const timer = window.setInterval(() => {
+      const turnstile = (window as unknown as { turnstile?: { render: (el: HTMLElement, opts: Record<string, unknown>) => string } }).turnstile;
+      if (!turnstile || !containerRef.current || widgetIdRef.current) return;
+      widgetIdRef.current = turnstile.render(containerRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (value: string) => setToken(value),
+        'expired-callback': () => setToken(''),
+        'error-callback': () => setToken(''),
+      });
+      window.clearInterval(timer);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [setToken]);
+
+  if (!TURNSTILE_SITE_KEY) return null;
+  return (
+    <div className="botCheck">
+      <div ref={containerRef} />
+      <p className={token ? 'success' : 'muted'}>{token ? 'Bot check complete.' : 'Complete the bot check before creating an account or running an assessment.'}</p>
+    </div>
+  );
+}
+
 function LoginGate({
   account,
   authReady,
@@ -986,6 +1025,8 @@ function LoginGate({
   onEmailPassword,
   onSignUp,
   onPasswordReset,
+  botToken,
+  setBotToken,
 }: {
   account: AccountProfile | null;
   authReady: boolean;
@@ -999,6 +1040,8 @@ function LoginGate({
   onEmailPassword: (event: FormEvent<HTMLFormElement>) => void;
   onSignUp: () => void;
   onPasswordReset: () => void;
+  botToken: string;
+  setBotToken: (value: string) => void;
 }) {
   return (
     <section className="card loginGate">
@@ -1017,9 +1060,10 @@ function LoginGate({
               Password
               <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimum 6 characters" type="password" />
             </label>
+            <TurnstileCheck token={botToken} setToken={setBotToken} />
             <div className="formRow">
               <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} type="submit">Sign in</button>
-              <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} onClick={onSignUp} type="button">Create free account</button>
+              <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6 || Boolean(TURNSTILE_SITE_KEY && !botToken)} onClick={onSignUp} type="button">Create free account</button>
               <button className="linkButton" disabled={authBusy || !email.trim()} onClick={onPasswordReset} type="button">Set/reset password</button>
             </div>
           </form>
@@ -1301,6 +1345,7 @@ export default function Home() {
   const [authMessage, setAuthMessage] = useState('');
   const [authDiagnostics, setAuthDiagnostics] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
+  const [botToken, setBotToken] = useState('');
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [reportsOpen, setReportsOpen] = useState(true);
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
@@ -1317,8 +1362,9 @@ export default function Home() {
   const canUseDeep = Boolean(userFeatures.deep_claims);
   const canUseSpeech = Boolean(userFeatures.speech_audit);
   const canShareReports = Boolean(userFeatures.share_reports);
-  const ready = useMemo(() => signedIn && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, claim, sourceUrl]);
-  const speechReady = useMemo(() => signedIn && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
+  const botReady = !TURNSTILE_SITE_KEY || Boolean(botToken);
+  const ready = useMemo(() => signedIn && botReady && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, botReady, claim, sourceUrl]);
+  const speechReady = useMemo(() => signedIn && botReady && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, botReady, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
 
   function rememberReport(result: AssessmentResponse) {
     const summary: ReportSummary = {
@@ -1480,6 +1526,7 @@ export default function Home() {
     setAuthBusy(true);
     setAuthMessage('');
     try {
+      if (TURNSTILE_SITE_KEY && !botToken) throw new Error('Complete the bot check before creating an account.');
       const session = await signUpWithEmailPassword(authEmail.trim(), authPassword);
       setAccessToken(session?.access_token || '');
       setAuthMessage(session ? 'Free account created.' : 'Account created. Check your email to confirm before signing in.');
@@ -1545,8 +1592,9 @@ export default function Home() {
     try {
       const requestedMode = canUseDeep ? mode : 'fast';
       const requestedStyle = requestedMode === 'fast' ? fastOutputStyle : 'standard';
-      const job = await createAssessmentJob({ claim, source_url: sourceUrl, category, mode: requestedMode, output_style: requestedStyle });
+      const job = await createAssessmentJob({ claim, source_url: sourceUrl, category, mode: requestedMode, output_style: requestedStyle, bot_token: botToken });
       window.localStorage.setItem(PENDING_ASSESSMENT_JOB_KEY, job.job_id);
+      setBotToken('');
       await pollAssessmentJob(job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Assessment failed');
@@ -1568,7 +1616,9 @@ export default function Home() {
         source_url: speechSourceUrl,
         max_claims: Math.min(maxClaims, Number(userLimits.max_speech_claims || maxClaims)),
         try_youtube_captions: tryYouTubeCaptions,
+        bot_token: botToken,
       });
+      setBotToken('');
       setSpeechExtraction(result);
       setSelectedSpeechClaims(result.claims.map((item) => item.id));
     } catch (err) {
@@ -1580,13 +1630,18 @@ export default function Home() {
 
   async function verifySelectedSpeechClaims() {
     if (!speechExtraction) return;
+    if (!botReady) {
+      setError('Complete the bot check before verifying selected claims.');
+      return;
+    }
     const claims: SpeechClaim[] = speechExtraction.claims.filter((item) => selectedSpeechClaims.includes(item.id));
     if (!claims.length) return;
     setLoadingKind('speech-verify');
     setVerifyingSpeech(true);
     setError('');
     try {
-      const result = await verifySpeechClaims({ claims, source_url: speechSourceUrl || speechExtraction.source_url, verification_mode: canUseDeep ? speechMode : 'fast' });
+      const result = await verifySpeechClaims({ claims, source_url: speechSourceUrl || speechExtraction.source_url, verification_mode: canUseDeep ? speechMode : 'fast', bot_token: botToken });
+      setBotToken('');
       setSpeechVerification(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Speech verification failed');
@@ -1666,6 +1721,8 @@ export default function Home() {
           onEmailPassword={handleEmailPasswordSignIn}
           onSignUp={handleEmailPasswordSignUp}
           onPasswordReset={handlePasswordReset}
+          botToken={botToken}
+          setBotToken={setBotToken}
         />
       )}
 
@@ -1724,6 +1781,7 @@ export default function Home() {
                 </label>
               </div>
               <VerifyGuide mode="claim" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
+              <TurnstileCheck token={botToken} setToken={setBotToken} />
               <button className="primaryAction" disabled={!ready || loading}>{loading && loadingKind === 'claim' ? 'Checking evidence…' : 'Check claim'}</button>
             </form>
           ) : (
@@ -1761,6 +1819,7 @@ export default function Home() {
                 <SpeechInputState transcript={speechTranscript} sourceUrl={speechSourceUrl} tryYouTubeCaptions={tryYouTubeCaptions} />
               </div>
               <VerifyGuide mode="speech" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
+              <TurnstileCheck token={botToken} setToken={setBotToken} />
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
               {!speechTranscript.trim() && speechSourceUrl.trim() && tryYouTubeCaptions && <p className="fieldHint">No transcript pasted, so Evidrai will try to extract captions from the URL first.</p>}
               {!speechTranscript.trim() && speechSourceUrl.trim() && !tryYouTubeCaptions && <p className="fieldHint">Paste the transcript above, or enable automatic YouTube captions for a best-effort URL-only attempt.</p>}

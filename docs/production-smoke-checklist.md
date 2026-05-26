@@ -12,13 +12,13 @@ This checks:
 
 - Vercel homepage loads
 - deployed frontend bundle contains current UI markers
-- Render `/runtime`, `/tiers`, `/me`, `/reports` respond
-- anonymous Fast assessment job creates, completes, and saves a report
-- saved report can be reloaded
+- Render `/runtime`, `/tiers`, `/me` respond
+- anonymous `/reports` and Fast assessment jobs are blocked
+- signed-in-only access is enforced before users can run assessments
 
 ## Optional authenticated checks
 
-Deep assessment and speech audit require a signed-in user because anonymous users only have Fast claims.
+Assessment, reports, Deep assessment, and speech audit require a signed-in user because Evidrai captures an email identity before any checks run.
 
 ```bash
 EVIDRAI_ACCESS_TOKEN='<supabase-access-token>' \
@@ -40,4 +40,4 @@ python scripts/smoke_production.py
 
 ## UI handoff gate
 
-Before UI testing, the default script should show zero failures. Skips for Deep/Speech are acceptable unless an access token is provided.
+Before UI testing, the default script should show zero failures and confirm anonymous users are blocked. For a full user-path smoke test, provide a Supabase access token for a test user.

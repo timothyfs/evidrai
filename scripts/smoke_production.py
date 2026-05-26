@@ -2,9 +2,9 @@
 """Production smoke checks for the deployed Evidrai web + API surfaces.
 
 Default mode is safe for frequent UI work: it checks public frontend assets,
-public API health/config endpoints, the anonymous account profile, the async
-Fast assessment job path used by the web UI, and report listing for the same
-anonymous smoke user.
+public API health/config endpoints, the anonymous account profile, and confirms
+that assessment/report endpoints now reject anonymous users. Provide an access
+token to test the signed-in Fast assessment job path used by the web UI.
 
 Optional authenticated checks are enabled with environment variables:
 
@@ -254,15 +254,25 @@ def main() -> int:
     if isinstance(me, dict):
         user = me.get("user") or {}
         result.note(f"Profile: authenticated={me.get('authenticated')} tier={user.get('tier')} label={user.get('tier_label')}")
-    check_get(client, "/reports", "reports list", result)
-
-    assessment_id = create_fast_job(client, result, args.poll_seconds)
-    if assessment_id:
-        status, payload, _headers = client.request("GET", f"/reports/{assessment_id}")
-        if status == 200 and isinstance(payload, dict):
-            expect(payload.get("assessment_id") == assessment_id, result, "saved report reload", assessment_id)
-        else:
-            result.fail("saved report reload", f"HTTP {status}: {payload_detail(payload)}")
+    if args.access_token:
+        check_get(client, "/reports", "reports list", result)
+        assessment_id = create_fast_job(client, result, args.poll_seconds)
+        if assessment_id:
+            status, payload, _headers = client.request("GET", f"/reports/{assessment_id}")
+            if status == 200 and isinstance(payload, dict):
+                expect(payload.get("assessment_id") == assessment_id, result, "saved report reload", assessment_id)
+            else:
+                result.fail("saved report reload", f"HTTP {status}: {payload_detail(payload)}")
+    else:
+        status, payload, _headers = client.request("GET", "/reports")
+        expect(status == 401, result, "anonymous reports blocked", f"HTTP {status}: {payload_detail(payload)}")
+        status, payload, _headers = client.request(
+            "POST",
+            "/assessment-jobs/fast",
+            {"claim": "The Eiffel Tower is in Paris.", "source_url": "", "category": "general", "output_style": "standard"},
+        )
+        expect(status == 401, result, "anonymous fast assessment blocked", f"HTTP {status}: {payload_detail(payload)}")
+        result.skip("signed-in fast assessment", "set EVIDRAI_ACCESS_TOKEN to run the full assessment job path")
 
     if args.run_deep:
         if args.access_token:

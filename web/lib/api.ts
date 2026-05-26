@@ -344,7 +344,7 @@ export function getTiers(): Promise<{ ok: boolean; schema_version: string; tiers
   return request<{ ok: boolean; schema_version: string; tiers: TierDefinition[] }>('/tiers');
 }
 
-export function createAssessment(input: { claim: string; source_url?: string; category: string; mode: 'fast' | 'deep'; output_style?: 'standard' | 'absurdity_humour' }): Promise<AssessmentResponse> {
+export function createAssessment(input: { claim: string; source_url?: string; category: string; mode: 'fast' | 'deep'; output_style?: 'standard' | 'absurdity_humour'; bot_token?: string }): Promise<AssessmentResponse> {
   const path = input.mode === 'deep' ? '/assessments/deep' : '/assessments/fast';
   return request<AssessmentResponse>(path, {
     method: 'POST',
@@ -353,11 +353,12 @@ export function createAssessment(input: { claim: string; source_url?: string; ca
       source_url: input.source_url || '',
       category: input.category,
       output_style: input.output_style || 'standard',
+      bot_token: input.bot_token || '',
     }),
   });
 }
 
-export function createAssessmentJob(input: { claim: string; source_url?: string; category: string; mode: 'fast' | 'deep'; output_style?: 'standard' | 'absurdity_humour' }): Promise<AssessmentJobCreateResponse> {
+export function createAssessmentJob(input: { claim: string; source_url?: string; category: string; mode: 'fast' | 'deep'; output_style?: 'standard' | 'absurdity_humour'; bot_token?: string }): Promise<AssessmentJobCreateResponse> {
   return request<AssessmentJobCreateResponse>(`/assessment-jobs/${input.mode}`, {
     method: 'POST',
     body: JSON.stringify({
@@ -365,6 +366,7 @@ export function createAssessmentJob(input: { claim: string; source_url?: string;
       source_url: input.source_url || '',
       category: input.category,
       output_style: input.output_style || 'standard',
+      bot_token: input.bot_token || '',
     }),
   });
 }
@@ -469,6 +471,7 @@ export async function extractSpeechClaims(input: {
   source_url?: string;
   max_claims: number;
   try_youtube_captions?: boolean;
+  bot_token?: string;
 }): Promise<SpeechExtractionResult> {
   const payload = await request<{ ok: boolean; result: SpeechExtractionResult }>('/speech/extract', {
     method: 'POST',
@@ -477,6 +480,7 @@ export async function extractSpeechClaims(input: {
       source_url: input.source_url || '',
       max_claims: input.max_claims,
       try_youtube_captions: input.try_youtube_captions ?? true,
+      bot_token: input.bot_token || '',
     }),
   });
   return payload.result;
@@ -486,6 +490,7 @@ export async function verifySpeechClaims(input: {
   claims: SpeechClaim[];
   source_url?: string;
   verification_mode: 'fast' | 'deep';
+  bot_token?: string;
 }): Promise<SpeechVerificationResult> {
   const payload = await request<{ ok: boolean; result: SpeechVerificationResult }>('/speech/verify', {
     method: 'POST',
@@ -493,6 +498,7 @@ export async function verifySpeechClaims(input: {
       claims: input.claims,
       source_url: input.source_url || '',
       verification_mode: input.verification_mode,
+      bot_token: input.bot_token || '',
     }),
   });
   return payload.result;

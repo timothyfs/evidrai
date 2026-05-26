@@ -315,6 +315,14 @@ summary { cursor: pointer; font-weight: 900; }
 .commentBox { min-height: 96px; }
 .error { color: var(--bad); font-weight: 800; }
 .success { color: var(--good); font-weight: 800; }
+.botCheck {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+.botCheck p { margin: 0; }
 
 @media (max-width: 880px) {
   .hero, .layout, .sourceGrid, .sourceGrid.compact, .checkedClaim, .userSummary, .matrixGrid { grid-template-columns: 1fr; }
