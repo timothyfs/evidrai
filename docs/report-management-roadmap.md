@@ -72,21 +72,19 @@ For shared reports:
 - Make sure privacy/consent copy is explicit before using these emails for marketing.
 - Do not expose recipient emails on public report pages.
 
-## Report labels/status markers
+## Researcher / Journalist report labels/status markers
 
-Tim's note ended at “allow reports to be marked like…”. This needs clarification.
+Researcher / Journalist users should be able to mark reports with lightweight workflow labels:
 
-Possible intended markings:
+- favourite
+- reviewed
+- customer-facing
+- internal-only
+- useful
+- not useful
+- needs follow-up
 
-- favourite / important
-- keep / do not delete
-- shared / private
-- reviewed / needs review
-- useful / not useful
-- customer-facing / internal-only
-- evidence-quality tags
-
-Decision needed before implementation.
+Implementation note: keep `do not delete` / protected as a separate retention flag, not just a label, because it controls auto-cycling behaviour.
 
 ## Suggested implementation sequence
 

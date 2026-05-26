@@ -153,6 +153,7 @@ Date: 2026-05-10
   - Retention cycling never deletes protected reports.
   - Reports can open in a dedicated report page/new tab and be shared.
   - Optional share-recipient email capture is stored safely and not exposed publicly.
+  - Researcher / Journalist users can label reports as favourite, reviewed, customer-facing, internal-only, useful/not useful, or needs follow-up.
 - Detail: `docs/report-management-roadmap.md`.
 
 ### Full QA and security audit gate

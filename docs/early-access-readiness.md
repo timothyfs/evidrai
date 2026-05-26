@@ -305,7 +305,7 @@ Tasks:
 4. Auto-cycle older non-protected reports when tier limits are exceeded.
 5. Open saved reports in a dedicated report page/new tab, similar to public share links.
 6. Capture optional share-recipient email addresses for future marketing/customer follow-up, subject to consent/compliance.
-7. Clarify the report marking/status taxonomy Tim started to describe.
+7. Add Researcher / Journalist report labels: favourite, reviewed, customer-facing, internal-only, useful/not useful, and needs follow-up.
 
 Reference: `docs/report-management-roadmap.md`.
 
@@ -315,6 +315,7 @@ Acceptance criteria:
 - Tier limits are enforced without deleting protected reports.
 - Users can view, delete, protect, and share reports cleanly.
 - Share recipient emails are stored safely and not exposed publicly.
+- Researcher / Journalist users can apply workflow labels to reports.
 
 ### G. QA and security audit gate
 
