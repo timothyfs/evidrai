@@ -745,13 +745,13 @@ def runtime() -> Dict[str, Any]:
 
 @app.post("/claims/check", response_model=ApiEnvelope)
 def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelope:
-    _require_bot_check(http_request, request.bot_token)
     claim = (request.claim or "").strip()
     source_url = (request.source_url or "").strip()
     _validate_claim_request(claim, source_url)
 
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims" if request.mode == "deep" else "fast_claims", authenticated=context.authenticated)
+    _require_bot_check(http_request, request.bot_token)
     result = _run_claim_assessment(claim=claim, source_url=source_url, category=request.category, mode=request.mode)
     assessment = serialize_assessment_response(
         result,
@@ -775,27 +775,27 @@ def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelop
 
 @app.post("/assessments/fast", response_model=AssessmentResponse)
 def create_fast_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
-    _require_bot_check(http_request, request.bot_token)
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "fast_claims", authenticated=context.authenticated)
+    _require_bot_check(http_request, request.bot_token)
     return _assessment_response_from_request(request, "fast", owner_id=context.owner_id)
 
 
 @app.post("/assessments/deep", response_model=AssessmentResponse)
 def create_deep_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
-    _require_bot_check(http_request, request.bot_token)
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims", authenticated=context.authenticated)
+    _require_bot_check(http_request, request.bot_token)
     return _assessment_response_from_request(request, "deep", owner_id=context.owner_id)
 
 
 @app.post("/assessment-jobs/{mode}", response_model=AssessmentJobCreateResponse)
 def create_assessment_job(mode: str, request: AssessmentCreateRequest, http_request: Request, background_tasks: BackgroundTasks) -> AssessmentJobCreateResponse:
-    _require_bot_check(http_request, request.bot_token)
     if mode not in {"fast", "deep"}:
         raise HTTPException(status_code=404, detail="Not Found")
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims" if mode == "deep" else "fast_claims", authenticated=context.authenticated)
+    _require_bot_check(http_request, request.bot_token)
     _validate_claim_request((request.claim or "").strip(), (request.source_url or "").strip())
     store = get_assessment_job_store()
     job = store.create(owner_id=context.owner_id, mode=mode, request=request.model_dump(mode="json"))
@@ -812,9 +812,9 @@ def get_assessment_job(job_id: str, http_request: Request) -> AssessmentJobStatu
 
 @app.post("/speech/extract", response_model=ApiEnvelope)
 def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiEnvelope:
-    _require_bot_check(http_request, request.bot_token)
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
+    _require_bot_check(http_request, request.bot_token)
     enforce_speech_claim_limit(profile, request.max_claims)
     source_url = (request.source_url or "").strip()
     transcript = _speech_transcript_from_request(request.transcript, source_url, request.try_youtube_captions)
@@ -836,9 +836,9 @@ def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiE
 
 @app.post("/speech/verify", response_model=ApiEnvelope)
 def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnvelope:
-    _require_bot_check(http_request, request.bot_token)
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
+    _require_bot_check(http_request, request.bot_token)
     enforce_speech_claim_limit(profile, len(request.claims))
     source_url = (request.source_url or "").strip()
     if source_url and not is_probable_url(source_url):
@@ -876,9 +876,9 @@ def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnv
 
 @app.post("/speech/audit", response_model=ApiEnvelope)
 def speech_audit(request: SpeechAuditRequest, http_request: Request) -> ApiEnvelope:
-    _require_bot_check(http_request, request.bot_token)
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
+    _require_bot_check(http_request, request.bot_token)
     enforce_speech_claim_limit(profile, request.max_claims)
     source_url = (request.source_url or "").strip()
     transcript = _speech_transcript_from_request(request.transcript, source_url, request.try_youtube_captions)

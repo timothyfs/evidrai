@@ -974,7 +974,7 @@ function SpeechInputState({ transcript, sourceUrl, tryYouTubeCaptions }: { trans
   return <p className="speechState weakState">Paste a transcript to start. YouTube URL-only extraction is experimental and may be blocked by YouTube.</p>;
 }
 
-function TurnstileCheck({ token, setToken }: { token: string; setToken: (value: string) => void }) {
+function TurnstileCheck({ token, setToken, actionLabel = 'continue' }: { token: string; setToken: (value: string) => void; actionLabel?: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
 
@@ -1003,11 +1003,11 @@ function TurnstileCheck({ token, setToken }: { token: string; setToken: (value: 
     return () => window.clearInterval(timer);
   }, [setToken]);
 
-  if (!TURNSTILE_SITE_KEY) return null;
+  if (!TURNSTILE_SITE_KEY || token) return null;
   return (
     <div className="botCheck">
       <div ref={containerRef} />
-      <p className={token ? 'success' : 'muted'}>{token ? 'Bot check complete.' : 'Complete the bot check before creating an account or running an assessment.'}</p>
+      <p className="muted">Complete the bot check to {actionLabel}.</p>
     </div>
   );
 }
@@ -1060,7 +1060,7 @@ function LoginGate({
               Password
               <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimum 6 characters" type="password" />
             </label>
-            <TurnstileCheck token={botToken} setToken={setBotToken} />
+            <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="create an account" />
             <div className="formRow">
               <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} type="submit">Sign in</button>
               <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6 || Boolean(TURNSTILE_SITE_KEY && !botToken)} onClick={onSignUp} type="button">Create free account</button>
@@ -1781,7 +1781,7 @@ export default function Home() {
                 </label>
               </div>
               <VerifyGuide mode="claim" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
-              <TurnstileCheck token={botToken} setToken={setBotToken} />
+              {(claim.trim() || sourceUrl.trim()) && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="check this claim" />}
               <button className="primaryAction" disabled={!ready || loading}>{loading && loadingKind === 'claim' ? 'Checking evidence…' : 'Check claim'}</button>
             </form>
           ) : (
@@ -1819,7 +1819,7 @@ export default function Home() {
                 <SpeechInputState transcript={speechTranscript} sourceUrl={speechSourceUrl} tryYouTubeCaptions={tryYouTubeCaptions} />
               </div>
               <VerifyGuide mode="speech" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
-              <TurnstileCheck token={botToken} setToken={setBotToken} />
+              {(speechTranscript.trim() || speechSourceUrl.trim()) && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="extract claims" />}
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
               {!speechTranscript.trim() && speechSourceUrl.trim() && tryYouTubeCaptions && <p className="fieldHint">No transcript pasted, so Evidrai will try to extract captions from the URL first.</p>}
               {!speechTranscript.trim() && speechSourceUrl.trim() && !tryYouTubeCaptions && <p className="fieldHint">Paste the transcript above, or enable automatic YouTube captions for a best-effort URL-only attempt.</p>}
