@@ -2739,3 +2739,33 @@ html[data-theme="light"] .methodologyGuardrails {
   .headerBrandCluster .brand { padding: 7px 10px; }
   .headerQuickCheck button { padding-inline: 10px; }
 }
+
+/* Header follow-up: remove redundant home chip behaviour and keep menus above quick search. */
+.siteHeader {
+  grid-template-columns: auto minmax(260px, 680px) 1fr auto;
+  overflow: visible;
+}
+.headerQuickCheck {
+  position: relative;
+  z-index: 1;
+}
+.navMenu,
+.accountMenu {
+  position: relative;
+  z-index: 90;
+}
+.navMenu[open],
+.accountMenu[open] {
+  z-index: 120;
+}
+.navMenu nav,
+.accountMenuPanel {
+  z-index: 130;
+}
+.homeChip { display: none !important; }
+@media (max-width: 980px) {
+  .siteHeader { grid-template-columns: auto minmax(0, 1fr) auto; }
+}
+@media (max-width: 720px) {
+  .siteHeader { grid-template-columns: auto 1fr auto; }
+}

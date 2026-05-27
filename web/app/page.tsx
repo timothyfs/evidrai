@@ -1149,7 +1149,6 @@ function SiteHeader({ account, me, signedIn, theme, quickClaim, onQuickClaimChan
     <header className="siteHeader">
       <div className="headerBrandCluster">
         <a className="brand" href="/">Evidrai</a>
-        <a className="homeChip" href="/" aria-label="Home">⌂</a>
       </div>
       {signedIn ? (
         <form className="headerQuickCheck" onSubmit={onQuickSubmit}>
