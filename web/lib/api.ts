@@ -102,6 +102,11 @@ export type UserProfile = {
   trial_started_at?: string;
   trial_ends_at?: string;
   payment_provider_customer_id?: string;
+  company_name?: string;
+  organisation_name?: string;
+  billing_account_name?: string;
+  billing_account_id?: string;
+  admin_notes?: string;
   admin_access?: boolean;
   admin_access_source?: 'master_admin_email' | 'none' | string;
   features: Record<string, boolean>;
@@ -434,6 +439,41 @@ export function inviteAdminUser(input: { email: string; tier: TierName; send_inv
 export function deleteAdminUser(owner_id: string): Promise<{ ok: boolean; owner_id: string; deleted: boolean; message: string }> {
   return request<{ ok: boolean; owner_id: string; deleted: boolean; message: string }>(`/admin/users/${encodeURIComponent(owner_id)}`, {
     method: 'DELETE',
+  });
+}
+
+export function updateAdminUserProfile(input: { owner_id: string; email?: string; company_name?: string; organisation_name?: string; billing_account_name?: string; billing_account_id?: string; admin_notes?: string }): Promise<{ ok: boolean; user: UserProfile }> {
+  return request<{ ok: boolean; user: UserProfile }>('/admin/users/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function bulkAdminUsers(input: { owner_ids: string[]; action: 'set_tier' | 'delete_profiles'; tier?: TierName }): Promise<{ ok: boolean; action: string; users?: UserProfile[]; deleted?: Array<{ owner_id: string; deleted: boolean }> }> {
+  return request<{ ok: boolean; action: string; users?: UserProfile[]; deleted?: Array<{ owner_id: string; deleted: boolean }> }>('/admin/users/bulk', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function sendAdminPasswordReset(input: { owner_id: string; email: string; redirect_to?: string }): Promise<{ ok: boolean; owner_id: string; email: string; message: string }> {
+  return request<{ ok: boolean; owner_id: string; email: string; message: string }>('/admin/users/password-reset', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAdminUserPassword(input: { owner_id: string; email?: string; password: string }): Promise<{ ok: boolean; owner_id: string; message: string }> {
+  return request<{ ok: boolean; owner_id: string; message: string }>('/admin/users/password', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function resendAdminInvite(input: { owner_id: string; email: string; redirect_to?: string }): Promise<{ ok: boolean; owner_id: string; email: string; message: string }> {
+  return request<{ ok: boolean; owner_id: string; email: string; message: string }>('/admin/users/resend-invite', {
+    method: 'POST',
+    body: JSON.stringify(input),
   });
 }
 

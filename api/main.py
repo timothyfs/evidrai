@@ -22,6 +22,7 @@ from evidrai.entitlements import (
     list_user_profiles,
     require_feature,
     set_user_tier,
+    update_user_profile_details,
 )
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, load_feedback_by_id, save_feedback
@@ -136,6 +137,29 @@ class AdminSetTierRequest(BaseModel):
     email: str = ""
 
 
+class AdminUpdateProfileRequest(BaseModel):
+    owner_id: str
+    email: str = ""
+    company_name: str = ""
+    organisation_name: str = ""
+    billing_account_name: str = ""
+    billing_account_id: str = ""
+    admin_notes: str = ""
+
+
+class AdminBulkUserActionRequest(BaseModel):
+    owner_ids: list[str]
+    action: str
+    tier: Optional[str] = Field(default=None, pattern="^(free|pro|researcher)$")
+
+
+class AdminPasswordActionRequest(BaseModel):
+    owner_id: str
+    email: str = ""
+    password: str = ""
+    redirect_to: str = ""
+
+
 class AdminInviteUserRequest(BaseModel):
     email: str
     tier: str = Field(default="free", pattern="^(free|pro|researcher)$")
@@ -186,6 +210,54 @@ def _supabase_auth_url(path: str) -> str:
     return f"{url.rstrip()}/auth/v1/{path.lstrip('/')}"
 
 
+
+
+def _supabase_request(method: str, path: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    try:
+        response = requests.request(method, _supabase_auth_url(path), headers=_supabase_admin_headers(), json=body or {}, timeout=20)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail={"code": "supabase_admin_request_failed", "message": "Could not reach Supabase admin API.", "developer_detail": str(exc)})
+    if response.status_code >= 400:
+        try:
+            detail = response.json()
+        except ValueError:
+            detail = response.text
+        raise HTTPException(status_code=response.status_code, detail={"code": "supabase_admin_error", "message": "Supabase could not complete this admin user action.", "supabase_detail": detail})
+    if not response.content:
+        return {}
+    try:
+        return response.json()
+    except ValueError:
+        return {"raw": response.text}
+
+
+def _send_supabase_password_reset(email: str, redirect_to: str = "") -> dict[str, Any]:
+    clean_email = email.strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail={"code": "invalid_email", "message": "A valid email address is required for password reset."})
+    body: dict[str, Any] = {"email": clean_email}
+    if redirect_to.strip():
+        body["redirect_to"] = redirect_to.strip()
+    return _supabase_request("POST", "recover", body=body)
+
+
+def _resend_supabase_invite(email: str, redirect_to: str = "") -> dict[str, Any]:
+    clean_email = email.strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail={"code": "invalid_email", "message": "A valid email address is required to resend an invite."})
+    body: dict[str, Any] = {"type": "signup", "email": clean_email}
+    if redirect_to.strip():
+        body["options"] = {"email_redirect_to": redirect_to.strip()}
+    return _supabase_request("POST", "resend", body=body)
+
+
+def _update_supabase_user_password(owner_id: str, password: str) -> dict[str, Any]:
+    if not owner_id.strip():
+        raise HTTPException(status_code=400, detail={"code": "owner_required", "message": "owner_id is required."})
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail={"code": "password_too_short", "message": "Temporary password must be at least 8 characters."})
+    return _supabase_request("PUT", f"admin/user/{owner_id.strip()}", body={"password": password})
+
 def _create_or_invite_supabase_user(request: AdminInviteUserRequest) -> dict[str, Any]:
     email = request.email.strip().lower()
     if not email or "@" not in email:
@@ -194,25 +266,10 @@ def _create_or_invite_supabase_user(request: AdminInviteUserRequest) -> dict[str
     if request.redirect_to.strip():
         body["redirect_to"] = request.redirect_to.strip()
     if request.send_invite:
-        endpoint = _supabase_auth_url("invite")
-    else:
-        endpoint = _supabase_auth_url("admin/users")
-        body["email_confirm"] = True
-        body["user_metadata"] = body.pop("data")
-    try:
-        response = requests.post(endpoint, headers=_supabase_admin_headers(), json=body, timeout=20)
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail={"code": "supabase_admin_request_failed", "message": "Could not reach Supabase admin API.", "developer_detail": str(exc)})
-    if response.status_code >= 400:
-        try:
-            detail = response.json()
-        except ValueError:
-            detail = response.text
-        raise HTTPException(status_code=response.status_code, detail={"code": "supabase_admin_error", "message": "Supabase could not create or invite this user.", "supabase_detail": detail})
-    try:
-        return response.json()
-    except ValueError:
-        return {}
+        return _supabase_request("POST", "invite", body=body)
+    body["email_confirm"] = True
+    body["user_metadata"] = body.pop("data")
+    return _supabase_request("POST", "admin/users", body=body)
 
 def _clients() -> tuple[OpenAICompatibleClient, TavilySearchClient]:
     return OpenAICompatibleClient(), TavilySearchClient()
@@ -627,6 +684,64 @@ def admin_set_user_tier(request: AdminSetTierRequest, http_request: Request) -> 
 
 
 
+
+
+
+@app.patch("/admin/users/profile", response_model=Dict[str, Any])
+def admin_update_user_profile(request: AdminUpdateProfileRequest, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    profile = update_user_profile_details(
+        request.owner_id,
+        email=request.email,
+        company_name=request.company_name,
+        organisation_name=request.organisation_name,
+        billing_account_name=request.billing_account_name,
+        billing_account_id=request.billing_account_id,
+        admin_notes=request.admin_notes,
+    )
+    return {"ok": True, "user": _profile_admin_view(profile)}
+
+
+@app.post("/admin/users/bulk", response_model=Dict[str, Any])
+def admin_bulk_user_action(request: AdminBulkUserActionRequest, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    owner_ids = [owner_id.strip() for owner_id in request.owner_ids if owner_id.strip()]
+    if not owner_ids:
+        raise HTTPException(status_code=400, detail={"code": "owner_required", "message": "Select at least one user."})
+    if request.action == "set_tier":
+        if not request.tier:
+            raise HTTPException(status_code=400, detail={"code": "tier_required", "message": "A target tier is required."})
+        users = [_profile_admin_view(set_user_tier(owner_id, request.tier)) for owner_id in owner_ids]
+        return {"ok": True, "action": request.action, "users": users}
+    if request.action == "delete_profiles":
+        current_owner = _auth_context_from_request(http_request).owner_id
+        if current_owner in owner_ids:
+            raise HTTPException(status_code=400, detail={"code": "cannot_delete_self", "message": "You cannot delete your own admin profile."})
+        deleted = [{"owner_id": owner_id, "deleted": delete_user_profile(owner_id)} for owner_id in owner_ids]
+        return {"ok": True, "action": request.action, "deleted": deleted}
+    raise HTTPException(status_code=400, detail={"code": "unsupported_bulk_action", "message": "Unsupported bulk action."})
+
+
+@app.post("/admin/users/password-reset", response_model=Dict[str, Any])
+def admin_password_reset(request: AdminPasswordActionRequest, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    _send_supabase_password_reset(request.email, redirect_to=request.redirect_to)
+    return {"ok": True, "owner_id": request.owner_id, "email": request.email.strip().lower(), "message": "Password reset email sent."}
+
+
+@app.patch("/admin/users/password", response_model=Dict[str, Any])
+def admin_update_user_password(request: AdminPasswordActionRequest, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    _update_supabase_user_password(request.owner_id, request.password)
+    return {"ok": True, "owner_id": request.owner_id, "message": "Password updated."}
+
+
+
+@app.post("/admin/users/resend-invite", response_model=Dict[str, Any])
+def admin_resend_invite(request: AdminPasswordActionRequest, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    _resend_supabase_invite(request.email, redirect_to=request.redirect_to)
+    return {"ok": True, "owner_id": request.owner_id, "email": request.email.strip().lower(), "message": "Invite email resent."}
 
 @app.post("/admin/users/invite", response_model=Dict[str, Any])
 def admin_invite_user(request: AdminInviteUserRequest, http_request: Request) -> Dict[str, Any]:

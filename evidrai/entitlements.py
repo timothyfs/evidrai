@@ -37,6 +37,11 @@ class UserProfile:
     trial_started_at: str = ""
     trial_ends_at: str = ""
     payment_provider_customer_id: str = ""
+    company_name: str = ""
+    organisation_name: str = ""
+    billing_account_name: str = ""
+    billing_account_id: str = ""
+    admin_notes: str = ""
     features: Dict[str, bool] = field(default_factory=dict)
     limits: Dict[str, int] = field(default_factory=dict)
 
@@ -152,6 +157,9 @@ class UserProfileStore(Protocol):
     def set_tier(self, owner_id: str, tier: str, email: str = "") -> UserProfile:
         ...
 
+    def update_details(self, owner_id: str, **details: str) -> UserProfile:
+        ...
+
     def list(self, limit: int = 100) -> List[UserProfile]:
         ...
 
@@ -187,7 +195,7 @@ class LocalUserProfileStore:
         elif owner_id not in data:
             data[owner_id] = record
             self._write(data)
-        return UserProfile(owner_id=owner_id, email=record.get("email") or "", tier=normalize_tier(record.get("tier") or "free"))
+        return UserProfile(owner_id=owner_id, email=record.get("email") or "", tier=normalize_tier(record.get("tier") or "free"), company_name=record.get("company_name") or "", organisation_name=record.get("organisation_name") or "", billing_account_name=record.get("billing_account_name") or "", billing_account_id=record.get("billing_account_id") or "", admin_notes=record.get("admin_notes") or "")
 
     def set_tier(self, owner_id: str, tier: str, email: str = "") -> UserProfile:
         if not owner_id:
@@ -199,11 +207,24 @@ class LocalUserProfileStore:
             record["email"] = email
         data[owner_id] = record
         self._write(data)
-        return UserProfile(owner_id=owner_id, email=record.get("email") or "", tier=record["tier"])
+        return self.get_or_create(owner_id, email=record.get("email") or "")
+
+    def update_details(self, owner_id: str, **details: str) -> UserProfile:
+        if not owner_id:
+            raise EntitlementError("owner_id is required", code="owner_required", status_code=400)
+        allowed = {"email", "company_name", "organisation_name", "billing_account_name", "billing_account_id", "admin_notes"}
+        data = self._read()
+        record = data.get(owner_id) or {"owner_id": owner_id, "email": details.get("email", ""), "tier": "free"}
+        for key, value in details.items():
+            if key in allowed:
+                record[key] = str(value or "").strip()
+        data[owner_id] = record
+        self._write(data)
+        return self.get_or_create(owner_id, email=record.get("email") or "")
 
     def list(self, limit: int = 100) -> List[UserProfile]:
         return [
-            UserProfile(owner_id=record.get("owner_id") or owner_id, email=record.get("email") or "", tier=normalize_tier(record.get("tier") or "free"))
+            UserProfile(owner_id=record.get("owner_id") or owner_id, email=record.get("email") or "", tier=normalize_tier(record.get("tier") or "free"), company_name=record.get("company_name") or "", organisation_name=record.get("organisation_name") or "", billing_account_name=record.get("billing_account_name") or "", billing_account_id=record.get("billing_account_id") or "", admin_notes=record.get("admin_notes") or "")
             for owner_id, record in list(self._read().items())[:limit]
         ]
 
@@ -246,7 +267,7 @@ class PostgresUserProfileStore:
                     ON CONFLICT (owner_id) DO UPDATE SET
                         email = COALESCE(NULLIF(EXCLUDED.email, ''), user_profiles.email),
                         updated_at = now()
-                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes
                     """,
                     (owner_id, email),
                 )
@@ -269,7 +290,7 @@ class PostgresUserProfileStore:
                         email = COALESCE(NULLIF(EXCLUDED.email, ''), user_profiles.email),
                         tier = EXCLUDED.tier,
                         updated_at = now()
-                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes
                     """,
                     (owner_id, email, normalized),
                 )
@@ -277,11 +298,38 @@ class PostgresUserProfileStore:
             conn.commit()
         return _profile_from_row(row)
 
+    def update_details(self, owner_id: str, **details: str) -> UserProfile:
+        if not owner_id:
+            raise EntitlementError("owner_id is required", code="owner_required", status_code=400)
+        allowed = {"email", "company_name", "organisation_name", "billing_account_name", "billing_account_id", "admin_notes"}
+        updates = {key: str(value or "").strip() for key, value in details.items() if key in allowed}
+        if not updates:
+            return self.get_or_create(owner_id)
+        self._ensure_schema()
+        columns = ", ".join(f"{key} = %s" for key in updates)
+        params = list(updates.values()) + [owner_id]
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE user_profiles
+                    SET {columns}, updated_at = now()
+                    WHERE owner_id = %s
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes
+                    """,
+                    tuple(params),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        if not row:
+            return self.get_or_create(owner_id, email=updates.get("email", ""))
+        return _profile_from_row(row)
+
     def list(self, limit: int = 100) -> List[UserProfile]:
         self._ensure_schema()
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id FROM user_profiles ORDER BY updated_at DESC LIMIT %s", (limit,))
+                cur.execute("SELECT owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes FROM user_profiles ORDER BY updated_at DESC LIMIT %s", (limit,))
                 rows = cur.fetchall()
         return [_profile_from_row(row) for row in rows]
 
@@ -310,6 +358,11 @@ def _profile_from_row(row: Dict[str, Any]) -> UserProfile:
         trial_started_at=_dt_value(row.get("trial_started_at")),
         trial_ends_at=_dt_value(row.get("trial_ends_at")),
         payment_provider_customer_id=row.get("payment_provider_customer_id") or "",
+        company_name=row.get("company_name") or "",
+        organisation_name=row.get("organisation_name") or "",
+        billing_account_name=row.get("billing_account_name") or "",
+        billing_account_id=row.get("billing_account_id") or "",
+        admin_notes=row.get("admin_notes") or "",
     )
 
 
@@ -326,6 +379,10 @@ def get_or_create_profile(owner_id: str, email: str = "", store: UserProfileStor
 
 def set_user_tier(owner_id: str, tier: str, email: str = "", store: UserProfileStore | None = None) -> UserProfile:
     return (store or get_user_profile_store()).set_tier(owner_id, tier=tier, email=email)
+
+
+def update_user_profile_details(owner_id: str, store: UserProfileStore | None = None, **details: str) -> UserProfile:
+    return (store or get_user_profile_store()).update_details(owner_id, **details)
 
 
 def list_user_profiles(limit: int = 100, store: UserProfileStore | None = None) -> List[UserProfile]:

@@ -144,6 +144,56 @@ def test_admin_users_marks_master_admin_access(monkeypatch):
     assert users[1]["admin_access"] is False
     assert users[1]["tier_label"] == "Pro"
 
+
+
+def test_admin_update_user_profile_details(monkeypatch):
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "update_user_profile_details", lambda owner_id, **details: UserProfile(owner_id=owner_id, email=details.get("email", ""), tier="pro", company_name=details.get("company_name", ""), billing_account_name=details.get("billing_account_name", "")))
+
+    response = client.patch(
+        "/admin/users/profile",
+        json={"owner_id": "user-1", "email": "user@example.com", "company_name": "Acme", "billing_account_name": "Acme Global"},
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["user"]["company_name"] == "Acme"
+    assert response.json()["user"]["billing_account_name"] == "Acme Global"
+
+
+def test_admin_bulk_set_tier(monkeypatch):
+    updated = []
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "set_user_tier", lambda owner_id, tier, email="": updated.append((owner_id, tier)) or UserProfile(owner_id=owner_id, tier=tier))
+
+    response = client.post("/admin/users/bulk", json={"owner_ids": ["u1", "u2"], "action": "set_tier", "tier": "researcher"}, headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    assert updated == [("u1", "researcher"), ("u2", "researcher")]
+    assert [user["tier"] for user in response.json()["users"]] == ["researcher", "researcher"]
+
+
+def test_admin_password_actions_call_supabase(monkeypatch):
+    calls = []
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "_supabase_request", lambda method, path, body=None: calls.append((method, path, body)) or {})
+
+    reset = client.post("/admin/users/password-reset", json={"owner_id": "u1", "email": "user@example.com"}, headers={"Authorization": "Bearer token"})
+    resend = client.post("/admin/users/resend-invite", json={"owner_id": "u1", "email": "user@example.com"}, headers={"Authorization": "Bearer token"})
+    password = client.patch("/admin/users/password", json={"owner_id": "u1", "password": "temporary123"}, headers={"Authorization": "Bearer token"})
+
+    assert reset.status_code == 200
+    assert resend.status_code == 200
+    assert password.status_code == 200
+    assert calls == [
+        ("POST", "recover", {"email": "user@example.com"}),
+        ("POST", "resend", {"type": "signup", "email": "user@example.com"}),
+        ("PUT", "admin/user/u1", {"password": "temporary123"}),
+    ]
+
 def test_admin_user_tier_update_sets_profile(monkeypatch):
     monkeypatch.setattr(api_main, "admin_token", lambda: "secret-token")
     monkeypatch.setattr(api_main, "set_user_tier", lambda owner_id, tier, email="": UserProfile(owner_id=owner_id, email=email, tier=tier))

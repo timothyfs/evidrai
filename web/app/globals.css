@@ -30,7 +30,7 @@ main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 28px;
-  align-items: end;
+  align-items: flex-end;
   margin-bottom: 28px;
 }
 
@@ -2415,4 +2415,65 @@ html[data-theme="light"] .methodologyGuardrails {
     padding-top: 10px;
     word-break: break-all;
   }
+}
+
+.adminToolbar {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+  padding: 14px;
+}
+.bulkActions, .rowActions {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bulkActions label { min-width: 220px; }
+.adminUserTable.scalable { overflow-x: auto; }
+.adminUserHeader.scalable, .adminUserRow.scalable {
+  display: grid;
+  grid-template-columns: 36px minmax(220px, 1.2fr) minmax(180px, 1fr) minmax(170px, 0.9fr) minmax(170px, 0.8fr) minmax(130px, 0.7fr) minmax(150px, 0.7fr) minmax(260px, 1fr);
+  min-width: 1400px;
+}
+.adminUserHeader.scalable {
+  align-items: start;
+  gap: 10px;
+}
+.adminUserHeader.scalable > span { min-height: 1px; }
+.adminUserHeader.scalable input { padding: 8px 10px; }
+.columnHeaderButton {
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  text-align: left;
+  text-transform: uppercase;
+}
+.columnHeaderButton:disabled { opacity: 1; }
+.adminUserRow.scalable {
+  align-items: center;
+}
+.adminUserRow.scalable > input { width: auto; }
+.rowActions button { padding: 7px 10px; font-size: 0.78rem; }
+.adminUserDetailsEditor {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 6px;
+  padding-top: 14px;
+}
+.adminUserDetailsEditor textarea { min-height: 86px; }
+.adminUserDetailsEditor .wide { grid-column: 1 / -1; }
+@media (max-width: 780px) {
+  .adminUserHeader.scalable { display: none; }
+  .adminUserTable.scalable { overflow-x: visible; }
+  .adminUserRow.scalable {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+  .adminUserDetailsEditor { grid-template-columns: 1fr; }
 }
