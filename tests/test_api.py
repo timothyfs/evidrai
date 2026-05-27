@@ -121,6 +121,29 @@ def test_master_admin_email_can_update_user_tier(monkeypatch):
     assert response.json()["user"]["tier_label"] == "Researcher / Journalist"
 
 
+
+
+def test_admin_users_marks_master_admin_access(monkeypatch):
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(
+        api_main,
+        "list_user_profiles",
+        lambda limit=100: [
+            UserProfile(owner_id="master", email="master@example.com", tier="researcher"),
+            UserProfile(owner_id="user-1", email="user@example.com", tier="pro"),
+        ],
+    )
+
+    response = client.get("/admin/users", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    users = response.json()["users"]
+    assert users[0]["admin_access"] is True
+    assert users[0]["admin_access_source"] == "master_admin_email"
+    assert users[1]["admin_access"] is False
+    assert users[1]["tier_label"] == "Pro"
+
 def test_admin_user_tier_update_sets_profile(monkeypatch):
     monkeypatch.setattr(api_main, "admin_token", lambda: "secret-token")
     monkeypatch.setattr(api_main, "set_user_tier", lambda owner_id, tier, email="": UserProfile(owner_id=owner_id, email=email, tier=tier))

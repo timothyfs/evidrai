@@ -42,7 +42,7 @@ export default function AdminPage() {
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return users;
-    return users.filter((user) => [user.email, user.owner_id, user.tier_label, user.subscription_status].some((value) => (value || '').toLowerCase().includes(query)));
+    return users.filter((user) => [user.email, user.owner_id, user.tier_label, user.subscription_status, user.admin_access ? 'admin access enabled master admin' : 'admin access none'].some((value) => (value || '').toLowerCase().includes(query)));
   }, [search, users]);
 
   async function refreshMe() {
@@ -237,7 +237,7 @@ export default function AdminPage() {
           <div className="sectionHeader">
             <div>
               <h2>User access</h2>
-              <p className="muted">{filteredUsers.length} shown · {users.length} total · product tiers only</p>
+              <p className="muted">{filteredUsers.length} shown · {users.length} total · product tiers separate from admin access</p>
             </div>
             <div className="formRow compactActions">
               <button className="secondary" disabled={busy} onClick={loadUsers} type="button">Reload</button>
@@ -250,6 +250,7 @@ export default function AdminPage() {
             <div><span>Free</span><strong>{users.filter((user) => user.tier === 'free').length}</strong></div>
             <div><span>Pro</span><strong>{users.filter((user) => user.tier === 'pro').length}</strong></div>
             <div><span>Researcher</span><strong>{users.filter((user) => user.tier === 'researcher').length}</strong></div>
+            <div><span>Admins</span><strong>{users.filter((user) => user.admin_access).length}</strong></div>
           </section>
 
           <section className="adminGuardRails" aria-label="Admin guardrails">
@@ -278,6 +279,7 @@ export default function AdminPage() {
             <div className="adminUserHeader">
               <strong>User</strong>
               <strong>Product tier</strong>
+              <strong>Admin access</strong>
               <strong>Change tier</strong>
               <strong>Profile</strong>
             </div>
@@ -289,6 +291,10 @@ export default function AdminPage() {
                   <small>Subscription: {user.subscription_status || 'none'}{user.trial_ends_at ? ` · trial ends ${user.trial_ends_at}` : ''}</small>
                 </div>
                 <strong>{user.tier_label}</strong>
+                <div className={user.admin_access ? 'adminAccessBadge enabled' : 'adminAccessBadge'}>
+                  <strong>{user.admin_access ? 'Enabled' : 'None'}</strong>
+                  <small>{user.admin_access ? 'Master admin email allowlist' : 'Not an admin'}</small>
+                </div>
                 <select disabled={busy} value={user.tier} onChange={(event) => updateUserTier(user, event.target.value as TierName)}>
                   {TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
@@ -298,7 +304,7 @@ export default function AdminPage() {
           </div>
 
           <details>
-            <summary><span>Manual update by user ID</span><small>Fallback for repairing a specific profile</small></summary>
+            <summary><span>Manual update by user ID</span><small>Fallback for repairing a specific product-tier profile</small></summary>
             <form onSubmit={saveManualTier}>
               <label>User ID<input value={manualOwnerId} onChange={(event) => setManualOwnerId(event.target.value)} placeholder="Supabase user id" /></label>
               <label>Email<input value={manualEmail} onChange={(event) => setManualEmail(event.target.value)} placeholder="optional email" /></label>

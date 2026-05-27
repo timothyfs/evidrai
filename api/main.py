@@ -595,23 +595,35 @@ def tiers() -> Dict[str, Any]:
     return {"ok": True, **feature_matrix()}
 
 
+def _profile_admin_view(profile: Any) -> Dict[str, Any]:
+    payload = profile.to_dict()
+    email = str(payload.get("email") or "").strip().lower()
+    admin_access = bool(email and email in master_admin_emails())
+    payload["admin_access"] = admin_access
+    payload["admin_access_source"] = "master_admin_email" if admin_access else "none"
+    return payload
+
+
 @app.get("/me", response_model=Dict[str, Any])
 def me(http_request: Request) -> Dict[str, Any]:
     context, profile = _profile_from_request(http_request)
-    return {"ok": True, "authenticated": context.authenticated, "is_admin": _is_master_admin(context), "user": profile.to_dict(), "feature_matrix": feature_matrix()}
+    user = profile.to_dict()
+    user["admin_access"] = _is_master_admin(context)
+    user["admin_access_source"] = "master_admin_email" if user["admin_access"] else "none"
+    return {"ok": True, "authenticated": context.authenticated, "is_admin": _is_master_admin(context), "user": user, "feature_matrix": feature_matrix()}
 
 
 @app.get("/admin/users", response_model=Dict[str, Any])
 def admin_users(http_request: Request, limit: int = 100) -> Dict[str, Any]:
     _require_admin(http_request)
-    return {"ok": True, "users": [profile.to_dict() for profile in list_user_profiles(limit=limit)], "feature_matrix": feature_matrix()}
+    return {"ok": True, "users": [_profile_admin_view(profile) for profile in list_user_profiles(limit=limit)], "feature_matrix": feature_matrix()}
 
 
 @app.patch("/admin/users/tier", response_model=Dict[str, Any])
 def admin_set_user_tier(request: AdminSetTierRequest, http_request: Request) -> Dict[str, Any]:
     _require_admin(http_request)
     profile = set_user_tier(request.owner_id, request.tier, email=request.email)
-    return {"ok": True, "user": profile.to_dict()}
+    return {"ok": True, "user": _profile_admin_view(profile)}
 
 
 
@@ -628,7 +640,7 @@ def admin_invite_user(request: AdminInviteUserRequest, http_request: Request) ->
         "sent_invite": request.send_invite,
         "owner_id": owner_id,
         "email": email,
-        "user": profile.to_dict() if profile else None,
+        "user": _profile_admin_view(profile) if profile else None,
         "message": "Invitation sent and profile created." if request.send_invite else "User created without sending an invite email.",
     }
 

@@ -383,7 +383,7 @@ summary { cursor: pointer; font-weight: 900; }
 }
 .adminUserHeader, .adminUserRow {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(120px, 0.45fr) minmax(180px, 0.65fr) minmax(90px, 0.3fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(120px, 0.42fr) minmax(150px, 0.52fr) minmax(180px, 0.62fr) minmax(90px, 0.28fr);
   gap: 14px;
   align-items: center;
 }
@@ -409,6 +409,19 @@ summary { cursor: pointer; font-weight: 900; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.adminAccessBadge {
+  align-content: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.08);
+  min-height: 42px;
+  padding: 8px 10px;
+}
+.adminAccessBadge strong { font-size: 0.86rem; }
+.adminAccessBadge.enabled {
+  border-color: color-mix(in srgb, var(--good) 38%, var(--line));
+  background: color-mix(in srgb, var(--good) 11%, transparent);
 }
 .compactActions {
   min-width: 180px;

@@ -102,6 +102,8 @@ export type UserProfile = {
   trial_started_at?: string;
   trial_ends_at?: string;
   payment_provider_customer_id?: string;
+  admin_access?: boolean;
+  admin_access_source?: 'master_admin_email' | 'none' | string;
   features: Record<string, boolean>;
   limits: Record<string, number>;
 };
