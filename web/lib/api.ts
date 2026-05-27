@@ -57,6 +57,7 @@ export type ReportSummary = {
   verdict: string;
   owner_id?: string | null;
   protected?: boolean;
+  labels?: string[];
   deleted_at?: string;
 };
 
@@ -386,7 +387,7 @@ export function getReport(id: string): Promise<AssessmentResponse> {
   return request<AssessmentResponse>(`/reports/${encodeURIComponent(id)}`);
 }
 
-export function updateReportMetadata(id: string, input: { protected?: boolean }): Promise<{ ok: boolean; report: ReportSummary }> {
+export function updateReportMetadata(id: string, input: { protected?: boolean; labels?: string[] }): Promise<{ ok: boolean; report: ReportSummary }> {
   return request<{ ok: boolean; report: ReportSummary }>(`/reports/${encodeURIComponent(id)}/metadata`, {
     method: 'PATCH',
     body: JSON.stringify(input),

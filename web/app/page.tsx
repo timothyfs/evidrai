@@ -49,6 +49,49 @@ function verdictTone(label: string) {
 type ThemeMode = 'dark' | 'light';
 
 const PENDING_ASSESSMENT_JOB_KEY = 'evidrai_pending_assessment_job';
+const RECENT_REPORTS_KEY = 'evidrai_recent_reports';
+
+function scopedStorageKey(base: string, ownerId?: string | null) {
+  const safeOwner = (ownerId || '').trim();
+  return safeOwner ? `${base}:${safeOwner}` : '';
+}
+
+function readCachedReports(ownerId?: string | null): ReportSummary[] {
+  if (typeof window === 'undefined') return [];
+  const key = scopedStorageKey(RECENT_REPORTS_KEY, ownerId);
+  if (!key) return [];
+  try {
+    const saved = window.localStorage.getItem(key);
+    if (!saved) return [];
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item) => item && item.owner_id === ownerId) as ReportSummary[];
+  } catch (err) {
+    console.warn(err);
+    return [];
+  }
+}
+
+function writeCachedReports(ownerId: string | undefined | null, reports: ReportSummary[]) {
+  if (typeof window === 'undefined') return;
+  const key = scopedStorageKey(RECENT_REPORTS_KEY, ownerId);
+  if (!key) return;
+  const scoped = reports.filter((item) => item.owner_id === ownerId);
+  window.localStorage.setItem(key, JSON.stringify(scoped));
+}
+
+function pendingJobStorageKey(ownerId?: string | null) {
+  return scopedStorageKey(PENDING_ASSESSMENT_JOB_KEY, ownerId);
+}
+const REPORT_LABELS = [
+  ['favourite', 'Favourite'],
+  ['reviewed', 'Reviewed'],
+  ['customer-facing', 'Customer-facing'],
+  ['internal-only', 'Internal-only'],
+  ['useful', 'Useful'],
+  ['not-useful', 'Not useful'],
+  ['needs-follow-up', 'Needs follow-up'],
+] as const;
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
 
 function applyTheme(theme: ThemeMode) {
@@ -1364,6 +1407,7 @@ export default function Home() {
   const canUseDeep = Boolean(userFeatures.deep_claims);
   const canUseSpeech = Boolean(userFeatures.speech_audit);
   const canShareReports = Boolean(userFeatures.share_reports);
+  const canLabelReports = me?.user?.tier === 'researcher';
   const botReady = !TURNSTILE_SITE_KEY || Boolean(botToken);
   const ready = useMemo(() => signedIn && botReady && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, botReady, claim, sourceUrl]);
   const speechReady = useMemo(() => signedIn && botReady && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, botReady, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
@@ -1377,30 +1421,30 @@ export default function Home() {
       verdict: result.verdict.label,
       owner_id: result.owner_id,
       protected: false,
+      labels: [],
     };
     setReports((current) => {
       const savedLimit = Number(userLimits.saved_reports || 8);
       const next = [summary, ...current.filter((item) => item.assessment_id !== summary.assessment_id)].slice(0, Math.max(savedLimit, 8));
-      window.localStorage.setItem('evidrai_recent_reports', JSON.stringify(next));
+      writeCachedReports(summary.owner_id || account?.owner_id, next);
       return next;
     });
   }
 
-  async function refreshReports() {
+  async function refreshReports(ownerId = account?.owner_id || '') {
+    if (!ownerId || ownerId.startsWith('anon_')) {
+      setReports([]);
+      return;
+    }
     try {
       const serverReports = await listReports();
       const savedLimit = Number(userLimits.saved_reports || 8);
-      const recent = serverReports.slice(0, Math.max(savedLimit, 8));
+      const recent = serverReports.filter((item) => item.owner_id === ownerId).slice(0, Math.max(savedLimit, 8));
       setReports(recent);
-      if (typeof window !== 'undefined') window.localStorage.setItem('evidrai_recent_reports', JSON.stringify(recent));
+      writeCachedReports(ownerId, recent);
     } catch (err) {
       console.warn('Could not load saved reports', err);
-      try {
-        const saved = window.localStorage.getItem('evidrai_recent_reports');
-        if (saved) setReports(JSON.parse(saved));
-      } catch (localErr) {
-        console.warn(localErr);
-      }
+      setReports(readCachedReports(ownerId));
     }
   }
 
@@ -1416,12 +1460,14 @@ export default function Home() {
           setSpeechExtraction(null);
           setSpeechVerification(null);
           rememberReport(status.assessment);
-          window.localStorage.removeItem(PENDING_ASSESSMENT_JOB_KEY);
-          refreshReports();
+          const key = pendingJobStorageKey(status.assessment.owner_id || account?.owner_id);
+          if (key) window.localStorage.removeItem(key);
+          refreshReports(status.assessment.owner_id || account?.owner_id || '');
           return;
         }
         if (status.status === 'failed') {
-          window.localStorage.removeItem(PENDING_ASSESSMENT_JOB_KEY);
+          const key = pendingJobStorageKey(account?.owner_id);
+          if (key) window.localStorage.removeItem(key);
           throw new Error(status.error || 'Assessment job failed');
         }
         await new Promise((resolve) => setTimeout(resolve, document.visibilityState === 'visible' ? 2500 : 8000));
@@ -1464,7 +1510,11 @@ export default function Home() {
         setAccountProfile(profile);
         if (session) {
           refreshMe();
-          refreshReports();
+          setReports(readCachedReports(profile.owner_id));
+          refreshReports(profile.owner_id);
+          const pendingKey = pendingJobStorageKey(profile.owner_id);
+          const pendingJobId = pendingKey ? window.localStorage.getItem(pendingKey) : '';
+          if (pendingJobId) pollAssessmentJob(pendingJobId);
         }
       })
       .catch((err) => setAuthMessage(err.message));
@@ -1477,21 +1527,20 @@ export default function Home() {
       setAuthMessage(session ? 'Signed in.' : 'Signed out. Sign in again to use Evidrai.');
       if (session) {
         refreshMe();
-        refreshReports();
+        setReports(readCachedReports(profile.owner_id));
+        refreshReports(profile.owner_id);
+        const pendingKey = pendingJobStorageKey(profile.owner_id);
+        const pendingJobId = pendingKey ? window.localStorage.getItem(pendingKey) : '';
+        if (pendingJobId) pollAssessmentJob(pendingJobId);
       } else {
         setMe(null);
         setReports([]);
       }
     });
     if (typeof window !== 'undefined' && window.location.href.includes('type=recovery')) setPasswordRecovery(true);
-    try {
-      const saved = window.localStorage.getItem('evidrai_recent_reports');
-      if (saved) setReports(JSON.parse(saved));
-      const pendingJobId = window.localStorage.getItem(PENDING_ASSESSMENT_JOB_KEY);
-      if (pendingJobId) pollAssessmentJob(pendingJobId);
-    } catch (err) {
-      console.warn(err);
-    }
+    // Report history and pending jobs are intentionally loaded only after a signed-in
+    // account is known. The old unscoped keys caused one browser profile to display
+    // another user's cached report list after account switching.
     return unsubscribe;
   }, []);
 
@@ -1513,9 +1562,13 @@ export default function Home() {
     try {
       const session = await signInWithEmailPassword(authEmail.trim(), authPassword);
       setAccessToken(session?.access_token || '');
+      const profile = profileFromSession(session, getAnonymousAccountProfile());
+      setAccount(profile);
+      setAccountProfile(profile);
+      setReports([]);
       setAuthMessage('Signed in.');
       await refreshMe();
-      await refreshReports();
+      await refreshReports(profile.owner_id);
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-in failed');
     } finally {
@@ -1530,9 +1583,13 @@ export default function Home() {
       if (TURNSTILE_SITE_KEY && !botToken) throw new Error('Complete the bot check before creating an account.');
       const session = await signUpWithEmailPassword(authEmail.trim(), authPassword);
       setAccessToken(session?.access_token || '');
+      const profile = profileFromSession(session, getAnonymousAccountProfile());
+      setAccount(profile);
+      setAccountProfile(profile);
+      setReports([]);
       setAuthMessage(session ? 'Free account created.' : 'Account created. Check your email to confirm before signing in.');
       await refreshMe();
-      await refreshReports();
+      await refreshReports(profile.owner_id);
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-up failed');
     } finally {
@@ -1564,7 +1621,7 @@ export default function Home() {
       setNewPassword('');
       setAuthMessage('Password updated.');
       await refreshMe();
-      await refreshReports();
+      await refreshReports(account?.owner_id || '');
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Could not update password');
     } finally {
@@ -1594,7 +1651,8 @@ export default function Home() {
       const requestedMode = canUseDeep ? mode : 'fast';
       const requestedStyle = requestedMode === 'fast' ? fastOutputStyle : 'standard';
       const job = await createAssessmentJob({ claim, source_url: sourceUrl, category, mode: requestedMode, output_style: requestedStyle, bot_token: botToken });
-      window.localStorage.setItem(PENDING_ASSESSMENT_JOB_KEY, job.job_id);
+      const key = pendingJobStorageKey(account?.owner_id);
+      if (key) window.localStorage.setItem(key, job.job_id);
       setBotToken('');
       await pollAssessmentJob(job.job_id);
     } catch (err) {
@@ -1680,6 +1738,18 @@ export default function Home() {
       setReports((current) => current.map((item) => item.assessment_id === report.assessment_id ? { ...item, protected: Boolean(payload.report.protected) } : item));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update report');
+    }
+  }
+
+  async function toggleReportLabel(report: ReportSummary, label: string) {
+    setError('');
+    const currentLabels = report.labels || [];
+    const labels = currentLabels.includes(label) ? currentLabels.filter((item) => item !== label) : [...currentLabels, label];
+    try {
+      const payload = await updateReportMetadata(report.assessment_id, { labels });
+      setReports((current) => current.map((item) => item.assessment_id === report.assessment_id ? { ...item, labels: payload.report.labels || [] } : item));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update report labels');
     }
   }
 
@@ -1879,7 +1949,11 @@ export default function Home() {
                   <strong>{report.verdict || 'Unverified'}{report.protected ? ' · protected' : ''}</strong>
                   <span>{report.claim || 'Untitled claim'}</span>
                   <small>{formatDate(report.created_at)} · {report.mode}</small>
+                  {canLabelReports && Boolean((report.labels || []).length) && <small>{(report.labels || []).map((label) => REPORT_LABELS.find(([value]) => value === label)?.[1] || label).join(' · ')}</small>}
                 </button>
+                {canLabelReports && <div className="reportLabels">
+                  {REPORT_LABELS.map(([value, label]) => <button className={(report.labels || []).includes(value) ? 'labelPill active' : 'labelPill'} key={value} onClick={() => toggleReportLabel(report, value)} type="button">{label}</button>)}
+                </div>}
                 <div className="reportActions">
                   <button className="secondary" onClick={() => openReportInNewTab(report.assessment_id)} type="button">View</button>
                   <button className="secondary" onClick={() => loadReport(report.assessment_id)} type="button">Load here</button>

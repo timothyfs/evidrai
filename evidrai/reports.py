@@ -101,7 +101,7 @@ class ReportStore(Protocol):
     def delete(self, report_id: str, owner_id: str = "") -> Dict[str, Any]:
         ...
 
-    def set_metadata(self, report_id: str, owner_id: str = "", *, protected: bool | None = None) -> Dict[str, Any]:
+    def set_metadata(self, report_id: str, owner_id: str = "", *, protected: bool | None = None, labels: list[str] | None = None) -> Dict[str, Any]:
         ...
 
     def enforce_retention(self, owner_id: str, limit: int) -> Dict[str, Any]:
@@ -192,6 +192,7 @@ class LocalReportStore:
                         "verdict": (payload.get("verdict") or {}).get("label"),
                         "owner_id": payload.get("owner_id"),
                         "protected": bool(metadata.get("protected")),
+                        "labels": list(metadata.get("labels") or []),
                         "deleted_at": metadata.get("deleted_at") or "",
                     }
                 )
@@ -204,25 +205,27 @@ class LocalReportStore:
     def delete(self, report_id: str, owner_id: str = "") -> Dict[str, Any]:
         assessment = self.load(report_id)
         assessment_owner = _assessment_field(assessment, "owner_id") or ""
-        if owner_id and assessment_owner and assessment_owner != owner_id:
+        if owner_id and assessment_owner != owner_id:
             raise ReportNotFoundError(report_id)
         metadata = self._read_metadata()
         record = metadata.setdefault(report_id, {})
         record["deleted_at"] = datetime.now(timezone.utc).isoformat()
         self._write_metadata(metadata)
-        return {"assessment_id": report_id, "deleted": True, "deleted_at": record["deleted_at"], "protected": bool(record.get("protected"))}
+        return {"assessment_id": report_id, "deleted": True, "deleted_at": record["deleted_at"], "protected": bool(record.get("protected")), "labels": list(record.get("labels") or [])}
 
-    def set_metadata(self, report_id: str, owner_id: str = "", *, protected: bool | None = None) -> Dict[str, Any]:
+    def set_metadata(self, report_id: str, owner_id: str = "", *, protected: bool | None = None, labels: list[str] | None = None) -> Dict[str, Any]:
         assessment = self.load(report_id)
         assessment_owner = _assessment_field(assessment, "owner_id") or ""
-        if owner_id and assessment_owner and assessment_owner != owner_id:
+        if owner_id and assessment_owner != owner_id:
             raise ReportNotFoundError(report_id)
         metadata = self._read_metadata()
         record = metadata.setdefault(report_id, {})
         if protected is not None:
             record["protected"] = bool(protected)
+        if labels is not None:
+            record["labels"] = list(labels)
         self._write_metadata(metadata)
-        return {"assessment_id": report_id, "protected": bool(record.get("protected")), "deleted_at": record.get("deleted_at") or ""}
+        return {"assessment_id": report_id, "protected": bool(record.get("protected")), "labels": list(record.get("labels") or []), "deleted_at": record.get("deleted_at") or ""}
 
     def enforce_retention(self, owner_id: str, limit: int) -> Dict[str, Any]:
         if not owner_id or limit <= 0:
@@ -280,7 +283,7 @@ class LocalReportStore:
         access_level = "full" if access_level == "full" else "simple"
         assessment_owner = _assessment_field(assessment, "owner_id") or ""
         assessment_created_at = _assessment_field(assessment, "created_at") or ""
-        if owner_id and assessment_owner and assessment_owner != owner_id:
+        if owner_id and assessment_owner != owner_id:
             raise ReportNotFoundError(report_id)
         token = _signed_share_token(report_id, access_level)
         return {"token": token, "assessment_id": report_id, "owner_id": assessment_owner or owner_id, "access_level": access_level, "created_at": assessment_created_at, "revoked_at": ""}
@@ -387,7 +390,7 @@ class PostgresReportStore:
                     if owner_id:
                         cur.execute(
                             """
-                            SELECT assessment_id, created_at, mode, claim, verdict, owner_id, report_protected AS protected, deleted_at
+                            SELECT assessment_id, created_at, mode, claim, verdict, owner_id, report_protected AS protected, report_labels AS labels, deleted_at
                             FROM assessments
                             WHERE owner_id = %s AND deleted_at IS NULL
                             ORDER BY created_at DESC NULLS LAST, updated_at DESC
@@ -398,7 +401,7 @@ class PostgresReportStore:
                     else:
                         cur.execute(
                             """
-                            SELECT assessment_id, created_at, mode, claim, verdict, owner_id, report_protected AS protected, deleted_at
+                            SELECT assessment_id, created_at, mode, claim, verdict, owner_id, report_protected AS protected, report_labels AS labels, deleted_at
                             FROM assessments
                             WHERE deleted_at IS NULL
                             ORDER BY created_at DESC NULLS LAST, updated_at DESC
@@ -428,8 +431,8 @@ class PostgresReportStore:
                             """
                             UPDATE assessments
                             SET deleted_at = now(), updated_at = now()
-                            WHERE assessment_id = %s AND (owner_id = %s OR owner_id IS NULL OR owner_id = '') AND deleted_at IS NULL
-                            RETURNING assessment_id, report_protected AS protected, deleted_at
+                            WHERE assessment_id = %s AND owner_id = %s AND deleted_at IS NULL
+                            RETURNING assessment_id, report_protected AS protected, report_labels AS labels, deleted_at
                             """,
                             (report_id, owner_id),
                         )
@@ -439,7 +442,7 @@ class PostgresReportStore:
                             UPDATE assessments
                             SET deleted_at = now(), updated_at = now()
                             WHERE assessment_id = %s AND deleted_at IS NULL
-                            RETURNING assessment_id, report_protected AS protected, deleted_at
+                            RETURNING assessment_id, report_protected AS protected, report_labels AS labels, deleted_at
                             """,
                             (report_id,),
                         )
@@ -451,41 +454,53 @@ class PostgresReportStore:
             if hasattr(item.get("deleted_at"), "isoformat"):
                 item["deleted_at"] = item["deleted_at"].isoformat()
             item["deleted"] = True
+            item["labels"] = list(item.get("labels") or [])
             return item
         except EvidraiError:
             raise
         except Exception as exc:
             raise ReportStoreError("Could not delete report.", developer_detail=str(exc))
 
-    def set_metadata(self, report_id: str, owner_id: str = "", *, protected: bool | None = None) -> Dict[str, Any]:
+    def set_metadata(self, report_id: str, owner_id: str = "", *, protected: bool | None = None, labels: list[str] | None = None) -> Dict[str, Any]:
         self._ensure_schema()
         try:
             with self._connect() as conn:
                 with conn.cursor() as cur:
-                    if protected is None:
-                        cur.execute(
-                            "SELECT assessment_id, report_protected AS protected, deleted_at FROM assessments WHERE assessment_id = %s AND deleted_at IS NULL",
-                            (report_id,),
-                        )
-                    elif owner_id:
-                        cur.execute(
-                            """
-                            UPDATE assessments
-                            SET report_protected = %s, updated_at = now()
-                            WHERE assessment_id = %s AND (owner_id = %s OR owner_id IS NULL OR owner_id = '') AND deleted_at IS NULL
-                            RETURNING assessment_id, report_protected AS protected, deleted_at
-                            """,
-                            (bool(protected), report_id, owner_id),
-                        )
+                    updates = []
+                    params: list[Any] = []
+                    if protected is not None:
+                        updates.append("report_protected = %s")
+                        params.append(bool(protected))
+                    if labels is not None:
+                        updates.append("report_labels = %s")
+                        params.append(list(labels))
+                    if updates:
+                        params.append(report_id)
+                        if owner_id:
+                            params.append(owner_id)
+                            cur.execute(
+                                f"""
+                                UPDATE assessments
+                                SET {', '.join(updates)}, updated_at = now()
+                                WHERE assessment_id = %s AND owner_id = %s AND deleted_at IS NULL
+                                RETURNING assessment_id, report_protected AS protected, report_labels AS labels, deleted_at
+                                """,
+                                tuple(params),
+                            )
+                        else:
+                            cur.execute(
+                                f"""
+                                UPDATE assessments
+                                SET {', '.join(updates)}, updated_at = now()
+                                WHERE assessment_id = %s AND deleted_at IS NULL
+                                RETURNING assessment_id, report_protected AS protected, report_labels AS labels, deleted_at
+                                """,
+                                tuple(params),
+                            )
                     else:
                         cur.execute(
-                            """
-                            UPDATE assessments
-                            SET report_protected = %s, updated_at = now()
-                            WHERE assessment_id = %s AND deleted_at IS NULL
-                            RETURNING assessment_id, report_protected AS protected, deleted_at
-                            """,
-                            (bool(protected), report_id),
+                            "SELECT assessment_id, report_protected AS protected, report_labels AS labels, deleted_at FROM assessments WHERE assessment_id = %s AND deleted_at IS NULL",
+                            (report_id,),
                         )
                     row = cur.fetchone()
                 conn.commit()
@@ -494,6 +509,7 @@ class PostgresReportStore:
             item = dict(row)
             if hasattr(item.get("deleted_at"), "isoformat"):
                 item["deleted_at"] = item["deleted_at"].isoformat()
+            item["labels"] = list(item.get("labels") or [])
             return item
         except EvidraiError:
             raise
@@ -566,7 +582,7 @@ class PostgresReportStore:
         if assessment is not None:
             assessment_owner = _assessment_field(assessment, "owner_id") or ""
             assessment_created_at = _assessment_field(assessment, "created_at") or ""
-            if owner_id and assessment_owner and assessment_owner != owner_id:
+            if owner_id and assessment_owner != owner_id:
                 raise ReportNotFoundError(report_id)
             token = _signed_share_token(report_id, access_level)
             return {"token": token, "assessment_id": report_id, "owner_id": assessment_owner or owner_id, "access_level": access_level, "created_at": assessment_created_at, "revoked_at": ""}
@@ -578,7 +594,7 @@ class PostgresReportStore:
                     row = cur.fetchone()
             if not row:
                 raise ReportNotFoundError(report_id)
-            if owner_id and row.get("owner_id") and row.get("owner_id") != owner_id:
+            if owner_id and row.get("owner_id") != owner_id:
                 raise ReportNotFoundError(report_id)
             created_at = row.get("created_at")
             if hasattr(created_at, "isoformat"):
@@ -670,8 +686,8 @@ def delete_report(report_id: str, owner_id: str = "", store: ReportStore | None 
     return (store or get_report_store()).delete(report_id, owner_id=owner_id)
 
 
-def set_report_metadata(report_id: str, owner_id: str = "", *, protected: bool | None = None, store: ReportStore | None = None) -> Dict[str, Any]:
-    return (store or get_report_store()).set_metadata(report_id, owner_id=owner_id, protected=protected)
+def set_report_metadata(report_id: str, owner_id: str = "", *, protected: bool | None = None, labels: list[str] | None = None, store: ReportStore | None = None) -> Dict[str, Any]:
+    return (store or get_report_store()).set_metadata(report_id, owner_id=owner_id, protected=protected, labels=labels)
 
 
 def enforce_report_retention(owner_id: str, limit: int, store: ReportStore | None = None) -> Dict[str, Any]:

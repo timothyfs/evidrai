@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 import api.main as api_main
 from api.main import app
+from evidrai.api_models import AssessmentRequestRecord, AssessmentResponse, AssessmentVerdict
 from evidrai.entitlements import UserProfile
 
 
@@ -536,6 +537,24 @@ def test_report_history_can_be_scoped_by_owner_header(monkeypatch, tmp_path):
     other_report = client.get(f"/reports/{alice['assessment_id']}", headers={"X-Evidrai-User-Id": "bob"})
     assert other_report.status_code == 403
 
+
+
+
+def test_unowned_legacy_report_is_not_visible_to_signed_in_user(monkeypatch, tmp_path):
+    grant_tier(monkeypatch, "pro", owner_id="alice")
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
+    assessment = AssessmentResponse(
+        build="test-build",
+        mode="fast",
+        request=AssessmentRequestRecord(claim="Legacy unowned claim"),
+        verdict=AssessmentVerdict(label="Supported", confidence="High"),
+    )
+    api_main.save_report(assessment)
+
+    assert client.get("/reports", headers={"X-Evidrai-User-Id": "alice"}).json()["reports"] == []
+    assert client.get(f"/reports/{assessment.assessment_id}", headers={"X-Evidrai-User-Id": "alice"}).status_code == 403
+    assert client.post(f"/reports/{assessment.assessment_id}/share", json={"platform": "copy"}, headers={"X-Evidrai-User-Id": "alice"}).status_code == 403
+    assert client.patch(f"/reports/{assessment.assessment_id}/metadata", json={"protected": True}, headers={"X-Evidrai-User-Id": "alice"}).status_code == 403
 
 def test_claim_check_embeds_assessment_contract(monkeypatch):
     def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):

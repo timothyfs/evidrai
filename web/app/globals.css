@@ -193,8 +193,19 @@ button.secondary {
   text-align: left;
   cursor: pointer;
 }
-.reportActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.reportActions, .reportLabels { display: flex; flex-wrap: wrap; gap: 8px; }
 .reportActions .secondary { padding: 7px 10px; font-size: 0.78rem; }
+.labelPill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 850;
+  padding: 6px 9px;
+}
+.labelPill.active { border-color: rgba(56, 189, 248, 0.5); color: var(--ink); background: rgba(56, 189, 248, 0.13); }
 .dangerAction { border-color: rgba(248, 113, 113, 0.45) !important; color: #fecaca !important; }
 .reportItem span, .reportItem small, .muted { color: var(--muted); }
 .reportItem small { font-size: 0.78rem; }

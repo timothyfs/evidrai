@@ -127,6 +127,7 @@ class ReportShareCreateRequest(BaseModel):
 
 class ReportMetadataUpdateRequest(BaseModel):
     protected: Optional[bool] = None
+    labels: Optional[list[str]] = None
 
 
 class AdminSetTierRequest(BaseModel):
@@ -568,7 +569,7 @@ def create_report_share_endpoint(report_id: str, request: ReportShareCreateReque
             raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in is required to share reports."})
         assessment = load_report(report_id)
         assessment_owner = _assessment_field(assessment, "owner_id") or ""
-        if assessment_owner and assessment_owner != context.owner_id and not _is_master_admin(context):
+        if (not assessment_owner or assessment_owner != context.owner_id) and not _is_master_admin(context):
             raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
         access_level = "full" if profile.features.get("share_reports") or profile.tier in {"pro", "researcher"} else "simple"
         share = create_report_share(report_id, owner_id=context.owner_id, access_level=access_level, assessment=assessment)
@@ -645,7 +646,7 @@ def admin_delete_user(owner_id: str, http_request: Request) -> Dict[str, Any]:
 def get_report(report_id: str, http_request: Request) -> AssessmentResponse:
     assessment = load_report(report_id)
     context = _require_authenticated(http_request)
-    if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+    if (not assessment.owner_id or assessment.owner_id != context.owner_id) and not _is_master_admin(context):
         raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
     return assessment
 
@@ -654,10 +655,20 @@ def get_report(report_id: str, http_request: Request) -> AssessmentResponse:
 def update_report_metadata(report_id: str, request: ReportMetadataUpdateRequest, http_request: Request) -> Dict[str, Any]:
     context = _require_authenticated(http_request)
     assessment = load_report(report_id)
-    if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+    if (not assessment.owner_id or assessment.owner_id != context.owner_id) and not _is_master_admin(context):
         raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
     owner_id = assessment.owner_id or context.owner_id
-    metadata = set_report_metadata(report_id, owner_id=owner_id, protected=request.protected)
+    allowed_labels = {"favourite", "reviewed", "customer-facing", "internal-only", "useful", "not-useful", "needs-follow-up"}
+    labels = None
+    if request.labels is not None:
+        labels = []
+        for label in request.labels:
+            normalized = str(label).strip().lower()
+            if normalized not in allowed_labels:
+                raise HTTPException(status_code=400, detail={"code": "invalid_report_label", "message": f"Unsupported report label: {label}"})
+            if normalized not in labels:
+                labels.append(normalized)
+    metadata = set_report_metadata(report_id, owner_id=owner_id, protected=request.protected, labels=labels)
     return {"ok": True, "report": metadata}
 
 
@@ -665,7 +676,7 @@ def update_report_metadata(report_id: str, request: ReportMetadataUpdateRequest,
 def delete_report_endpoint(report_id: str, http_request: Request) -> Dict[str, Any]:
     context = _require_authenticated(http_request)
     assessment = load_report(report_id)
-    if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+    if (not assessment.owner_id or assessment.owner_id != context.owner_id) and not _is_master_admin(context):
         raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
     owner_id = assessment.owner_id or context.owner_id
     result = delete_report(report_id, owner_id=owner_id)
@@ -676,7 +687,7 @@ def delete_report_endpoint(report_id: str, http_request: Request) -> Dict[str, A
 def create_assessment_feedback(assessment_id: str, request: FeedbackCreateRequest, http_request: Request) -> Dict[str, Any]:
     assessment = load_report(assessment_id)
     context = _require_authenticated(http_request)
-    if assessment.owner_id and assessment.owner_id != context.owner_id and not _is_master_admin(context):
+    if (not assessment.owner_id or assessment.owner_id != context.owner_id) and not _is_master_admin(context):
         raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
     payload = assessment.model_dump(mode="json")
     record = build_feedback_record(
