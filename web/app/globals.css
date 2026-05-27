@@ -2653,3 +2653,89 @@ html[data-theme="light"] .methodologyGuardrails {
   .accountMenu > summary span { max-width: 105px; }
   .accountMenu > summary strong { display: none; }
 }
+
+/* Spotify-inspired app header with quick claim check. */
+.siteHeader {
+  grid-template-columns: auto minmax(280px, 680px) 1fr auto;
+  gap: 12px;
+  min-height: 52px;
+  padding: 7px 10px;
+}
+.headerBrandCluster {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.headerBrandCluster .brand {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+}
+.homeChip {
+  align-items: center;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 1rem;
+  font-weight: 900;
+  height: 36px;
+  justify-content: center;
+  text-decoration: none;
+  width: 36px;
+}
+.headerQuickCheck {
+  align-items: center;
+  background: rgba(255,255,255,0.075);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  max-width: 680px;
+  min-width: 0;
+  padding: 4px 5px 4px 12px;
+}
+.headerQuickCheck span {
+  color: var(--muted);
+  font-size: 1rem;
+  font-weight: 900;
+}
+.headerQuickCheck input {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+  min-width: 0;
+  outline: none;
+  padding: 8px 4px;
+}
+.headerQuickCheck input::placeholder { color: color-mix(in srgb, var(--muted) 78%, transparent); }
+.headerQuickCheck button {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  min-height: 32px;
+  padding: 7px 13px;
+}
+.accountMenu > summary {
+  background: rgba(255,255,255,0.08);
+  min-height: 36px;
+}
+@media (max-width: 980px) {
+  .siteHeader { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .headerQuickCheck { max-width: none; }
+  .headerSpacer { display: none; }
+}
+@media (max-width: 720px) {
+  .siteHeader { grid-template-columns: auto 1fr auto; }
+  .headerQuickCheck { grid-column: 1 / -1; order: 5; }
+  .accountMenu { justify-self: end; }
+}
+@media (max-width: 560px) {
+  .homeChip { display: none; }
+  .headerBrandCluster .brand { padding: 7px 10px; }
+  .headerQuickCheck button { padding-inline: 10px; }
+}

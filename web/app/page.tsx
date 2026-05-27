@@ -1144,19 +1144,30 @@ function AccountMenu({ account, me, theme, onToggleTheme, onSignOut, authBusy }:
   );
 }
 
-function SiteHeader({ account, me, signedIn, theme, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile | null; me: MeResponse | null; signedIn: boolean; theme: ThemeMode; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
+function SiteHeader({ account, me, signedIn, theme, quickClaim, onQuickClaimChange, onQuickSubmit, quickDisabled, quickLoading, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile | null; me: MeResponse | null; signedIn: boolean; theme: ThemeMode; quickClaim: string; onQuickClaimChange: (value: string) => void; onQuickSubmit: (event: FormEvent<HTMLFormElement>) => void; quickDisabled: boolean; quickLoading: boolean; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
   return (
     <header className="siteHeader">
-      <a className="brand" href="/">Evidrai</a>
-      <nav className="desktopNav" aria-label="Primary navigation">
-        <a href="/">Verify</a>
-        <a href="/product">Product</a>
-        <a href="/plans">Plans</a>
-        <a href="/about">About</a>
-        <a href="/team">Team</a>
-        <a href="/contact">Contact</a>
-        {me?.is_admin && <a href="/admin">Admin</a>}
-      </nav>
+      <div className="headerBrandCluster">
+        <a className="brand" href="/">Evidrai</a>
+        <a className="homeChip" href="/" aria-label="Home">⌂</a>
+      </div>
+      {signedIn ? (
+        <form className="headerQuickCheck" onSubmit={onQuickSubmit}>
+          <span aria-hidden="true">⌕</span>
+          <input value={quickClaim} onChange={(event) => onQuickClaimChange(event.target.value)} placeholder="Quick claim check…" aria-label="Quick claim check" />
+          <button disabled={quickDisabled} type="submit">{quickLoading ? 'Checking…' : 'Check'}</button>
+        </form>
+      ) : (
+        <nav className="desktopNav" aria-label="Primary navigation">
+          <a href="/">Verify</a>
+          <a href="/product">Product</a>
+          <a href="/plans">Plans</a>
+          <a href="/about">About</a>
+          <a href="/team">Team</a>
+          <a href="/contact">Contact</a>
+          {me?.is_admin && <a href="/admin">Admin</a>}
+        </nav>
+      )}
       <details className="navMenu">
         <summary aria-label="Open navigation"><span></span><span></span><span></span></summary>
         <nav>
@@ -1784,7 +1795,7 @@ export default function Home() {
 
   return (
     <main>
-      <SiteHeader account={account} me={me} signedIn={signedIn} theme={theme} onToggleTheme={toggleTheme} onSignOut={handleSignOut} authBusy={authBusy} />
+      <SiteHeader account={account} me={me} signedIn={signedIn} theme={theme} quickClaim={claim} onQuickClaimChange={(value) => { setToolMode('claim'); setClaim(value); }} onQuickSubmit={submit} quickDisabled={!ready || loading} quickLoading={loading && loadingKind === 'claim'} onToggleTheme={toggleTheme} onSignOut={handleSignOut} authBusy={authBusy} />
       <section className={`hero appHero ${signedIn ? 'compactHero' : 'landingHero'}`}>
         <div>
           <p className="eyebrow">Because trust needs evidence</p>
