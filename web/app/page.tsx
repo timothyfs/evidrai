@@ -1147,6 +1147,16 @@ function AccountMenu({ account, me, theme, onToggleTheme, onSignOut, authBusy }:
 function SiteHeader({ account, me, signedIn, theme, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile | null; me: MeResponse | null; signedIn: boolean; theme: ThemeMode; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
   return (
     <header className="siteHeader">
+      <a className="brand" href="/">Evidrai</a>
+      <nav className="desktopNav" aria-label="Primary navigation">
+        <a href="/">Verify</a>
+        <a href="/product">Product</a>
+        <a href="/plans">Plans</a>
+        <a href="/about">About</a>
+        <a href="/team">Team</a>
+        <a href="/contact">Contact</a>
+        {me?.is_admin && <a href="/admin">Admin</a>}
+      </nav>
       <details className="navMenu">
         <summary aria-label="Open navigation"><span></span><span></span><span></span></summary>
         <nav>
@@ -1159,7 +1169,6 @@ function SiteHeader({ account, me, signedIn, theme, onToggleTheme, onSignOut, au
           {me?.is_admin && <a href="/admin">Admin</a>}
         </nav>
       </details>
-      <a className="brand" href="/">Evidrai</a>
       <div className="headerSpacer" />
       {signedIn && account ? <AccountMenu account={account} me={me} theme={theme} onToggleTheme={onToggleTheme} onSignOut={onSignOut} authBusy={authBusy} /> : <a className="button secondary" href="/">Sign in</a>}
     </header>

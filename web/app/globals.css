@@ -2587,3 +2587,69 @@ html[data-theme="light"] .methodologyGuardrails {
   .adminUserRow.scalable { min-width: 1180px; }
   .adminUserDetailsEditor { grid-template-columns: 1fr; }
 }
+
+/* Header cleanup: conventional desktop nav, compact mobile menu, slimmer account pill. */
+.siteHeader {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 18px;
+  min-height: 58px;
+  padding: 8px 12px 8px 18px;
+}
+.desktopNav {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+.desktopNav a {
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 850;
+  padding: 8px 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.desktopNav a:hover {
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--ink);
+}
+.navMenu { display: none; }
+.navMenu > summary {
+  border-radius: 10px;
+  height: 32px;
+  width: 32px;
+}
+.navMenu > summary span,
+.navMenu > summary span:nth-child(2),
+.navMenu > summary span:nth-child(3) {
+  height: 1.5px;
+  width: 13px;
+}
+.accountMenu > summary {
+  gap: 8px;
+  min-height: 36px;
+  padding: 5px 8px 5px 12px;
+}
+.accountMenu > summary span {
+  font-size: 0.86rem;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.accountMenu > summary strong {
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 5px 7px;
+  white-space: nowrap;
+}
+@media (max-width: 920px) {
+  .siteHeader { grid-template-columns: auto auto 1fr auto; gap: 10px; padding-left: 12px; }
+  .desktopNav { display: none; }
+  .navMenu { display: block; order: -1; }
+}
+@media (max-width: 560px) {
+  .accountMenu > summary span { max-width: 105px; }
+  .accountMenu > summary strong { display: none; }
+}
