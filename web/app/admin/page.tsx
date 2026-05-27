@@ -99,6 +99,7 @@ export default function AdminPage() {
 
   const selectedUsers = selected.map((ownerId) => users.find((user) => user.owner_id === ownerId)).filter(Boolean) as UserProfile[];
   const allVisibleSelected = filteredUsers.length > 0 && filteredUsers.every((user) => selected.includes(user.owner_id));
+  const editingUser = users.find((user) => user.owner_id === editing) || null;
 
   async function refreshMe() {
     const payload = await getMe();
@@ -479,7 +480,6 @@ export default function AdminPage() {
             </div>
 
             {filteredUsers.length === 0 ? <p className="muted">No users found. Users appear here after sign-in, invite creation, or profile creation by the API.</p> : filteredUsers.map((user) => {
-              const edit = details[user.owner_id] || blankDetails(user);
               return (
                 <article className="adminUserRow scalable" key={user.owner_id}>
                   <input checked={selected.includes(user.owner_id)} onChange={() => toggleSelected(user.owner_id)} type="checkbox" aria-label={`Select ${user.email || user.owner_id}`} />
@@ -494,29 +494,53 @@ export default function AdminPage() {
                   </select>
                   <div className={user.admin_access ? 'adminAccessBadge enabled' : 'adminAccessBadge'}><strong>{user.admin_access ? 'Enabled' : 'None'}</strong><small>{user.admin_access ? 'Allowlist' : 'Not admin'}</small></div>
                   <small>{user.subscription_status || 'none'}{user.trial_ends_at ? ` · trial ends ${user.trial_ends_at}` : ''}</small>
-                  <div className="rowActions">
-                    <button className="secondary" disabled={busy} onClick={() => { setEditing(editing === user.owner_id ? '' : user.owner_id); setDetails((current) => ({ ...current, [user.owner_id]: current[user.owner_id] || blankDetails(user) })); }} type="button">Details</button>
-                    <button className="secondary" disabled={busy || !user.email} onClick={() => sendReset(user)} type="button">Reset</button>
-                    <button className="secondary" disabled={busy || !user.email} onClick={() => resendInvite(user)} type="button">Invite</button>
-                    <button className="danger" disabled={busy || user.owner_id === account?.owner_id} onClick={() => deleteUser(user)} type="button">Delete</button>
-                  </div>
-                  {editing === user.owner_id && <div className="adminUserDetailsEditor">
-                    <label>Email<input value={edit.email} onChange={(event) => setDetails((current) => ({ ...current, [user.owner_id]: { ...edit, email: event.target.value } }))} /></label>
-                    <label>Company name<input value={edit.company_name} onChange={(event) => setDetails((current) => ({ ...current, [user.owner_id]: { ...edit, company_name: event.target.value } }))} /></label>
-                    <label>Organisation name<input value={edit.organisation_name} onChange={(event) => setDetails((current) => ({ ...current, [user.owner_id]: { ...edit, organisation_name: event.target.value } }))} /></label>
-                    <label>Billing account name<input value={edit.billing_account_name} onChange={(event) => setDetails((current) => ({ ...current, [user.owner_id]: { ...edit, billing_account_name: event.target.value } }))} /></label>
-                    <label>Billing account ID<input value={edit.billing_account_id} onChange={(event) => setDetails((current) => ({ ...current, [user.owner_id]: { ...edit, billing_account_id: event.target.value } }))} /></label>
-                    <label>Admin notes<textarea value={edit.admin_notes} onChange={(event) => setDetails((current) => ({ ...current, [user.owner_id]: { ...edit, admin_notes: event.target.value } }))} /></label>
-                    <label>Temporary password<input value={tempPasswords[user.owner_id] || ''} onChange={(event) => setTempPasswords((current) => ({ ...current, [user.owner_id]: event.target.value }))} type="password" placeholder="Set temporary password" /></label>
-                    <div className="rowActions wide">
-                      <button disabled={busy} onClick={() => saveUserDetails(user)} type="button">Save details</button>
-                      <button className="secondary" disabled={busy || (tempPasswords[user.owner_id] || '').length < 8} onClick={() => setTemporaryPassword(user)} type="button">Set temporary password</button>
-                    </div>
-                  </div>}
+                  <select className="rowActionSelect" disabled={busy} value="" aria-label={`Actions for ${user.email || user.owner_id}`} onChange={(event) => {
+                    const action = event.target.value;
+                    event.target.value = '';
+                    if (action === 'details') {
+                      setEditing(editing === user.owner_id ? '' : user.owner_id);
+                      setDetails((current) => ({ ...current, [user.owner_id]: current[user.owner_id] || blankDetails(user) }));
+                    }
+                    if (action === 'reset') sendReset(user);
+                    if (action === 'invite') resendInvite(user);
+                    if (action === 'delete') deleteUser(user);
+                  }}>
+                    <option value="">Actions…</option>
+                    <option value="details">Edit details</option>
+                    <option disabled={!user.email} value="reset">Send password reset</option>
+                    <option disabled={!user.email} value="invite">Resend invite</option>
+                    <option disabled={user.owner_id === account?.owner_id} value="delete">Delete profile</option>
+                  </select>
                 </article>
               );
             })}
           </div>
+
+          {editingUser && (() => {
+            const edit = details[editingUser.owner_id] || blankDetails(editingUser);
+            return (
+              <section className="adminUserDetailsEditor" aria-label="Edit user details">
+                <div className="editorHeader">
+                  <div>
+                    <strong>Edit details</strong>
+                    <small>{editingUser.email || editingUser.owner_id}</small>
+                  </div>
+                  <button className="secondary" disabled={busy} onClick={() => setEditing('')} type="button">Close</button>
+                </div>
+                <label>Email<input value={edit.email} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, email: event.target.value } }))} /></label>
+                <label>Company name<input value={edit.company_name} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, company_name: event.target.value } }))} /></label>
+                <label>Organisation name<input value={edit.organisation_name} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, organisation_name: event.target.value } }))} /></label>
+                <label>Billing account name<input value={edit.billing_account_name} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, billing_account_name: event.target.value } }))} /></label>
+                <label>Billing account ID<input value={edit.billing_account_id} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, billing_account_id: event.target.value } }))} /></label>
+                <label>Temporary password<input value={tempPasswords[editingUser.owner_id] || ''} onChange={(event) => setTempPasswords((current) => ({ ...current, [editingUser.owner_id]: event.target.value }))} type="password" placeholder="Set temporary password" /></label>
+                <label className="notesField">Admin notes<textarea value={edit.admin_notes} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, admin_notes: event.target.value } }))} /></label>
+                <div className="rowActions wide">
+                  <button disabled={busy} onClick={() => saveUserDetails(editingUser)} type="button">Save details</button>
+                  <button className="secondary" disabled={busy || (tempPasswords[editingUser.owner_id] || '').length < 8} onClick={() => setTemporaryPassword(editingUser)} type="button">Set temporary password</button>
+                </div>
+              </section>
+            );
+          })()}
 
           <details>
             <summary><span>Manual update by user ID</span><small>Fallback for repairing a specific product-tier profile</small></summary>

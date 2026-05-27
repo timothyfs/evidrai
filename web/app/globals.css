@@ -2477,3 +2477,113 @@ html[data-theme="light"] .methodologyGuardrails {
   }
   .adminUserDetailsEditor { grid-template-columns: 1fr; }
 }
+
+/* Dense admin user grid: Excel-like table with local scrollbars. */
+.adminPanel { overflow: visible; }
+.adminUserTable.scalable {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: block;
+  max-height: 68vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  position: relative;
+  scrollbar-gutter: stable both-edges;
+}
+.adminUserHeader.scalable,
+.adminUserRow.scalable {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  display: grid;
+  gap: 0;
+  grid-template-columns: 38px minmax(260px, 1.35fr) minmax(190px, 1fr) minmax(170px, 0.85fr) 150px 120px 150px 110px;
+  min-width: 1290px;
+  padding: 0;
+}
+.adminUserHeader.scalable {
+  background: color-mix(in srgb, var(--surface) 94%, var(--line));
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+.adminUserHeader.scalable > strong,
+.adminUserHeader.scalable > span,
+.adminUserRow.scalable > * {
+  align-items: center;
+  border-right: 1px solid var(--line);
+  display: flex;
+  min-width: 0;
+  padding: 7px 9px;
+}
+.adminUserHeader.scalable > strong,
+.adminUserHeader.scalable > span { min-height: 34px; }
+.adminUserHeader.scalable > strong:last-of-type,
+.adminUserRow.scalable > *:last-child { border-right: 0; }
+.adminUserHeader.scalable input {
+  font-size: 0.75rem;
+  height: 30px;
+  min-width: 0;
+  padding: 5px 7px;
+}
+.adminUserRow.scalable {
+  background: var(--surface);
+  min-height: 42px;
+}
+.adminUserRow.scalable:hover { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.adminUserRow.scalable > div {
+  align-content: center;
+  display: grid;
+  gap: 1px;
+}
+.adminUserRow.scalable strong,
+.adminUserRow.scalable small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adminUserRow.scalable strong { font-size: 0.82rem; }
+.adminUserRow.scalable small { font-size: 0.7rem; }
+.adminUserRow.scalable select,
+.rowActionSelect {
+  font-size: 0.78rem;
+  height: 30px;
+  min-width: 0;
+  padding: 4px 7px;
+  width: 100%;
+}
+.adminAccessBadge {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  min-height: 0;
+  padding: 0;
+}
+.adminAccessBadge.enabled { background: transparent; border: 0; color: var(--good); }
+.adminUserDetailsEditor {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
+  padding: 14px;
+}
+.adminUserDetailsEditor .editorHeader,
+.adminUserDetailsEditor .notesField,
+.adminUserDetailsEditor .wide { grid-column: 1 / -1; }
+.adminUserDetailsEditor .editorHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+.adminUserDetailsEditor textarea { min-height: 86px; }
+@media (max-width: 780px) {
+  .adminUserTable.scalable { max-height: none; overflow-x: auto; }
+  .adminUserHeader.scalable { display: grid; }
+  .adminUserHeader.scalable,
+  .adminUserRow.scalable { min-width: 1180px; }
+  .adminUserDetailsEditor { grid-template-columns: 1fr; }
+}
