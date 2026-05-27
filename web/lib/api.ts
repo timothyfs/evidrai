@@ -254,9 +254,10 @@ const ANONYMOUS_ACCOUNT_KEY = 'evidrai_anonymous_account_profile';
 let accessToken = '';
 
 
-function userFacingError(message: string): string {
+function userFacingError(message: string, code = ''): string {
   const lower = message.toLowerCase();
-  if (lower.includes('youtube blocked automatic transcript access') || (lower.includes('youtube') && lower.includes('not a bot')) || lower.includes('cookies-from-browser') || lower.includes('use --cookies')) {
+  const cleanCode = code.toLowerCase();
+  if (cleanCode === 'youtube_bot_check' || lower.includes('youtube blocked automatic transcript access')) {
     return 'YouTube blocked automatic transcript access for this video. Paste the transcript into the Transcript box and run the speech/video audit again.';
   }
   if (lower === 'load failed' || lower.includes('failed to fetch') || lower.includes('networkerror')) {
@@ -317,6 +318,7 @@ async function request<T>(path: string, init?: RequestInit, options?: { sameOrig
 
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
+    let errorCode = '';
     try {
       const payload = await response.json();
       const detail = payload?.detail;
@@ -324,15 +326,17 @@ async function request<T>(path: string, init?: RequestInit, options?: { sameOrig
       const upstreamNested = typeof upstreamDetail === 'object' && upstreamDetail?.detail ? upstreamDetail.detail : null;
       const upstreamMessage = typeof upstreamNested === 'string' ? upstreamNested : (typeof upstreamNested === 'object' ? upstreamNested?.message : '');
       const upstreamCode = typeof upstreamNested === 'object' ? upstreamNested?.code : '';
-      const upstreamDeveloper = typeof upstreamNested === 'object' ? upstreamNested?.developer_detail : '';
+      const detailCode = typeof detail === 'object' ? detail?.code : '';
       const fallback = typeof detail === 'object' && detail?.fallback ? ` ${detail.fallback}` : '';
       const baseMessage = upstreamMessage || detail?.message || payload?.error || message;
-      const diagnostic = upstreamCode || upstreamDeveloper ? ` (${[upstreamCode, upstreamDeveloper].filter(Boolean).join(': ')})` : '';
+      const diagnosticCode = upstreamCode || detailCode;
+      errorCode = String(diagnosticCode || '');
+      const diagnostic = diagnosticCode ? ` (${diagnosticCode})` : '';
       message = typeof detail === 'string' ? detail : `${baseMessage}${diagnostic}${fallback}`;
     } catch {
       // Keep HTTP status fallback.
     }
-    throw new Error(userFacingError(typeof message === 'string' ? message : JSON.stringify(message)));
+    throw new Error(userFacingError(typeof message === 'string' ? message : JSON.stringify(message), errorCode));
   }
 
   return response.json() as Promise<T>;
