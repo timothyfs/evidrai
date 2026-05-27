@@ -1,4 +1,4 @@
-from evidrai.transcripts import _caption_candidates, _requests_proxy_dict, _yt_dlp_proxy_url, clean_pasted_youtube_transcript, clean_vtt_transcript, transcript_backend_status
+from evidrai.transcripts import _caption_candidates, _extract_with_youtube_transcript_api, _requests_proxy_dict, _yt_dlp_proxy_url, clean_pasted_youtube_transcript, clean_vtt_transcript, transcript_backend_status
 
 
 def test_clean_vtt_transcript_removes_timestamps_tags_and_duplicates():
@@ -23,7 +23,7 @@ We created 10 million jobs
     assert "&" in cleaned
 
 
-def test_caption_candidates_excludes_live_chat_json():
+def test_caption_candidates_excludes_live_chat_json_and_keeps_language_metadata():
     candidates = _caption_candidates(
         {
             "live_chat": [{"ext": "json", "url": "https://youtube.com/live_chat_replay"}],
@@ -32,7 +32,20 @@ def test_caption_candidates_excludes_live_chat_json():
         ("en",),
     )
 
-    assert candidates == [{"ext": "vtt", "url": "https://example.com/captions.vtt"}]
+    assert candidates == [{"ext": "vtt", "url": "https://example.com/captions.vtt", "language_code": "en", "source": "caption"}]
+
+
+def test_caption_candidates_falls_back_to_any_usable_caption_track():
+    candidates = _caption_candidates(
+        {
+            "live_chat": [{"ext": "json", "url": "https://youtube.com/live_chat_replay"}],
+            "nl": [{"ext": "vtt", "url": "https://example.com/nl-captions.vtt"}],
+            "fr": [{"ext": "srv3", "url": "https://example.com/fr-captions.srv3"}],
+        },
+        ("en", "en-US"),
+    )
+
+    assert [candidate["language_code"] for candidate in candidates] == ["nl", "fr"]
 
 
 def test_clean_pasted_youtube_transcript_preserves_timestamps_and_removes_noise():
@@ -74,3 +87,44 @@ def test_youtube_proxy_env_is_explicit(monkeypatch):
     }
     assert _yt_dlp_proxy_url() == "http://youtube-proxy.example:8080"
     assert transcript_backend_status()["generic_proxy_configured"] is True
+
+
+class _FakeFetchedTranscript:
+    language_code = "nl"
+
+    def __iter__(self):
+        return iter([type("CaptionLine", (), {"text": "Good afternoon"})(), type("CaptionLine", (), {"text": "NATO remains ready"})()])
+
+
+class _FakeTranscriptRef:
+    language_code = "nl"
+    language = "Dutch (auto-generated)"
+    is_translatable = True
+    translation_languages = []
+
+    def fetch(self):
+        return _FakeFetchedTranscript()
+
+
+class _FakeTranscriptApi:
+    def __init__(self, proxy_config=None):
+        self.proxy_config = proxy_config
+
+    def fetch(self, video_id, languages):
+        raise RuntimeError("No transcripts were found for English")
+
+    def list(self, video_id):
+        return [_FakeTranscriptRef()]
+
+
+def test_youtube_transcript_api_falls_back_to_any_available_track(monkeypatch):
+    import youtube_transcript_api
+
+    monkeypatch.setattr(youtube_transcript_api, "YouTubeTranscriptApi", _FakeTranscriptApi)
+
+    result = _extract_with_youtube_transcript_api("https://youtu.be/example123", ("en", "en-US"))
+
+    assert result["ok"] is True
+    assert result["source_language"] == "nl"
+    assert result["extraction_method"] == "youtube_transcript_api_any_language"
+    assert "NATO remains ready" in result["transcript"]

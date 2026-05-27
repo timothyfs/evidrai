@@ -313,6 +313,8 @@ SPEECH_AUDIT_SYSTEM_PROMPT = dedent(
     - Identify concrete, checkable factual claims.
     - Preserve the exact quote or closest available wording.
     - Normalize each claim into a falsifiable statement suitable for evidence retrieval.
+    - Write normalized_claim, topic, why_it_matters, verification_query, summary, and extraction_notes in English, even if the transcript/caption track is not English or is mislabelled by the video platform.
+    - If the transcript appears machine-translated, auto-captioned, or language-mislabelled, mention that briefly in extraction_notes but still extract clearly checkable claims.
     - Prioritize high-impact public claims, especially around elections, crime, immigration, war, health, economy, law, public spending, and named people or institutions.
     - Skip pure applause lines, insults, slogans, predictions, and vague rhetoric unless they contain a checkable factual proposition.
     - If a quote contains several checkable claims, split them.
