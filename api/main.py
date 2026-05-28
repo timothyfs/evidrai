@@ -1024,7 +1024,10 @@ def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiE
 def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnvelope:
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
-    _require_bot_check(http_request, request.bot_token)
+    # Bot protection is enforced on /speech/extract. Verification is the second
+    # stage of the same signed-in, entitlement-limited workflow; requiring a
+    # fresh Turnstile token here causes single-use token failures after a
+    # successful extraction.
     enforce_speech_claim_limit(profile, len(request.claims))
     source_url = (request.source_url or "").strip()
     if source_url and not is_probable_url(source_url):

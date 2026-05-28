@@ -311,6 +311,7 @@ def test_speech_verify_requires_selected_claims(monkeypatch):
 
 def test_speech_verify_defaults_to_fast_without_tavily(monkeypatch):
     grant_tier(monkeypatch, "pro")
+    monkeypatch.setattr(api_main, "turnstile_configured", lambda: True)
 
     class FakeLLM:
         configured = True

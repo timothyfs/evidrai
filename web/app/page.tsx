@@ -1712,17 +1712,13 @@ export default function Home() {
 
   async function verifySelectedSpeechClaims() {
     if (!speechExtraction) return;
-    if (!botReady) {
-      setError('Complete the bot check before verifying selected claims.');
-      return;
-    }
     const claims: SpeechClaim[] = speechExtraction.claims.filter((item) => selectedSpeechClaims.includes(item.id));
     if (!claims.length) return;
     setLoadingKind('speech-verify');
     setVerifyingSpeech(true);
     setError('');
     try {
-      const result = await verifySpeechClaims({ claims, source_url: speechSourceUrl || speechExtraction.source_url, verification_mode: canUseDeep ? speechMode : 'fast', bot_token: botToken });
+      const result = await verifySpeechClaims({ claims, source_url: speechSourceUrl || speechExtraction.source_url, verification_mode: canUseDeep ? speechMode : 'fast' });
       setBotToken('');
       setSpeechVerification(result);
     } catch (err) {
@@ -1940,7 +1936,7 @@ export default function Home() {
                 <SpeechInputState transcript={speechTranscript} sourceUrl={speechSourceUrl} tryYouTubeCaptions={tryYouTubeCaptions} />
               </div>
               <VerifyGuide mode="speech" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
-              {(speechTranscript.trim() || speechSourceUrl.trim()) && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel={speechExtraction ? 'verify selected claims' : 'extract claims'} />}
+              {(speechTranscript.trim() || speechSourceUrl.trim()) && !speechExtraction && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="extract claims" />}
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
               {!speechTranscript.trim() && speechSourceUrl.trim() && tryYouTubeCaptions && <p className="fieldHint">No transcript pasted, so Evidrai will try to extract captions from the URL first.</p>}
               {!speechTranscript.trim() && speechSourceUrl.trim() && !tryYouTubeCaptions && <p className="fieldHint">Paste the transcript above, or enable automatic YouTube captions for a best-effort URL-only attempt.</p>}
