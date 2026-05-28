@@ -72,6 +72,7 @@ h2 { font-size: 1.35rem; }
 
 .card { padding: 24px; }
 .loginGate {
+  scroll-margin-top: 110px;
   display: grid;
   gap: 16px;
   margin-bottom: 24px;

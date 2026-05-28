@@ -1093,7 +1093,7 @@ function LoginGate({
   setBotToken: (value: string) => void;
 }) {
   return (
-    <section className="card loginGate">
+    <section className="card loginGate" id="sign-in">
       <p className="eyebrow">Because trust needs evidence</p>
       <h2>Start verifying with Evidrai</h2>
       <p className="muted">Sign in to save assessments, inspect evidence trails, and use the verification tools included in your plan.</p>
@@ -1185,7 +1185,7 @@ function SiteHeader({ account, me, signedIn, theme, quickClaim, onQuickClaimChan
         </nav>
       )}
       <div className="headerSpacer" />
-      {signedIn && account ? <AccountMenu account={account} me={me} theme={theme} onToggleTheme={onToggleTheme} onSignOut={onSignOut} authBusy={authBusy} /> : <a className="button secondary" href="/">Sign in</a>}
+      {signedIn && account ? <AccountMenu account={account} me={me} theme={theme} onToggleTheme={onToggleTheme} onSignOut={onSignOut} authBusy={authBusy} /> : <a className="button secondary" href="#sign-in">Sign in</a>}
     </header>
   );
 }
