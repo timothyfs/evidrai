@@ -2867,9 +2867,13 @@ html[data-theme="light"] .methodologyGuardrails {
 .siteHeader .navMenu > summary {
   display: grid;
   gap: 3px;
+  grid-auto-flow: row;
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(3, 1.5px);
   justify-content: center;
   margin: 0;
   padding: 0;
+  place-items: center;
 }
 .siteHeader .accountMenu > summary {
   width: auto;
