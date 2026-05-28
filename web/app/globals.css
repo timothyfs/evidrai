@@ -2823,11 +2823,16 @@ html[data-theme="light"] .methodologyGuardrails {
 .siteHeader:has(.headerQuickCheck) .navMenu nav { left: 0; }
 .navMenu,
 .accountMenu {
-  border-top: 0;
-  margin-top: 0;
-  padding-top: 0;
+  border-top: 0 !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
   position: relative;
   z-index: 90;
+}
+.siteHeader details {
+  border-top: 0 !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 .navMenu[open],
 .accountMenu[open] {
@@ -2852,14 +2857,19 @@ html[data-theme="light"] .methodologyGuardrails {
 .siteHeader .accountMenu > summary {
   align-items: center;
   box-sizing: border-box;
-  display: inline-flex;
   height: 36px;
 }
+.siteHeader .brand,
+.siteHeader .accountMenu > summary { display: inline-flex; }
 .siteHeader .brand {
   line-height: 1;
 }
 .siteHeader .navMenu > summary {
+  display: grid;
+  gap: 3px;
   justify-content: center;
+  margin: 0;
+  padding: 0;
 }
 .siteHeader .accountMenu > summary {
   width: auto;
