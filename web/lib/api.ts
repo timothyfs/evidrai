@@ -82,7 +82,7 @@ export type TierName = 'free' | 'pro' | 'researcher';
 export type AccountProfile = {
   owner_id: string;
   label: string;
-  plan: 'Free' | 'Pro' | 'Researcher / Journalist';
+  plan: 'Free' | 'Pro' | 'Researcher / Journalist' | 'Loading plan…';
 };
 
 export type TierDefinition = {

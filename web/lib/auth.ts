@@ -22,7 +22,7 @@ export function profileFromSession(session: Session | null, fallback: AccountPro
   return {
     owner_id: user.id,
     label: user.email || user.user_metadata?.full_name || 'Signed-in user',
-    plan: 'Free',
+    plan: 'Loading plan…',
   };
 }
 

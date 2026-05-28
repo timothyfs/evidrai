@@ -1129,15 +1129,16 @@ function LoginGate({
 function AccountMenu({ account, me, theme, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; theme: ThemeMode; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
   const label = account.label || 'Signed in';
   const displayName = label.includes('@') ? label.split('@')[0] : label;
+  const planLabel = me?.user?.tier_label || (account.owner_id.startsWith('anon_') ? account.plan : 'Loading plan…');
   return (
     <details className="accountMenu">
       <summary>
         <span>{displayName}</span>
-        <strong>{me?.user?.tier_label || account.plan}</strong>
+        <strong>{planLabel}</strong>
       </summary>
       <div className="accountMenuPanel">
         <p className="accountProfileLine"><span>Signed in as</span><strong>{label}</strong></p>
-        <p><span>Plan</span><strong>{me?.user?.tier_label || account.plan}</strong></p>
+        <p><span>Plan</span><strong>{planLabel}</strong></p>
         <p><span>User ID</span><code>{account.owner_id}</code></p>
         {me?.is_admin && <p><span>Admin</span><strong>Enabled</strong></p>}
         {me?.is_admin && <a className="button secondary" href="/admin">Admin UI</a>}
