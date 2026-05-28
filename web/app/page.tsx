@@ -1465,8 +1465,8 @@ export default function Home() {
       labels: [],
     };
     setReports((current) => {
-      const savedLimit = Number(userLimits.saved_reports || 8);
-      const next = [summary, ...current.filter((item) => item.assessment_id !== summary.assessment_id)].slice(0, Math.max(savedLimit, 8));
+      const savedLimit = Number(userLimits.saved_reports || 100);
+      const next = [summary, ...current.filter((item) => item.assessment_id !== summary.assessment_id)].slice(0, Math.max(savedLimit, current.length, 1));
       writeCachedReports(summary.owner_id || account?.owner_id, next);
       return next;
     });
@@ -1479,8 +1479,7 @@ export default function Home() {
     }
     try {
       const serverReports = await listReports();
-      const savedLimit = Number(userLimits.saved_reports || 8);
-      const recent = serverReports.filter((item) => item.owner_id === ownerId).slice(0, Math.max(savedLimit, 8));
+      const recent = serverReports.filter((item) => item.owner_id === ownerId);
       setReports(recent);
       writeCachedReports(ownerId, recent);
     } catch (err) {
