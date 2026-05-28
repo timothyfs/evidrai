@@ -454,6 +454,23 @@ button.danger {
   letter-spacing: -0.04em;
   text-decoration: none;
 }
+.logoBrand {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  overflow: hidden;
+  padding: 5px 10px;
+}
+.logoBrand img {
+  display: block;
+  height: 22px;
+  object-fit: contain;
+  width: auto;
+}
 .headerSpacer { min-width: 1px; }
 .navMenu { position: relative; }
 .navMenu > summary {
@@ -2728,10 +2745,7 @@ html[data-theme="light"] .methodologyGuardrails {
   min-width: 0;
 }
 .headerBrandCluster .brand {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 8px 12px;
+  padding: 5px 10px;
 }
 .homeChip {
   align-items: center;
