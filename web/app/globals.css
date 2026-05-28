@@ -456,26 +456,28 @@ button.danger {
 }
 .logoBrand {
   align-items: center;
-  background: #000000;
+  background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
   display: inline-flex;
-  height: 36px;
+  height: 42px;
   justify-content: center;
   overflow: hidden;
-  padding: 5px 10px;
+  padding: 4px;
+  width: 54px;
 }
 .logoBrand img {
   display: block;
-  height: 22px;
+  height: 34px;
   object-fit: contain;
   width: auto;
 }
+.eyeBrand img { height: 36px; }
 .logoBrand .logoLight { display: none; }
 .logoBrand .logoDark { display: block; }
 html[data-theme="light"] .logoBrand {
-  background: #ffffff;
-  border-color: rgba(255, 255, 255, 0.72);
+  background: transparent;
+  border-color: rgba(30, 42, 56, 0.16);
 }
 html[data-theme="light"] .logoBrand .logoLight { display: block; }
 html[data-theme="light"] .logoBrand .logoDark { display: none; }
@@ -2753,7 +2755,7 @@ html[data-theme="light"] .methodologyGuardrails {
   min-width: 0;
 }
 .headerBrandCluster .brand {
-  padding: 5px 10px;
+  padding: 4px;
 }
 .homeChip {
   align-items: center;
@@ -2880,6 +2882,9 @@ html[data-theme="light"] .methodologyGuardrails {
   align-items: center;
   box-sizing: border-box;
   height: 36px;
+}
+.siteHeader .logoBrand {
+  height: 42px;
 }
 .siteHeader .brand,
 .siteHeader .accountMenu > summary { display: inline-flex; }

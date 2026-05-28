@@ -6,10 +6,10 @@ export const metadata: Metadata = {
   description: 'Claim-level evidence assessment',
   icons: {
     icon: [
-      { url: '/brand/evidrai-icon.png', media: '(prefers-color-scheme: light)' },
-      { url: '/brand/evidrai-icon-dark.png', media: '(prefers-color-scheme: dark)' },
+      { url: '/brand/evidrai-eye-light.png', media: '(prefers-color-scheme: light)' },
+      { url: '/brand/evidrai-eye-dark.png', media: '(prefers-color-scheme: dark)' },
     ],
-    apple: '/brand/evidrai-icon.png',
+    apple: '/brand/evidrai-eye-light.png',
   },
   openGraph: {
     title: 'Evidrai',
