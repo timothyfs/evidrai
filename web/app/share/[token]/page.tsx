@@ -91,7 +91,7 @@ export default async function SharedReportPage({ params }: SharePageProps) {
   if (!payload) {
     return (
       <main>
-        <header className="siteHeader"><a className="brand logoBrand" href="/" aria-label="Evidrai home"><img src="/brand/evidrai-logo-full.jpg" alt="Evidrai" /></a><nav className="staticNav"><a href="/product">Product</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/">Verify</a></nav></header>
+        <header className="siteHeader"><a className="brand logoBrand" href="/" aria-label="Evidrai home"><img className="logoLight" src="/brand/evidrai-logo-full.jpg" alt="" /><img className="logoDark" src="/brand/evidrai-logo-full-dark.jpg" alt="" /></a><nav className="staticNav"><a href="/product">Product</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/">Verify</a></nav></header>
         <section className="card marketingPage"><p className="eyebrow">Shared report</p><h1>Report not available.</h1><p className="lead">The share link may be invalid, revoked, or unavailable.</p></section>
       </main>
     );
@@ -104,7 +104,7 @@ export default async function SharedReportPage({ params }: SharePageProps) {
   const publicUrl = publicShareUrl(token, headerList);
   return (
     <main>
-      <header className="siteHeader printHidden"><a className="brand logoBrand" href="/" aria-label="Evidrai home"><img src="/brand/evidrai-logo-full.jpg" alt="Evidrai" /></a><nav className="staticNav"><a href="/product">Product</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/">Verify another claim</a></nav></header>
+      <header className="siteHeader printHidden"><a className="brand logoBrand" href="/" aria-label="Evidrai home"><img className="logoLight" src="/brand/evidrai-logo-full.jpg" alt="" /><img className="logoDark" src="/brand/evidrai-logo-full-dark.jpg" alt="" /></a><nav className="staticNav"><a href="/product">Product</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/">Verify another claim</a></nav></header>
       <section className="card resultCard assessmentCard publicReport">
         <div className="printMasthead"><strong>Evidrai</strong><span>Evidence report</span></div>
         <div className="resultHeader assessmentHeader">

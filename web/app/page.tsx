@@ -1148,7 +1148,7 @@ function SiteHeader({ account, me, signedIn, theme, quickClaim, onQuickClaimChan
   return (
     <header className="siteHeader">
       <div className="headerBrandCluster">
-        <a className="brand logoBrand" href="/" aria-label="Evidrai home"><img src="/brand/evidrai-logo-full.jpg" alt="Evidrai" /></a>
+        <a className="brand logoBrand" href="/" aria-label="Evidrai home"><img className="logoLight" src="/brand/evidrai-logo-full.jpg" alt="" /><img className="logoDark" src="/brand/evidrai-logo-full-dark.jpg" alt="" /></a>
       </div>
       <details className="navMenu">
         <summary aria-label="Open navigation"><span></span><span></span><span></span></summary>

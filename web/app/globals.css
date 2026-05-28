@@ -456,8 +456,8 @@ button.danger {
 }
 .logoBrand {
   align-items: center;
-  background: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: #000000;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
   display: inline-flex;
   height: 36px;
@@ -471,6 +471,14 @@ button.danger {
   object-fit: contain;
   width: auto;
 }
+.logoBrand .logoLight { display: none; }
+.logoBrand .logoDark { display: block; }
+html[data-theme="light"] .logoBrand {
+  background: #ffffff;
+  border-color: rgba(255, 255, 255, 0.72);
+}
+html[data-theme="light"] .logoBrand .logoLight { display: block; }
+html[data-theme="light"] .logoBrand .logoDark { display: none; }
 .headerSpacer { min-width: 1px; }
 .navMenu { position: relative; }
 .navMenu > summary {
