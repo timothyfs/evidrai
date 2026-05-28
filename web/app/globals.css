@@ -1638,8 +1638,11 @@ html[data-theme="light"] .earlyAccessNotice { background: rgba(255,255,255,0.72)
   border: 1px solid rgba(157,183,213,0.22);
   border-radius: 22px;
   background: linear-gradient(135deg, rgba(157,183,213,0.10), rgba(255,255,255,0.03));
+  display: grid;
+  gap: 14px;
   padding: 16px;
 }
+.firstRunGuide .eyebrow { margin: 0; }
 .guideSteps {
   display: grid;
   gap: 10px;
@@ -1665,6 +1668,33 @@ html[data-theme="light"] .earlyAccessNotice { background: rgba(255,255,255,0.72)
   height: 26px;
   justify-content: center;
   width: 26px;
+}
+.starterExamples {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.starterExample {
+  appearance: none;
+  border: 1px solid rgba(196,154,80,0.28);
+  border-radius: 18px;
+  background: rgba(196,154,80,0.07);
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  text-align: left;
+}
+.starterExample:hover {
+  border-color: rgba(196,154,80,0.5);
+  transform: translateY(-1px);
+}
+.starterExample strong { font-size: 0.92rem; }
+.starterExample span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 .speechState {
   border-radius: 14px;
@@ -1699,7 +1729,7 @@ html[data-theme="light"] .guideSteps span {
   .siteHeader { top: 10px; }
   .layout { gap: 16px; }
   .verifyCard, .assessmentCard, .resultCard { padding: 18px; }
-  .firstRunGuide .guideSteps { grid-template-columns: 1fr; }
+  .firstRunGuide .guideSteps, .starterExamples { grid-template-columns: 1fr; }
   .assessmentHeader .verdictPanel { display: none; }
   .mobileVerdictBar {
     display: flex;

@@ -985,7 +985,38 @@ function SpeechAuditExplainer() {
   );
 }
 
-function FirstRunGuide({ mode }: { mode: 'claim' | 'speech' }) {
+const claimStarterExamples = [
+  {
+    label: 'Viral headline',
+    claim: 'Electric vehicles are worse for the climate than petrol cars once battery production is included.',
+    hint: 'Good for testing a broad public claim with lots of competing evidence.',
+  },
+  {
+    label: 'Political claim',
+    claim: 'The UK spends more on debt interest than on defence.',
+    hint: 'Specific, measurable, and likely to need up-to-date public data.',
+  },
+  {
+    label: 'AI rumour',
+    claim: 'AI-generated images can always be detected by looking at hands and text.',
+    hint: 'Useful for checking an overconfident internet rule of thumb.',
+  },
+];
+
+const speechStarterExamples = [
+  {
+    label: 'Speech transcript',
+    transcript: 'Paste a speech, interview, podcast, or YouTube transcript here. Evidrai will extract factual claims first, then let you choose which claims to verify.',
+    hint: 'Best path: paste transcript text for reliable extraction.',
+  },
+  {
+    label: 'YouTube URL',
+    sourceUrl: 'https://www.youtube.com/watch?v=',
+    hint: 'Experimental path: add a YouTube URL and Evidrai will try captions first.',
+  },
+];
+
+function FirstRunGuide({ mode, onUseClaimExample, onUseSpeechExample }: { mode: 'claim' | 'speech'; onUseClaimExample: (claim: string) => void; onUseSpeechExample: (example: { transcript?: string; sourceUrl?: string }) => void }) {
   return (
     <section className="firstRunGuide" aria-label="Getting started">
       <p className="eyebrow">Try this first</p>
@@ -1002,6 +1033,19 @@ function FirstRunGuide({ mode }: { mode: 'claim' | 'speech' }) {
           <span><strong>3</strong> Verify only selected claims</span>
         </div>
       )}
+      <div className="starterExamples" aria-label="Example inputs">
+        {(mode === 'claim' ? claimStarterExamples : speechStarterExamples).map((example) => (
+          <button
+            className="starterExample"
+            key={example.label}
+            onClick={() => mode === 'claim' ? onUseClaimExample('claim' in example ? example.claim : '') : onUseSpeechExample({ transcript: 'transcript' in example ? example.transcript : '', sourceUrl: 'sourceUrl' in example ? example.sourceUrl : '' })}
+            type="button"
+          >
+            <strong>{example.label}</strong>
+            <span>{example.hint}</span>
+          </button>
+        ))}
+      </div>
     </section>
   );
 }
@@ -1682,6 +1726,23 @@ export default function Home() {
     }
   }
 
+  function useClaimStarter(claimText: string) {
+    setToolMode('claim');
+    setClaim(claimText);
+    setSourceUrl('');
+    setError('');
+  }
+
+  function useSpeechStarter(example: { transcript?: string; sourceUrl?: string }) {
+    setToolMode('speech');
+    setSpeechTranscript(example.transcript || '');
+    setSpeechSourceUrl(example.sourceUrl || '');
+    setTryYouTubeCaptions(Boolean(example.sourceUrl));
+    setSpeechExtraction(null);
+    setSpeechVerification(null);
+    setError('');
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!ready) return;
@@ -1907,7 +1968,7 @@ export default function Home() {
             </div>
           </div>
 
-          {!assessment && !speechExtraction && !loading && <FirstRunGuide mode={toolMode} />}
+          {!assessment && !speechExtraction && !loading && <FirstRunGuide mode={toolMode} onUseClaimExample={useClaimStarter} onUseSpeechExample={useSpeechStarter} />}
 
           {toolMode === 'claim' ? (
             <form className="verifyForm" onSubmit={submit}>
