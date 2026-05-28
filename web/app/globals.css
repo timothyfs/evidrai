@@ -2338,11 +2338,66 @@ html[data-theme="light"] .methodologyGuardrails {
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
   border-radius: 22px;
   display: grid;
-  gap: 6px;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-top: 22px;
   padding: 18px;
 }
+.reportAbstract div {
+  border-right: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-right: 12px;
+}
+.reportAbstract div:last-child { border-right: 0; padding-right: 0; }
+.reportAbstract span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.reportAbstract strong {
+  color: var(--ink);
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
 .reportAbstract p { margin: 0; }
+.reportBreakdownGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.reportBreakdownCard {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.035);
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+.reportBreakdownCard div {
+  display: grid;
+  gap: 5px;
+}
+.reportBreakdownCard span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: capitalize;
+}
+.reportBreakdownCard p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+@media (max-width: 760px) {
+  .reportAbstract,
+  .reportBreakdownGrid { grid-template-columns: 1fr; }
+  .reportAbstract div { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 10px; }
+  .reportAbstract div:last-child { border-bottom: 0; padding-bottom: 0; }
+}
 .printMasthead,
 .printFooter { display: none; }
 
@@ -2363,7 +2418,8 @@ html[data-theme="light"] .methodologyGuardrails {
   }
   a { color: #111827; text-decoration: underline; }
   .printHidden,
-  .mobileVerdictBar { display: none !important; }
+  .mobileVerdictBar,
+  .sharePanel { display: none !important; }
   .printMasthead {
     border-bottom: 1px solid #d1d5db;
     display: flex;
@@ -2393,6 +2449,7 @@ html[data-theme="light"] .methodologyGuardrails {
   .verdictPanel,
   .assessmentNarrative,
   .reportAbstract,
+  .reportBreakdownCard,
   .sourceCard,
   .facts span {
     background: #ffffff !important;
@@ -2400,7 +2457,10 @@ html[data-theme="light"] .methodologyGuardrails {
     color: #111827 !important;
   }
   .assessmentNarrative,
-  .reportAbstract { break-inside: avoid; page-break-inside: avoid; }
+  .reportAbstract,
+  .reportBreakdownCard { break-inside: avoid; page-break-inside: avoid; }
+  .reportAbstract,
+  .reportBreakdownGrid { grid-template-columns: 1fr 1fr; }
   .sourceGrid { display: grid; grid-template-columns: 1fr; gap: 10px; }
   .sourceCard { break-inside: avoid; page-break-inside: avoid; padding: 12px; }
   .sourceCard p,
@@ -2742,13 +2802,25 @@ html[data-theme="light"] .methodologyGuardrails {
 
 /* Header follow-up: remove redundant home chip behaviour and keep menus above quick search. */
 .siteHeader {
-  grid-template-columns: auto minmax(260px, 680px) 1fr auto;
   overflow: visible;
+}
+.siteHeader:has(.headerQuickCheck) {
+  grid-template-columns: auto auto minmax(260px, 680px) 1fr auto;
 }
 .headerQuickCheck {
   position: relative;
   z-index: 1;
 }
+.siteHeader:has(.headerQuickCheck) .navMenu {
+  display: block;
+}
+.siteHeader:has(.headerQuickCheck) .navMenu > summary {
+  background: rgba(255,255,255,0.08);
+  border-radius: 999px;
+  height: 36px;
+  width: 36px;
+}
+.siteHeader:has(.headerQuickCheck) .navMenu nav { left: 0; }
 .navMenu,
 .accountMenu {
   position: relative;
@@ -2764,8 +2836,9 @@ html[data-theme="light"] .methodologyGuardrails {
 }
 .homeChip { display: none !important; }
 @media (max-width: 980px) {
-  .siteHeader { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .siteHeader:has(.headerQuickCheck) { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+  .siteHeader:has(.headerQuickCheck) .headerSpacer { display: none; }
 }
 @media (max-width: 720px) {
-  .siteHeader { grid-template-columns: auto 1fr auto; }
+  .siteHeader:has(.headerQuickCheck) { grid-template-columns: auto auto 1fr; }
 }

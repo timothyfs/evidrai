@@ -28,11 +28,10 @@ const liveNow = [
   'Best-effort YouTube transcript extraction',
   'Saved reports and feedback capture',
   'Evidence scorecards and source grouping',
+  'Polished report export and share links',
 ];
 
 const comingNext = [
-  'Polished report export',
-  'Shareable report links',
   'Researcher evidence ledger',
   'Durable source snapshots',
   'External API access with keys and limits',

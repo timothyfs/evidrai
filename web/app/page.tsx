@@ -1150,6 +1150,18 @@ function SiteHeader({ account, me, signedIn, theme, quickClaim, onQuickClaimChan
       <div className="headerBrandCluster">
         <a className="brand" href="/">Evidrai</a>
       </div>
+      <details className="navMenu">
+        <summary aria-label="Open navigation"><span></span><span></span><span></span></summary>
+        <nav>
+          <a href="/">Verify</a>
+          <a href="/product">Product</a>
+          <a href="/plans">Plans</a>
+          <a href="/about">About</a>
+          <a href="/team">Team</a>
+          <a href="/contact">Contact</a>
+          {me?.is_admin && <a href="/admin">Admin</a>}
+        </nav>
+      </details>
       {signedIn ? (
         <form className="headerQuickCheck" onSubmit={onQuickSubmit}>
           <span aria-hidden="true">⌕</span>
@@ -1167,18 +1179,6 @@ function SiteHeader({ account, me, signedIn, theme, quickClaim, onQuickClaimChan
           {me?.is_admin && <a href="/admin">Admin</a>}
         </nav>
       )}
-      <details className="navMenu">
-        <summary aria-label="Open navigation"><span></span><span></span><span></span></summary>
-        <nav>
-          <a href="/">Verify</a>
-          <a href="/product">Product</a>
-          <a href="/plans">Plans</a>
-          <a href="/about">About</a>
-          <a href="/team">Team</a>
-          <a href="/contact">Contact</a>
-          {me?.is_admin && <a href="/admin">Admin</a>}
-        </nav>
-      </details>
       <div className="headerSpacer" />
       {signedIn && account ? <AccountMenu account={account} me={me} theme={theme} onToggleTheme={onToggleTheme} onSignOut={onSignOut} authBusy={authBusy} /> : <a className="button secondary" href="/">Sign in</a>}
     </header>
