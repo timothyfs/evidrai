@@ -1035,24 +1035,28 @@ function TurnstileCheck({ token, setToken, actionLabel = 'continue' }: { token: 
       document.head.appendChild(script);
     }
     const timer = window.setInterval(() => {
-      const turnstile = (window as unknown as { turnstile?: { render: (el: HTMLElement, opts: Record<string, unknown>) => string } }).turnstile;
-      if (!turnstile || !containerRef.current || widgetIdRef.current) return;
-      widgetIdRef.current = turnstile.render(containerRef.current, {
-        sitekey: TURNSTILE_SITE_KEY,
-        callback: (value: string) => setToken(value),
-        'expired-callback': () => setToken(''),
-        'error-callback': () => setToken(''),
-      });
+      const turnstile = (window as unknown as { turnstile?: { render: (el: HTMLElement, opts: Record<string, unknown>) => string; reset?: (widgetId: string) => void } }).turnstile;
+      if (!turnstile || !containerRef.current) return;
+      if (!widgetIdRef.current) {
+        widgetIdRef.current = turnstile.render(containerRef.current, {
+          sitekey: TURNSTILE_SITE_KEY,
+          callback: (value: string) => setToken(value),
+          'expired-callback': () => setToken(''),
+          'error-callback': () => setToken(''),
+        });
+      } else if (!token && turnstile.reset) {
+        turnstile.reset(widgetIdRef.current);
+      }
       window.clearInterval(timer);
     }, 250);
     return () => window.clearInterval(timer);
-  }, [setToken]);
+  }, [setToken, token]);
 
-  if (!TURNSTILE_SITE_KEY || token) return null;
+  if (!TURNSTILE_SITE_KEY) return null;
   return (
-    <div className="botCheck">
+    <div className={`botCheck ${token ? 'botCheckComplete' : ''}`}>
       <div ref={containerRef} />
-      <p className="muted">Complete the bot check to {actionLabel}.</p>
+      {!token && <p className="muted">Complete the bot check to {actionLabel}.</p>}
     </div>
   );
 }
@@ -1936,7 +1940,7 @@ export default function Home() {
                 <SpeechInputState transcript={speechTranscript} sourceUrl={speechSourceUrl} tryYouTubeCaptions={tryYouTubeCaptions} />
               </div>
               <VerifyGuide mode="speech" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
-              {(speechTranscript.trim() || speechSourceUrl.trim()) && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="extract claims" />}
+              {(speechTranscript.trim() || speechSourceUrl.trim()) && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel={speechExtraction ? 'verify selected claims' : 'extract claims'} />}
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
               {!speechTranscript.trim() && speechSourceUrl.trim() && tryYouTubeCaptions && <p className="fieldHint">No transcript pasted, so Evidrai will try to extract captions from the URL first.</p>}
               {!speechTranscript.trim() && speechSourceUrl.trim() && !tryYouTubeCaptions && <p className="fieldHint">Paste the transcript above, or enable automatic YouTube captions for a best-effort URL-only attempt.</p>}

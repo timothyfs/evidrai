@@ -348,6 +348,7 @@ summary { cursor: pointer; font-weight: 900; }
   padding: 12px;
 }
 .botCheck p { margin: 0; }
+.botCheckComplete { display: none; }
 
 @media (max-width: 880px) {
   .hero, .layout, .sourceGrid, .sourceGrid.compact, .checkedClaim, .userSummary, .matrixGrid { grid-template-columns: 1fr; }
