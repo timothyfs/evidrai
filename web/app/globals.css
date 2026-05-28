@@ -2823,6 +2823,9 @@ html[data-theme="light"] .methodologyGuardrails {
 .siteHeader:has(.headerQuickCheck) .navMenu nav { left: 0; }
 .navMenu,
 .accountMenu {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
   position: relative;
   z-index: 90;
 }
@@ -2835,6 +2838,32 @@ html[data-theme="light"] .methodologyGuardrails {
   z-index: 130;
 }
 .homeChip { display: none !important; }
+
+/* Header alignment: global details styling adds a top border/padding that made
+   nav/account pills sit too high. Keep all header controls on one 36px axis. */
+.siteHeader .headerBrandCluster,
+.siteHeader .navMenu,
+.siteHeader .accountMenu,
+.siteHeader .headerQuickCheck {
+  align-self: center;
+}
+.siteHeader .brand,
+.siteHeader .navMenu > summary,
+.siteHeader .accountMenu > summary {
+  align-items: center;
+  box-sizing: border-box;
+  display: inline-flex;
+  height: 36px;
+}
+.siteHeader .brand {
+  line-height: 1;
+}
+.siteHeader .navMenu > summary {
+  justify-content: center;
+}
+.siteHeader .accountMenu > summary {
+  width: auto;
+}
 @media (max-width: 980px) {
   .siteHeader:has(.headerQuickCheck) { grid-template-columns: auto auto minmax(0, 1fr) auto; }
   .siteHeader:has(.headerQuickCheck) .headerSpacer { display: none; }
