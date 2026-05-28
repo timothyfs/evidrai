@@ -2870,10 +2870,11 @@ html[data-theme="light"] .methodologyGuardrails {
   grid-auto-flow: row;
   grid-template-columns: 1fr;
   grid-template-rows: repeat(3, 1.5px);
+  align-content: center;
   justify-content: center;
   margin: 0;
   padding: 0;
-  place-items: center;
+  justify-items: center;
 }
 .siteHeader .accountMenu > summary {
   width: auto;
