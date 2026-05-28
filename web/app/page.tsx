@@ -1223,6 +1223,21 @@ function shareUrls(publicUrl: string, assessment: AssessmentResponse) {
   ];
 }
 
+function savedReportShareUrls(publicUrl: string, report: ReportSummary) {
+  const claim = truncateShareText(report.claim || 'Evidence report', 96);
+  const verdict = report.verdict || 'Unverified';
+  const title = `Evidrai report: ${claim} — ${verdict}`;
+  const abstract = `Evidrai assessed this saved report as ${verdict.toLowerCase()}.`;
+  const body = `${abstract}\n\n${publicUrl}`;
+  const socialText = `${title}\n\n${abstract}`;
+  return [
+    { key: 'email', label: 'Email', href: `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}` },
+    { key: 'linkedin', label: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(publicUrl)}` },
+    { key: 'x', label: 'X', href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(socialText)}` },
+    { key: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/?text=${encodeURIComponent(`${socialText}\n${publicUrl}`)}` },
+  ];
+}
+
 function ShareReportControls({ assessment, canShare }: { assessment: AssessmentResponse; canShare: boolean }) {
   const [publicUrl, setPublicUrl] = useState('');
   const [message, setMessage] = useState('');
@@ -1416,6 +1431,9 @@ export default function Home() {
   const [botToken, setBotToken] = useState('');
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [reportsOpen, setReportsOpen] = useState(false);
+  const [reportShareLinks, setReportShareLinks] = useState<Record<string, string>>({});
+  const [reportShareMessages, setReportShareMessages] = useState<Record<string, string>>({});
+  const [sharingReportId, setSharingReportId] = useState('');
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
   const [reportIdInput, setReportIdInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -1772,6 +1790,35 @@ export default function Home() {
     }
   }
 
+  async function shareSavedReport(report: ReportSummary, platform = 'copy') {
+    setError('');
+    setSharingReportId(report.assessment_id);
+    setReportShareMessages((current) => ({ ...current, [report.assessment_id]: '' }));
+    try {
+      const payload = await createReportShare(report.assessment_id, platform);
+      const url = `${window.location.origin}/share/${payload.token}`;
+      setReportShareLinks((current) => ({ ...current, [report.assessment_id]: url }));
+      let copied = false;
+      if (navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(url);
+          copied = true;
+        } catch (copyErr) {
+          console.warn('Could not copy saved report share link automatically', copyErr);
+        }
+      }
+      const shareType = payload.access_level === 'full' ? 'Full public report' : 'Simple public share';
+      setReportShareMessages((current) => ({
+        ...current,
+        [report.assessment_id]: copied ? `${shareType} link copied.` : `${shareType} link created. Copy it from the field below.`,
+      }));
+    } catch (err) {
+      setReportShareMessages((current) => ({ ...current, [report.assessment_id]: err instanceof Error ? err.message : 'Could not create share link' }));
+    } finally {
+      setSharingReportId('');
+    }
+  }
+
   async function removeReport(report: ReportSummary) {
     if (typeof window !== 'undefined' && !window.confirm('Delete this saved report from your account history?')) return;
     setError('');
@@ -1976,9 +2023,15 @@ export default function Home() {
                 <div className="reportActions">
                   <button className="secondary" onClick={() => openReportInNewTab(report.assessment_id)} type="button">View</button>
                   <button className="secondary" onClick={() => loadReport(report.assessment_id)} type="button">Load here</button>
+                  <button className="secondary" disabled={sharingReportId === report.assessment_id} onClick={() => shareSavedReport(report)} type="button">{sharingReportId === report.assessment_id ? 'Creating…' : reportShareLinks[report.assessment_id] ? 'Copy share link' : 'Share'}</button>
                   <button className="secondary" onClick={() => toggleReportProtected(report)} type="button">{report.protected ? 'Allow cycling' : 'Do not delete'}</button>
                   <button className="secondary dangerAction" onClick={() => removeReport(report)} type="button">Delete</button>
                 </div>
+                {reportShareLinks[report.assessment_id] && <div className="savedReportShare">
+                  <div className="shareLinkRow"><input readOnly value={reportShareLinks[report.assessment_id]} onFocus={(event) => event.currentTarget.select()} /><a className="button secondary" href={reportShareLinks[report.assessment_id]} target="_blank" rel="noreferrer">Open</a></div>
+                  <div className="reportActions">{savedReportShareUrls(reportShareLinks[report.assessment_id], report).map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}</div>
+                </div>}
+                {reportShareMessages[report.assessment_id] && <p className={reportShareMessages[report.assessment_id].toLowerCase().includes('could not') || reportShareMessages[report.assessment_id].toLowerCase().includes('failed') ? 'error' : 'success'}>{reportShareMessages[report.assessment_id]}</p>}
               </article>
             ))}
           </div>

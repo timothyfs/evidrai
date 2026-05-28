@@ -195,6 +195,8 @@ button.secondary {
 }
 .reportActions, .reportLabels { display: flex; flex-wrap: wrap; gap: 8px; }
 .reportActions .secondary { padding: 7px 10px; font-size: 0.78rem; }
+.savedReportShare { display: grid; gap: 8px; margin-top: 8px; }
+.savedReportShare .shareLinkRow input { font-size: 0.78rem; min-height: 36px; }
 .labelPill {
   border: 1px solid var(--line);
   border-radius: 999px;
