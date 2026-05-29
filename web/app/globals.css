@@ -3078,10 +3078,11 @@ html[data-theme="light"] .methodologyGuardrails {
   width: auto;
 }
 .supportPanel {
-  background: color-mix(in srgb, var(--panel) 94%, black);
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: 22px;
   box-shadow: 0 24px 70px rgba(0,0,0,0.36);
+  color: var(--ink);
   display: grid;
   gap: 12px;
   max-height: min(680px, calc(100vh - 92px));
@@ -3092,10 +3093,36 @@ html[data-theme="light"] .methodologyGuardrails {
 .supportPanel h3 { margin: 0; }
 .supportPanel form { display: grid; gap: 12px; }
 .supportPanel textarea { min-height: 120px; }
+.supportToast {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 14px 36px rgba(0,0,0,0.28);
+  margin: 0;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 10px 14px;
+}
 .sectionHeader.compact { align-items: start; gap: 12px; }
 @media (max-width: 640px) {
   .supportWidget { bottom: 12px; right: 12px; }
-  .supportPanel { max-width: calc(100vw - 24px); }
+  .supportWidget.open {
+    align-content: end;
+    background: rgba(0,0,0,0.54);
+    bottom: 0;
+    justify-items: stretch;
+    left: 0;
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+    right: 0;
+    top: 0;
+  }
+  .supportWidget.open .supportFab { display: none; }
+  .supportPanel {
+    border-radius: 22px 22px 0 0;
+    max-height: min(78vh, calc(100vh - 56px));
+    max-width: none;
+    width: 100%;
+  }
+  .supportPanel .formRow { grid-template-columns: 1fr; }
 }
 .adminIssueList {
   display: grid;

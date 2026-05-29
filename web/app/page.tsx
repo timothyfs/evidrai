@@ -1208,6 +1208,8 @@ function SupportIssueButton({ assessment, signedIn }: { assessment: AssessmentRe
       setStatus(`Issue sent for review. ID: ${response.issue_id}`);
       setSubject('');
       setDescription('');
+      setOpen(false);
+      window.setTimeout(() => setStatus(''), 7000);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Could not send issue report.');
     } finally {
@@ -1217,6 +1219,7 @@ function SupportIssueButton({ assessment, signedIn }: { assessment: AssessmentRe
 
   return (
     <div className={`supportWidget ${open ? 'open' : ''}`}>
+      {!open && status && <p className={status.toLowerCase().includes('could not') || status.toLowerCase().includes('sign in') ? 'supportToast error' : 'supportToast success'}>{status}</p>}
       <button className="supportFab" onClick={() => setOpen((current) => !current)} type="button">Help / bug</button>
       {open && (
         <section className="supportPanel" aria-label="Report an issue">
