@@ -2267,6 +2267,7 @@ export default function Home() {
           onVerify={verifySelectedSpeechClaims}
         />
       )}
+      <SupportIssueButton assessment={assessment} signedIn={signedIn} />
     </main>
   );
 }
