@@ -51,6 +51,16 @@ type ThemeMode = 'dark' | 'light';
 const PENDING_ASSESSMENT_JOB_KEY = 'evidrai_pending_assessment_job';
 const RECENT_REPORTS_KEY = 'evidrai_recent_reports';
 
+function isBotCheckError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err || '');
+  return message.includes('bot_check_failed') || message.includes('bot_check_required') || message.includes('bot_check_unavailable');
+}
+
+function botCheckRetryMessage(fallback: string, err: unknown) {
+  if (!isBotCheckError(err)) return err instanceof Error ? err.message : fallback;
+  return 'Bot protection check needs a fresh verification. Please complete the bot check again and retry.';
+}
+
 function scopedStorageKey(base: string, ownerId?: string | null) {
   const safeOwner = (ownerId || '').trim();
   return safeOwner ? `${base}:${safeOwner}` : '';
@@ -1826,7 +1836,8 @@ export default function Home() {
       setBotToken('');
       await pollAssessmentJob(job.job_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Assessment failed');
+      if (isBotCheckError(err)) setBotToken('');
+      setError(botCheckRetryMessage('Assessment failed', err));
       setLoading(false);
     }
   }
@@ -1851,7 +1862,8 @@ export default function Home() {
       setSpeechExtraction(result);
       setSelectedSpeechClaims(result.claims.map((item) => item.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Speech extraction failed');
+      if (isBotCheckError(err)) setBotToken('');
+      setError(botCheckRetryMessage('Speech extraction failed', err));
     } finally {
       setLoading(false);
     }
