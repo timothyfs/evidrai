@@ -25,7 +25,7 @@ from evidrai.entitlements import (
     update_user_profile_details,
 )
 from evidrai.errors import EvidraiError, safe_error_payload
-from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, load_feedback_by_id, save_feedback
+from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, list_recent_feedback_records, load_feedback_by_id, save_feedback
 from evidrai.trust import backfill_trust_from_reports, trust_analytics_summary
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
 from evidrai.pipeline.verification import (
@@ -108,6 +108,16 @@ class SpeechVerifyRequest(BaseModel):
 
 class SourceExtractRequest(BaseModel):
     source_url: str
+
+
+class SupportIssueRequest(BaseModel):
+    issue_type: str = Field(default="bug", pattern="^(bug|support|idea|other)$")
+    severity: str = Field(default="normal", pattern="^(low|normal|high|urgent)$")
+    subject: str = ""
+    description: str = ""
+    page_url: str = ""
+    assessment_id: str = ""
+    browser_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class FeedbackCreateRequest(BaseModel):
@@ -808,6 +818,51 @@ def delete_report_endpoint(report_id: str, http_request: Request) -> Dict[str, A
     owner_id = assessment.owner_id or context.owner_id
     result = delete_report(report_id, owner_id=owner_id)
     return {"ok": True, "report": result}
+
+
+@app.post("/support/issues", response_model=Dict[str, Any])
+def create_support_issue(request: SupportIssueRequest, http_request: Request) -> Dict[str, Any]:
+    context = _require_authenticated(http_request)
+    subject = (request.subject or "").strip()[:180]
+    description = (request.description or "").strip()
+    if not subject and not description:
+        raise HTTPException(status_code=400, detail={"code": "support_issue_empty", "message": "Describe the issue before sending it."})
+    record = build_feedback_record(
+        result_key="support_issue",
+        rating="Issue report",
+        reasons=[request.issue_type, request.severity],
+        comment=description or subject,
+        result={
+            "assessment_id": request.assessment_id,
+            "owner_id": context.owner_id,
+            "support_issue": {
+                "issue_type": request.issue_type,
+                "severity": request.severity,
+                "subject": subject,
+                "description": description,
+                "page_url": request.page_url,
+                "browser_context": request.browser_context,
+            },
+        },
+        source_url=request.page_url,
+        settings={"support_channel": "in_app", "email": context.email},
+        owner_id=context.owner_id,
+    )
+    saved = save_feedback(record)
+    return {
+        "ok": saved.ok,
+        "issue_id": saved.feedback_id,
+        "destination": saved.destination,
+        "message": "Support issue sent for review.",
+    }
+
+
+@app.get("/admin/support/issues", response_model=Dict[str, Any])
+def admin_support_issues(http_request: Request, limit: int = 25) -> Dict[str, Any]:
+    _require_admin(http_request)
+    safe_limit = max(1, min(limit, 100))
+    issues = list_recent_feedback_records(limit=safe_limit, result_key="support_issue")
+    return {"ok": True, "issues": issues, "count": len(issues)}
 
 
 @app.post("/assessments/{assessment_id}/feedback", response_model=Dict[str, Any])

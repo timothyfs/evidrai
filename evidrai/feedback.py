@@ -46,6 +46,9 @@ class FeedbackStore(Protocol):
     def list_by_assessment(self, assessment_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         ...
 
+    def list_recent(self, limit: int = 50, result_key: str = "") -> List[Dict[str, Any]]:
+        ...
+
 
 class PostgresFeedbackStore:
     def __init__(self, url: str) -> None:
@@ -111,6 +114,15 @@ class PostgresFeedbackStore:
             payload = json.loads(payload)
         return payload
 
+    def _payload_rows(self, rows: list[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
+        for row in rows:
+            payload = row["payload"]
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            results.append(payload)
+        return results
+
     def list_by_assessment(self, assessment_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         self._ensure_schema()
         with self._connect() as conn:
@@ -126,13 +138,35 @@ class PostgresFeedbackStore:
                     (assessment_id, limit),
                 )
                 rows = cur.fetchall()
-        results: List[Dict[str, Any]] = []
-        for row in rows:
-            payload = row["payload"]
-            if isinstance(payload, str):
-                payload = json.loads(payload)
-            results.append(payload)
-        return results
+        return self._payload_rows(rows)
+
+    def list_recent(self, limit: int = 50, result_key: str = "") -> List[Dict[str, Any]]:
+        self._ensure_schema()
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                if result_key:
+                    cur.execute(
+                        """
+                        SELECT payload
+                        FROM feedback
+                        WHERE payload->>'result_key' = %s
+                        ORDER BY captured_at DESC NULLS LAST
+                        LIMIT %s
+                        """,
+                        (result_key, limit),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT payload
+                        FROM feedback
+                        ORDER BY captured_at DESC NULLS LAST
+                        LIMIT %s
+                        """,
+                        (limit,),
+                    )
+                rows = cur.fetchall()
+        return self._payload_rows(rows)
 
 
 class LocalFeedbackStore:
@@ -147,6 +181,9 @@ class LocalFeedbackStore:
 
     def list_by_assessment(self, assessment_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         return list_feedback_by_assessment_id(assessment_id, limit=limit, path=self.path)
+
+    def list_recent(self, limit: int = 50, result_key: str = "") -> List[Dict[str, Any]]:
+        return list_recent_feedback(limit=limit, result_key=result_key, path=self.path)
 
 
 def feedback_log_path() -> Path:
@@ -370,6 +407,14 @@ def list_feedback_by_assessment_id(assessment_id: str, limit: int = 100, path: O
     return matches[:limit]
 
 
+def list_recent_feedback(limit: int = 50, result_key: str = "", path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    records = list(_iter_local_feedback_records(path) or [])
+    if result_key:
+        records = [record for record in records if record.get("result_key") == result_key]
+    records.sort(key=lambda item: item.get("captured_at", ""), reverse=True)
+    return records[:limit]
+
+
 def get_feedback_store() -> FeedbackStore:
     url = database_url()
     if url:
@@ -406,6 +451,10 @@ def _save_feedback_record(record: Dict[str, Any], path: Optional[Path] = None) -
         message=f"Saved to feedback log: {log_path}",
         feedback_id=feedback_id,
     )
+
+
+def list_recent_feedback_records(limit: int = 50, result_key: str = "", store: Optional[FeedbackStore] = None) -> List[Dict[str, Any]]:
+    return (store or get_feedback_store()).list_recent(limit=limit, result_key=result_key)
 
 
 def save_feedback(record: Dict[str, Any], store: Optional[FeedbackStore] = None) -> FeedbackResult:

@@ -170,6 +170,25 @@ export type FeedbackResponse = {
   message: string;
 };
 
+export type SupportIssue = {
+  feedback_id?: string;
+  issue_id?: string;
+  captured_at?: string;
+  owner_id?: string;
+  comment?: string;
+  reasons?: string[];
+  source_url?: string;
+  assessment_id?: string;
+  assessment_output?: { support_issue?: { issue_type?: string; severity?: string; subject?: string; description?: string; page_url?: string; browser_context?: Record<string, unknown> } };
+};
+
+export type SupportIssueResponse = {
+  ok: boolean;
+  issue_id: string;
+  destination: string;
+  message: string;
+};
+
 export type AssessmentJobCreateResponse = {
   ok: boolean;
   job_id: string;
@@ -496,6 +515,33 @@ export function getTrustAnalytics(limit = 20): Promise<TrustAnalyticsResponse> {
 
 export function backfillTrustAnalytics(limit = 1000): Promise<TrustBackfillResponse> {
   return request<TrustBackfillResponse>(`/admin/trust/backfill?limit=${encodeURIComponent(String(limit))}`, { method: 'POST' });
+}
+
+export function submitSupportIssue(input: {
+  issue_type: 'bug' | 'support' | 'idea' | 'other';
+  severity: 'low' | 'normal' | 'high' | 'urgent';
+  subject: string;
+  description: string;
+  page_url?: string;
+  assessment_id?: string;
+  browser_context?: Record<string, unknown>;
+}): Promise<SupportIssueResponse> {
+  return request<SupportIssueResponse>('/support/issues', {
+    method: 'POST',
+    body: JSON.stringify({
+      issue_type: input.issue_type,
+      severity: input.severity,
+      subject: input.subject,
+      description: input.description,
+      page_url: input.page_url || '',
+      assessment_id: input.assessment_id || '',
+      browser_context: input.browser_context || {},
+    }),
+  });
+}
+
+export function listSupportIssues(limit = 25): Promise<{ ok: boolean; issues: SupportIssue[]; count: number }> {
+  return request<{ ok: boolean; issues: SupportIssue[]; count: number }>(`/admin/support/issues?limit=${encodeURIComponent(String(limit))}`);
 }
 
 export function submitFeedback(input: {

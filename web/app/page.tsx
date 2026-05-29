@@ -27,6 +27,7 @@ import {
   setAccessToken,
   setAccountProfile,
   submitFeedback,
+  submitSupportIssue,
   updateReportMetadata,
   verifySpeechClaims,
 } from '../lib/api';
@@ -1167,6 +1168,80 @@ function TurnstileCheck({ token, setToken, actionLabel = 'continue' }: { token: 
     <div className={`botCheck ${token ? 'botCheckComplete' : ''}`}>
       <div ref={containerRef} />
       {!token && <p className="muted">Complete the bot check to {actionLabel}.</p>}
+    </div>
+  );
+}
+
+
+function SupportIssueButton({ assessment, signedIn }: { assessment: AssessmentResponse | null; signedIn: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [issueType, setIssueType] = useState<'bug' | 'support' | 'idea' | 'other'>('bug');
+  const [severity, setSeverity] = useState<'low' | 'normal' | 'high' | 'urgent'>('normal');
+  const [subject, setSubject] = useState('');
+  const [description, setDescription] = useState('');
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!signedIn) {
+      setStatus('Sign in first so we can link the issue to your account.');
+      return;
+    }
+    setBusy(true);
+    setStatus('');
+    try {
+      const response = await submitSupportIssue({
+        issue_type: issueType,
+        severity,
+        subject,
+        description,
+        page_url: typeof window !== 'undefined' ? window.location.href : '',
+        assessment_id: assessment?.assessment_id || '',
+        browser_context: typeof window !== 'undefined' ? {
+          user_agent: window.navigator.userAgent,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          path: window.location.pathname,
+          build: assessment?.build || '',
+        } : {},
+      });
+      setStatus(`Issue sent for review. ID: ${response.issue_id}`);
+      setSubject('');
+      setDescription('');
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Could not send issue report.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={`supportWidget ${open ? 'open' : ''}`}>
+      <button className="supportFab" onClick={() => setOpen((current) => !current)} type="button">Help / bug</button>
+      {open && (
+        <section className="supportPanel" aria-label="Report an issue">
+          <div className="sectionHeader compact">
+            <div>
+              <p className="eyebrow">Support</p>
+              <h3>Report a bug or issue</h3>
+              <p className="muted">This sends the issue into the Evidrai review queue with page context so Monty/Tim can triage it.</p>
+            </div>
+            <button className="linkButton" onClick={() => setOpen(false)} type="button">Close</button>
+          </div>
+          <form onSubmit={submit}>
+            <div className="formRow">
+              <label>Type<select value={issueType} onChange={(event) => setIssueType(event.target.value as typeof issueType)}><option value="bug">Bug</option><option value="support">Support</option><option value="idea">Idea</option><option value="other">Other</option></select></label>
+              <label>Severity<select value={severity} onChange={(event) => setSeverity(event.target.value as typeof severity)}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
+            </div>
+            <label>Subject<input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Short summary" /></label>
+            <label>What happened?<textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What were you trying to do, what went wrong, and what did you expect?" /></label>
+            {assessment?.assessment_id && <p className="muted">Linked assessment: {assessment.assessment_id}</p>}
+            <button disabled={busy || (!subject.trim() && !description.trim())} type="submit">{busy ? 'Sending…' : 'Send issue'}</button>
+            {!signedIn && <p className="error">Sign in first so support reports are tied to an account.</p>}
+            {status && <p className={status.toLowerCase().includes('could not') || status.toLowerCase().includes('sign in') ? 'error' : 'success'}>{status}</p>}
+          </form>
+        </section>
+      )}
     </div>
   );
 }

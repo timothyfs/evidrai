@@ -3062,3 +3062,62 @@ html[data-theme="light"] .methodologyGuardrails {
 @media (max-width: 720px) {
   .siteHeader:has(.headerQuickCheck) { grid-template-columns: auto auto 1fr; }
 }
+
+.supportWidget {
+  bottom: 18px;
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+  position: fixed;
+  right: 18px;
+  z-index: 40;
+}
+.supportFab {
+  border-radius: 999px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.28);
+  width: auto;
+}
+.supportPanel {
+  background: color-mix(in srgb, var(--panel) 94%, black);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.36);
+  display: grid;
+  gap: 12px;
+  max-height: min(680px, calc(100vh - 92px));
+  max-width: min(420px, calc(100vw - 28px));
+  overflow: auto;
+  padding: 18px;
+}
+.supportPanel h3 { margin: 0; }
+.supportPanel form { display: grid; gap: 12px; }
+.supportPanel textarea { min-height: 120px; }
+.sectionHeader.compact { align-items: start; gap: 12px; }
+@media (max-width: 640px) {
+  .supportWidget { bottom: 12px; right: 12px; }
+  .supportPanel { max-width: calc(100vw - 24px); }
+}
+.adminIssueList {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.adminIssueList article {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+.adminIssueList article div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+.adminIssueList article span,
+.adminIssueList article small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.adminIssueList article p { margin: 0; }

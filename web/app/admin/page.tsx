@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { AccountProfile, MeResponse, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, listAdminUsers, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
+import { AccountProfile, MeResponse, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, listAdminUsers, listSupportIssues, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut } from '../../lib/auth';
 
 const TIER_OPTIONS = [
@@ -70,6 +70,7 @@ export default function AdminPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [bulkTier, setBulkTier] = useState<TierName>('pro');
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [supportIssues, setSupportIssues] = useState<SupportIssue[]>([]);
   const [editing, setEditing] = useState<string>('');
   const [details, setDetails] = useState<Record<string, ReturnType<typeof blankDetails>>>({});
   const [tempPasswords, setTempPasswords] = useState<Record<string, string>>({});
@@ -105,6 +106,20 @@ export default function AdminPage() {
     const payload = await getMe();
     setMe(payload);
     setAccount((current) => current ? { ...current, plan: payload.user.tier_label } : current);
+  }
+
+  async function loadSupportIssues() {
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await listSupportIssues(25);
+      setSupportIssues(payload.issues || []);
+      setMessage(`Loaded ${payload.count || 0} support issues.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not load support issues.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function loadUsers() {
@@ -440,6 +455,23 @@ export default function AdminPage() {
             <div><strong>Admin access</strong><span>Shown for visibility, but still controlled by the server allowlist.</span></div>
             <div><strong>Billing grouping</strong><span>Company and billing group fields prepare for organisation contracts and consolidated billing.</span></div>
           </section>
+
+          <details className="adminInviteBox">
+            <summary><span>Support issues</span><small>Bug and help reports submitted from the product</small></summary>
+            <div className="formRow compactActions"><button className="secondary" disabled={busy} onClick={loadSupportIssues} type="button">Load latest issues</button></div>
+            <div className="adminIssueList">
+              {supportIssues.length === 0 ? <p className="muted">No support issues loaded.</p> : supportIssues.map((issue) => {
+                const support = issue.assessment_output?.support_issue || {};
+                return (
+                  <article key={issue.feedback_id || issue.issue_id}>
+                    <div><strong>{support.subject || issue.comment || 'Untitled issue'}</strong><span>{support.issue_type || 'issue'} · {support.severity || 'normal'} · {issue.captured_at || ''}</span></div>
+                    <p>{support.description || issue.comment}</p>
+                    <small>{support.page_url || issue.source_url || 'No page URL'}{issue.owner_id ? ` · ${issue.owner_id}` : ''}</small>
+                  </article>
+                );
+              })}
+            </div>
+          </details>
 
           <details open className="adminInviteBox">
             <summary><span>Invite or create user</span><small>Create auth access and assign an initial product tier</small></summary>
