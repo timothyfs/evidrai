@@ -890,23 +890,79 @@ function TrustLanguageStrip() {
   );
 }
 
+function ProgressiveTrustJourney() {
+  const steps = [
+    { label: '1', title: 'Start precise', text: 'Submit one checkable claim so the system can separate evidence from background noise.' },
+    { label: '2', title: 'Inspect source roles', text: 'See what supports, contradicts, or only adds context before accepting the verdict.' },
+    { label: '3', title: 'Read the caveat', text: 'Confidence is a quality signal, not certainty. The key caveat explains what could still change.' },
+    { label: '4', title: 'Share responsibly', text: 'Use the prepared share text so the verdict travels with its uncertainty, not as a naked score.' },
+  ];
+  return (
+    <section className="progressiveTrustJourney" aria-label="Progressive trust journey">
+      <div>
+        <p className="eyebrow">Progressive trust journey</p>
+        <h3>From claim to shareable evidence</h3>
+      </div>
+      <div className="trustJourneySteps">
+        {steps.map((step) => (
+          <article key={step.label}>
+            <span>{step.label}</span>
+            <strong>{step.title}</strong>
+            <p>{step.text}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function LoadingState({ type }: { type: 'claim' | 'speech' | 'report' | 'speech-verify' }) {
+  const [activeStep, setActiveStep] = useState(0);
   const copy = {
-    claim: { title: 'Checking the claim', steps: ['Isolating the factual claim', 'Finding relevant evidence', 'Grouping sources by role', 'Preparing caveats and verdict'] },
+    claim: {
+      title: 'Checking the claim',
+      steps: [
+        'Isolating the factual claim',
+        'Searching for relevant evidence',
+        'Comparing support and contradiction',
+        'Scoring confidence and caveats',
+        'Preparing verdict and share text',
+      ],
+    },
     speech: { title: 'Extracting checkable claims', steps: ['Reading transcript', 'Separating claims from rhetoric', 'Ranking by checkability', 'Preparing selection list'] },
     report: { title: 'Loading report', steps: ['Retrieving assessment', 'Restoring evidence trail', 'Preparing verdict and caveats'] },
     'speech-verify': { title: 'Verifying selected claims', steps: ['Checking selected claims', 'Grouping sources by role', 'Preparing claim verdicts and caveats'] },
   }[type];
+
+  useEffect(() => {
+    setActiveStep(0);
+    const timer = window.setInterval(() => {
+      setActiveStep((current) => Math.min(current + 1, copy.steps.length - 1));
+    }, type === 'claim' ? 2200 : 1800);
+    return () => window.clearInterval(timer);
+  }, [copy.steps.length, type]);
+
+  const progress = Math.min(94, Math.round(((activeStep + 1) / copy.steps.length) * 100));
+
   return (
     <section className="loadingState" aria-live="polite">
       <div className="loadingOrb"><span></span></div>
       <div>
         <p className="eyebrow">Analysis in progress</p>
         <h3>{copy.title}</h3>
-        <div className="loadingSteps">
-          {copy.steps.map((step) => <span key={step}>{step}</span>)}
+        <div className="analysisProgress" aria-label={`Analysis progress: ${progress}%`}>
+          <div><span style={{ width: `${progress}%` }} /></div>
+          <strong>{progress}%</strong>
         </div>
-        <p className="loadingHint">Keep this page open while the check runs. On supported phones, Evidrai will try to keep the screen awake.</p>
+        <ol className="loadingSteps">
+          {copy.steps.map((step, index) => (
+            <li className={index < activeStep ? 'done' : index === activeStep ? 'active' : ''} key={step}>
+              <span>{index < activeStep ? '✓' : index + 1}</span>
+              {step}
+            </li>
+          ))}
+        </ol>
+        <p className="loadingHint">Current stage: {copy.steps[activeStep]}. Keep this page open while the check runs.</p>
       </div>
     </section>
   );
@@ -1250,7 +1306,12 @@ function shareAbstract(assessment: AssessmentResponse) {
   if (assessment.verdict.summary) parts.push(truncateShareText(assessment.verdict.summary, 220));
   if (assessment.verdict.key_caveat) parts.push(`Key caveat: ${truncateShareText(assessment.verdict.key_caveat, 180)}`);
   parts.push(`The report reviewed ${assessment.sources?.length || 0} source${(assessment.sources?.length || 0) === 1 ? '' : 's'}.`);
+  parts.push('Share caveat: confidence is not certainty; inspect the evidence and caveats before reposting.');
   return parts.join(' ');
+}
+
+function shareText(publicUrl: string, assessment: AssessmentResponse) {
+  return `${shareSubject(assessment)}\n\n${shareAbstract(assessment)}\n\n${publicUrl}`;
 }
 
 function shareUrls(publicUrl: string, assessment: AssessmentResponse) {
@@ -1268,11 +1329,17 @@ function shareUrls(publicUrl: string, assessment: AssessmentResponse) {
   ];
 }
 
+function savedReportShareText(publicUrl: string, report: ReportSummary) {
+  const claim = truncateShareText(report.claim || 'Evidence report', 96);
+  const verdict = report.verdict || 'Unverified';
+  return `Evidrai report: ${claim} — ${verdict}\n\nEvidrai assessed this saved report as ${verdict.toLowerCase()}. Share caveat: confidence is not certainty; inspect the evidence and caveats before reposting.\n\n${publicUrl}`;
+}
+
 function savedReportShareUrls(publicUrl: string, report: ReportSummary) {
   const claim = truncateShareText(report.claim || 'Evidence report', 96);
   const verdict = report.verdict || 'Unverified';
   const title = `Evidrai report: ${claim} — ${verdict}`;
-  const abstract = `Evidrai assessed this saved report as ${verdict.toLowerCase()}.`;
+  const abstract = `Evidrai assessed this saved report as ${verdict.toLowerCase()}. Share caveat: confidence is not certainty; inspect the evidence and caveats before reposting.`;
   const body = `${abstract}\n\n${publicUrl}`;
   const socialText = `${title}\n\n${abstract}`;
   return [
@@ -1298,14 +1365,14 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
       let copied = false;
       if (platform === 'copy' && navigator.clipboard) {
         try {
-          await navigator.clipboard.writeText(url);
+          await navigator.clipboard.writeText(shareText(url, assessment));
           copied = true;
         } catch (copyErr) {
-          console.warn('Could not copy share link automatically', copyErr);
+          console.warn('Could not copy share text automatically', copyErr);
         }
       }
       const shareType = payload.access_level === 'full' ? 'Full public report' : 'Simple public share';
-      setMessage(copied ? `${shareType} link copied.` : `${shareType} link created. Copy it from the field below.`);
+      setMessage(copied ? `${shareType} text copied.` : `${shareType} link created. Copy the suggested text or link below.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not create share link');
     } finally {
@@ -1322,11 +1389,12 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
         <p className="muted">Free users can share a simple verdict/summary card. Pro users share the full evidence report.</p>
       </div>
       <div className="shareActions">
-        <button className="secondary" disabled={busy} onClick={() => createShare('copy')} type="button">{busy ? 'Creating…' : publicUrl ? 'Copy link' : 'Create share link'}</button>
+        <button className="secondary" disabled={busy} onClick={() => createShare('copy')} type="button">{busy ? 'Creating…' : publicUrl ? 'Copy share text' : 'Create share link'}</button>
         {publicUrl && links.map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}
       </div>
+      {publicUrl && <div className="shareTextPreview"><label>Suggested share text<textarea readOnly value={shareText(publicUrl, assessment)} onFocus={(event) => event.currentTarget.select()} /></label></div>}
       {publicUrl && <div className="shareLinkRow"><input readOnly value={publicUrl} onFocus={(event) => event.currentTarget.select()} /><a className="button secondary" href={publicUrl} target="_blank" rel="noreferrer">Open</a></div>}
-      {publicUrl && <p className="muted">Instagram does not allow normal web share intents. Copy the link and paste it into a bio, story sticker, caption, or DM.</p>}
+      {publicUrl && <p className="muted">The copy button now copies the prepared text plus link. Instagram still needs manual paste into a story sticker, caption, bio, or DM.</p>}
       {!canShare && <p className="muted">Free share is intentionally lightweight and branded for discovery. Upgrade to Pro for full evidence-source sharing.</p>}
       {message && <p className={message.toLowerCase().includes('could not') || message.toLowerCase().includes('feature') ? 'error' : 'muted'}>{message}</p>}
     </section>
@@ -1862,16 +1930,16 @@ export default function Home() {
       let copied = false;
       if (navigator.clipboard) {
         try {
-          await navigator.clipboard.writeText(url);
+          await navigator.clipboard.writeText(savedReportShareText(url, report));
           copied = true;
         } catch (copyErr) {
-          console.warn('Could not copy saved report share link automatically', copyErr);
+          console.warn('Could not copy saved report share text automatically', copyErr);
         }
       }
       const shareType = payload.access_level === 'full' ? 'Full public report' : 'Simple public share';
       setReportShareMessages((current) => ({
         ...current,
-        [report.assessment_id]: copied ? `${shareType} link copied.` : `${shareType} link created. Copy it from the field below.`,
+        [report.assessment_id]: copied ? `${shareType} text copied.` : `${shareType} link created. Copy the suggested text or link below.`,
       }));
     } catch (err) {
       setReportShareMessages((current) => ({ ...current, [report.assessment_id]: err instanceof Error ? err.message : 'Could not create share link' }));
@@ -1953,6 +2021,7 @@ export default function Home() {
 
       {signedIn && <section className="workspaceIntro"><p>Evidence-based assessment · Sources grouped by role · Confidence is not certainty · Reasoning is inspectable</p></section>}
       {signedIn && <TrustLanguageStrip />}
+      {signedIn && !assessment && !speechExtraction && <ProgressiveTrustJourney />}
 
       {signedIn && <div className="layout">
         <section className="card verifyCard">
@@ -2084,11 +2153,12 @@ export default function Home() {
                 <div className="reportActions">
                   <button className="secondary" onClick={() => openReportInNewTab(report.assessment_id)} type="button">View</button>
                   <button className="secondary" onClick={() => loadReport(report.assessment_id)} type="button">Load here</button>
-                  <button className="secondary" disabled={sharingReportId === report.assessment_id} onClick={() => shareSavedReport(report)} type="button">{sharingReportId === report.assessment_id ? 'Creating…' : reportShareLinks[report.assessment_id] ? 'Copy share link' : 'Share'}</button>
+                  <button className="secondary" disabled={sharingReportId === report.assessment_id} onClick={() => shareSavedReport(report)} type="button">{sharingReportId === report.assessment_id ? 'Creating…' : reportShareLinks[report.assessment_id] ? 'Copy share text' : 'Share'}</button>
                   <button className="secondary" onClick={() => toggleReportProtected(report)} type="button">{report.protected ? 'Allow cycling' : 'Do not delete'}</button>
                   <button className="secondary dangerAction" onClick={() => removeReport(report)} type="button">Delete</button>
                 </div>
                 {reportShareLinks[report.assessment_id] && <div className="savedReportShare">
+                  <div className="shareTextPreview compact"><label>Suggested share text<textarea readOnly value={savedReportShareText(reportShareLinks[report.assessment_id], report)} onFocus={(event) => event.currentTarget.select()} /></label></div>
                   <div className="shareLinkRow"><input readOnly value={reportShareLinks[report.assessment_id]} onFocus={(event) => event.currentTarget.select()} /><a className="button secondary" href={reportShareLinks[report.assessment_id]} target="_blank" rel="noreferrer">Open</a></div>
                   <div className="reportActions">{savedReportShareUrls(reportShareLinks[report.assessment_id], report).map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}</div>
                 </div>}

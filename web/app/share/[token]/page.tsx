@@ -39,6 +39,7 @@ function reportAbstract(report: AssessmentResponse, isSimple = false) {
   if (report.verdict.summary) parts.push(truncateText(report.verdict.summary, 220));
   if (report.verdict.key_caveat) parts.push(`Key caveat: ${truncateText(report.verdict.key_caveat, 180)}`);
   if (!isSimple) parts.push(`The report reviewed ${report.sources?.length || 0} source${(report.sources?.length || 0) === 1 ? '' : 's'}.`);
+  parts.push('Share caveat: confidence is not certainty; inspect the evidence and caveats before reposting.');
   return parts.join(' ');
 }
 

@@ -1253,18 +1253,77 @@ html[data-theme="light"] .verdictPanel {
   height: 34px;
   width: 34px;
 }
-.loadingSteps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.analysisProgress {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 8px 0 14px;
 }
-.loadingSteps span {
+.analysisProgress div {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+.analysisProgress div span {
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 42%, white));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transition: width 480ms ease;
+}
+.analysisProgress strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+.loadingSteps {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.loadingSteps li {
+  align-items: center;
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
-  font-size: 0.82rem;
+  display: flex;
+  font-size: 0.84rem;
   font-weight: 850;
-  padding: 7px 9px;
+  gap: 9px;
+  padding: 8px 11px;
+}
+.loadingSteps li span {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+.loadingSteps li.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  color: var(--ink);
+}
+.loadingSteps li.active span {
+  animation: loadingPulse 1.8s ease-in-out infinite;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+}
+.loadingSteps li.done {
+  color: var(--ink);
+  opacity: 0.72;
+}
+.loadingSteps li.done span {
+  background: color-mix(in srgb, var(--good) 16%, transparent);
+  border-color: color-mix(in srgb, var(--good) 42%, var(--line));
 }
 .loadingHint {
   color: var(--muted);
@@ -1823,6 +1882,45 @@ html[data-theme="light"] .guideSteps span {
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+
+.progressiveTrustJourney {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02));
+  display: grid;
+  gap: 16px;
+  margin: 0 0 22px;
+  padding: 18px;
+}
+.progressiveTrustJourney h3 { margin: 0; }
+.trustJourneySteps {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.trustJourneySteps article {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(0,0,0,0.08);
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+}
+.trustJourneySteps span {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+.trustJourneySteps p { color: var(--muted); line-height: 1.42; margin: 0; }
+@media (max-width: 900px) { .trustJourneySteps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .trustJourneySteps { grid-template-columns: 1fr; } }
 .adminStats,
 .adminGuardRails {
   display: grid;
@@ -2387,6 +2485,23 @@ html[data-theme="light"] .methodologyGuardrails {
 .shareActions { display: flex; flex-wrap: wrap; gap: 10px; }
 .shareActions .button, .shareActions button { width: auto; }
 .sharePanel input { font-size: .9rem; }
+.shareTextPreview label {
+  color: var(--muted);
+  display: grid;
+  gap: 7px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.shareTextPreview textarea {
+  min-height: 118px;
+  resize: vertical;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+.shareTextPreview.compact textarea { min-height: 92px; }
 .publicReport { max-width: 1040px; margin: 28px auto; }
 .publicReport h1 { margin: 0; font-size: clamp(2rem, 5vw, 4rem); letter-spacing: -0.05em; }
 
