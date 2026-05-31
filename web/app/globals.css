@@ -3148,3 +3148,115 @@ html[data-theme="light"] .methodologyGuardrails {
   font-size: 0.78rem;
 }
 .adminIssueList article p { margin: 0; }
+
+/* Legal and trust policy pages */
+.policyPage {
+  gap: 22px;
+  max-width: 920px;
+  margin-inline: auto;
+}
+.policyPage h1 {
+  font-size: clamp(2.25rem, 6vw, 4.8rem);
+  line-height: 0.98;
+}
+.lastUpdated {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  margin: -8px 0 0;
+}
+.policyNotice,
+.policySummary,
+.policyContact {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(157,183,213,0.075);
+  padding: 18px 20px;
+}
+.policyNotice {
+  color: var(--muted);
+  font-weight: 750;
+  margin: 0;
+}
+.policySummary h2,
+.policyContact h2,
+.policyContent h2 {
+  letter-spacing: -0.025em;
+}
+.policySummary ul,
+.policyContent ul {
+  color: var(--muted);
+  display: grid;
+  gap: 9px;
+  line-height: 1.6;
+  margin: 10px 0 0;
+  padding-left: 22px;
+}
+.policyContent {
+  display: grid;
+  gap: 24px;
+}
+.policyContent section {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  padding-top: 22px;
+}
+.policyContent p,
+.policyContact p {
+  color: var(--muted);
+  line-height: 1.68;
+  margin: 0;
+}
+.policyContact a,
+.siteFooter a {
+  color: var(--accent-strong, var(--accent));
+}
+.siteFooter {
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+  gap: 28px;
+  margin: 0 auto;
+  padding: 36px 0 48px;
+  width: min(1180px, calc(100vw - 32px));
+}
+.siteFooterBrand {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+.siteFooterBrand strong { display: block; font-size: 1.05rem; }
+.siteFooterBrand p { color: var(--muted); line-height: 1.45; margin: 3px 0 0; }
+.siteFooterLinks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+.siteFooterLinks section {
+  display: grid;
+  gap: 8px;
+}
+.siteFooterLinks h2 {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+.siteFooterLinks a {
+  border-radius: 10px;
+  color: var(--ink);
+  font-weight: 750;
+  padding: 4px 0;
+  text-decoration: none;
+}
+.siteFooterLinks a:hover { text-decoration: underline; }
+@media (max-width: 760px) {
+  .policyPage { padding: 20px; }
+  .siteFooter,
+  .siteFooterLinks { grid-template-columns: 1fr; }
+  .siteFooter { padding-bottom: 32px; }
+}
