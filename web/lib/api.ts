@@ -445,8 +445,32 @@ export async function getPublicSharedReport(token: string): Promise<PublicReport
   return response.json() as Promise<PublicReportResponse>;
 }
 
+export type ScoringPolicy = {
+  schema_version: string;
+  version: number;
+  updated_at: string;
+  updated_by: string;
+  change_note: string;
+  source_score_weights: Record<string, number>;
+  source_type_authority: Record<string, number>;
+  source_type_independence: Record<string, number>;
+  source_type_bias_risk: Record<string, number>;
+  notes: string[];
+};
+
 export function listAdminUsers(): Promise<{ ok: boolean; users: UserProfile[]; feature_matrix: { schema_version: string; tiers: TierDefinition[] } }> {
   return request<{ ok: boolean; users: UserProfile[]; feature_matrix: { schema_version: string; tiers: TierDefinition[] } }>('/admin/users');
+}
+
+export function getAdminScoringPolicy(): Promise<{ ok: boolean; policy: ScoringPolicy; weight_sum: number; history: ScoringPolicy[] }> {
+  return request<{ ok: boolean; policy: ScoringPolicy; weight_sum: number; history: ScoringPolicy[] }>('/admin/scoring-policy');
+}
+
+export function updateAdminScoringPolicy(input: Partial<ScoringPolicy> & { change_note?: string }): Promise<{ ok: boolean; policy: ScoringPolicy; weight_sum: number; history: ScoringPolicy[] }> {
+  return request<{ ok: boolean; policy: ScoringPolicy; weight_sum: number; history: ScoringPolicy[] }>('/admin/scoring-policy', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
 }
 
 export function setAdminUserTier(input: { owner_id: string; tier: TierName; email?: string }): Promise<{ ok: boolean; user: UserProfile }> {

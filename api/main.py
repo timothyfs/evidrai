@@ -36,6 +36,7 @@ from evidrai.pipeline.verification import (
     verify_speech_claim,
 )
 from evidrai.reports import _assessment_field, create_report_share, delete_report, enforce_report_retention, list_reports, load_report, load_shared_report, save_report, set_report_metadata
+from evidrai.scoring import get_scoring_policy, list_scoring_policy_history, policy_to_dict, update_scoring_policy, weight_sum
 from evidrai.transcripts import clean_pasted_youtube_transcript, diagnose_youtube_transcript, extract_youtube_transcript, transcript_backend_status
 from evidrai.utils import build_analysis_input, is_probable_url
 
@@ -175,6 +176,15 @@ class AdminInviteUserRequest(BaseModel):
     tier: str = Field(default="free", pattern="^(free|pro|researcher)$")
     send_invite: bool = True
     redirect_to: str = ""
+
+
+class AdminScoringPolicyUpdateRequest(BaseModel):
+    source_score_weights: Dict[str, float] = Field(default_factory=dict)
+    source_type_authority: Dict[str, float] = Field(default_factory=dict)
+    source_type_independence: Dict[str, float] = Field(default_factory=dict)
+    source_type_bias_risk: Dict[str, float] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
+    change_note: str = ""
 
 
 class ApiEnvelope(BaseModel):
@@ -764,8 +774,23 @@ def admin_set_user_tier(request: AdminSetTierRequest, http_request: Request) -> 
     return {"ok": True, "user": _profile_admin_view(profile)}
 
 
+@app.get("/admin/scoring-policy", response_model=Dict[str, Any])
+def admin_get_scoring_policy(http_request: Request, limit: int = 25) -> Dict[str, Any]:
+    _require_admin(http_request)
+    policy = get_scoring_policy()
+    return {"ok": True, "policy": policy_to_dict(policy), "weight_sum": weight_sum(policy), "history": list_scoring_policy_history(limit=limit)}
 
 
+@app.patch("/admin/scoring-policy", response_model=Dict[str, Any])
+def admin_update_scoring_policy(request: AdminScoringPolicyUpdateRequest, http_request: Request) -> Dict[str, Any]:
+    context = _auth_context_from_request(http_request)
+    _require_admin(http_request)
+    policy = update_scoring_policy(
+        request.model_dump(mode="json"),
+        updated_by=context.email or context.owner_id or "admin",
+        change_note=request.change_note,
+    )
+    return {"ok": True, "policy": policy_to_dict(policy), "weight_sum": weight_sum(policy), "history": list_scoring_policy_history(limit=25)}
 
 
 @app.patch("/admin/users/profile", response_model=Dict[str, Any])

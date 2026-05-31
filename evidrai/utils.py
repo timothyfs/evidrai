@@ -13,17 +13,33 @@ from .config import SCORING_CONFIG
 
 # -----------------------------
 
-PRIMARY_DOMAINS = (
+SCIENTIFIC_DOMAINS = (
+    "nature.com",
+    "science.org",
+    "sciencedirect.com",
+    "springer.com",
+    "pubmed.ncbi.nlm.nih.gov",
+    "nih.gov",
+    "who.int",
+    "thelancet.com",
+    "nejm.org",
+    "arxiv.org",
+    "biorxiv.org",
+    "medrxiv.org",
+)
+GOVERNMENT_DOMAINS = (
     ".gov",
     ".gouv.fr",
+    "nhs.uk",
+    "oecd.org",
+)
+LEGAL_DOMAINS = (
     ".parliament.uk",
     ".legislation.gov.uk",
     ".judiciary.uk",
-    ".edu",
-    "who.int",
-    "nih.gov",
-    "nhs.uk",
-    "oecd.org",
+    "supremecourt.uk",
+    "justice.gov.uk",
+    "eur-lex.europa.eu",
 )
 SECONDARY_DOMAINS = (
     "reuters.com",
@@ -57,10 +73,14 @@ def domain_from_url(url: str) -> str:
 
 
 def classify_source_type(domain: str) -> str:
-    if any(d in domain for d in PRIMARY_DOMAINS):
-        return "primary"
+    if any(d in domain for d in SCIENTIFIC_DOMAINS):
+        return "scientific"
+    if any(d in domain for d in LEGAL_DOMAINS):
+        return "legal"
+    if any(d in domain for d in GOVERNMENT_DOMAINS):
+        return "government"
     if any(d in domain for d in SECONDARY_DOMAINS):
-        return "secondary"
+        return "news"
     return "contextual"
 
 

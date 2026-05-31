@@ -139,7 +139,7 @@ def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
             stats["unique_clusters"].add(cluster)
 
         source_type = (s.get("source_type") or "").lower()
-        is_primaryish = source_type in {"primary", "official", "government", "court", "parliament", "document", "record"}
+        is_primaryish = source_type in {"primary", "scientific", "official", "government", "legal", "court", "parliament", "document", "record"}
         is_high_quality = is_primaryish or source_type == "secondary" or float(s.get("weighted_score") or 0) >= 4.25
 
         if category in {"direct_evidence", "credible_reporting", "expert_analysis"}:
@@ -210,7 +210,7 @@ def assess_amplification_risk(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
         if support == "supports" and category in {"direct_evidence", "credible_reporting", "expert_analysis"}:
             substantive_support_clusters.add(cluster)
             source_type = (source.get("source_type") or "").lower()
-            if source_type in {"primary", "official", "government", "court", "parliament", "document", "record"}:
+            if source_type in {"primary", "scientific", "official", "government", "legal", "court", "parliament", "document", "record"}:
                 primary_support_clusters.add(cluster)
 
     dominant_cluster, dominant_count = clusters.most_common(1)[0] if clusters else ("", 0)
@@ -301,6 +301,10 @@ def rule_based_verdict_from_evidence(
         verdict = "False / contradicted"
         confidence = "High" if primary_contradictory >= 1 else "Medium"
         rationale = "The claim uses absolute language, and a credible counterexample directly contradicts it. One strong counterexample is enough to defeat a 'never', 'always', 'only', or similarly absolute claim."
+    elif contradictory >= 1 and supportive == 0 and high_quality_contradictory >= 1 and concrete_factual_claim:
+        verdict = "False / contradicted"
+        confidence = "High" if primary_contradictory >= 1 else "Medium"
+        rationale = "A credible current source directly contradicts the factual claim, and no substantive support was identified in the reviewed set."
     elif contradictory >= 2 and supportive == 0:
         verdict = "False / contradicted" if high_quality_contradictory >= 1 else "Not supported by credible evidence"
         confidence = "High" if primary_contradictory >= 1 or high_quality_contradictory >= 1 else "Medium"
@@ -479,14 +483,16 @@ def normalize_evidence_category(category: str) -> str:
 def source_bucket_multiplier(source_type: str, domain: str) -> float:
     stype = (source_type or "").lower()
     d = (domain or "").lower()
-    if stype in {"official", "government", "court", "parliament"}:
-        return 1.5
+    if stype in {"scientific", "expert_publication", "journal"}:
+        return 1.6
+    if stype in {"official", "government", "legal", "court", "parliament"}:
+        return 1.45
     if stype in {"primary", "document", "record"}:
-        return 1.4
+        return 1.35
     if any(x in d for x in ["reuters.com", "apnews.com", "bbc.", "ft.com", "nytimes.com", "theguardian.com", "lemonde.fr", "france24.com"]):
-        return 1.3
-    if stype in {"expert_publication", "journal", "think_tank"}:
-        return 1.2
+        return 1.05
+    if stype in {"news", "secondary", "think_tank"}:
+        return 1.0
     if stype in {"commentary", "analysis"}:
         return 1.0
     if stype in {"local_news"}:
@@ -534,7 +540,9 @@ def evidence_pendulum(sources: List[Dict[str, Any]], claim_type: str = "other") 
                 direction = -1.0
             elif cat in {"reported_allegation", "contextual_signal", "denial_or_rebuttal", "rumor_amplification"}:
                 direction = 0.0
-            contribution = base * mult * (decay[idx] if idx < len(decay) else 0.1) * direction
+            source_score = max(0.0, min(5.0, float(s.get("weighted_score") or 0.0)))
+            score_factor = max(0.35, source_score / 4.0) if source_score else 0.7
+            contribution = base * mult * score_factor * (decay[idx] if idx < len(decay) else 0.1) * direction
             score += contribution
             if cat in {"direct_evidence", "credible_reporting", "expert_analysis"} and support == "supports":
                 support_count += 1

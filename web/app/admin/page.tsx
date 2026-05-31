@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { AccountProfile, MeResponse, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, listAdminUsers, listSupportIssues, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
+import { AccountProfile, MeResponse, ScoringPolicy, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAdminScoringPolicy, getAnonymousAccountProfile, inviteAdminUser, getMe, listAdminUsers, listSupportIssues, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminScoringPolicy, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut } from '../../lib/auth';
 
 const TIER_OPTIONS = [
@@ -27,6 +27,8 @@ type SortState = { key: SortKey; direction: 'asc' | 'desc' };
 type Filters = Partial<Record<SortKey, string>>;
 
 const sortableColumns = new Set<AdminColumnKey>(['email', 'company_name', 'billing_account_name', 'tier_label', 'admin_access', 'subscription_status']);
+const WEIGHT_KEYS = ['authority', 'relevance', 'directness', 'independence', 'recency', 'bias_risk'] as const;
+const SOURCE_TYPE_KEYS = ['scientific', 'government', 'legal', 'primary', 'news', 'secondary', 'contextual'] as const;
 
 function valueFor(user: UserProfile, key: SortKey) {
   if (key === 'admin_access') return user.admin_access ? 'enabled' : 'none';
@@ -80,6 +82,11 @@ export default function AdminPage() {
   const [tempPasswords, setTempPasswords] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [scoringPolicy, setScoringPolicy] = useState<ScoringPolicy | null>(null);
+  const [scoringHistory, setScoringHistory] = useState<ScoringPolicy[]>([]);
+  const [scoringWeightSum, setScoringWeightSum] = useState(0);
+  const [scoringDraft, setScoringDraft] = useState<ScoringPolicy | null>(null);
+  const [scoringChangeNote, setScoringChangeNote] = useState('');
 
   const isAdmin = Boolean(me?.is_admin);
 
@@ -105,6 +112,7 @@ export default function AdminPage() {
   const selectedUsers = selected.map((ownerId) => users.find((user) => user.owner_id === ownerId)).filter(Boolean) as UserProfile[];
   const allVisibleSelected = filteredUsers.length > 0 && filteredUsers.every((user) => selected.includes(user.owner_id));
   const editingUser = users.find((user) => user.owner_id === editing) || null;
+  const draftWeightSum = scoringDraft ? WEIGHT_KEYS.reduce((sum, key) => sum + Number(scoringDraft.source_score_weights[key] || 0), 0) : 0;
 
   async function refreshMe() {
     const payload = await getMe();
@@ -141,6 +149,58 @@ export default function AdminPage() {
     }
   }
 
+  async function loadScoringPolicy() {
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await getAdminScoringPolicy();
+      setScoringPolicy(payload.policy);
+      setScoringDraft(payload.policy);
+      setScoringHistory(payload.history || []);
+      setScoringWeightSum(payload.weight_sum || 0);
+      setMessage(`Loaded scoring policy v${payload.policy.version}.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not load scoring policy.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateScoringDraft(section: 'source_score_weights' | 'source_type_authority' | 'source_type_independence' | 'source_type_bias_risk', key: string, value: string) {
+    const numeric = Number(value);
+    setScoringDraft((current) => current ? { ...current, [section]: { ...current[section], [key]: Number.isFinite(numeric) ? numeric : 0 } } : current);
+  }
+
+  async function saveScoringPolicy() {
+    if (!scoringDraft) return;
+    if (!scoringChangeNote.trim()) {
+      setMessage('A change note is required so scoring changes remain auditable.');
+      return;
+    }
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await updateAdminScoringPolicy({
+        source_score_weights: scoringDraft.source_score_weights,
+        source_type_authority: scoringDraft.source_type_authority,
+        source_type_independence: scoringDraft.source_type_independence,
+        source_type_bias_risk: scoringDraft.source_type_bias_risk,
+        notes: scoringDraft.notes,
+        change_note: scoringChangeNote.trim(),
+      });
+      setScoringPolicy(payload.policy);
+      setScoringDraft(payload.policy);
+      setScoringHistory(payload.history || []);
+      setScoringWeightSum(payload.weight_sum || 0);
+      setScoringChangeNote('');
+      setMessage(`Saved scoring policy v${payload.policy.version}.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not save scoring policy.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     const fallback = getAnonymousAccountProfile();
     setAccount(fallback);
@@ -165,7 +225,10 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) loadUsers();
+    if (isAdmin) {
+      loadUsers();
+      loadScoringPolicy();
+    }
   }, [isAdmin]);
 
   function toggleSort(key: AdminColumnKey) {
@@ -461,6 +524,60 @@ export default function AdminPage() {
             <div><strong>Admin access</strong><span>Shown for visibility, but still controlled by the server allowlist.</span></div>
             <div><strong>Billing grouping</strong><span>Company and billing group fields prepare for organisation contracts and consolidated billing.</span></div>
           </section>
+
+          <details open className="adminInviteBox scoringPolicyEditor">
+            <summary><span>Scoring policy</span><small>Source weights, source-type scores, and auditable change history</small></summary>
+            {!scoringDraft ? (
+              <div className="formRow compactActions"><button className="secondary" disabled={busy} onClick={loadScoringPolicy} type="button">Load scoring policy</button></div>
+            ) : (
+              <>
+                <div className="adminGuardRails" aria-label="Scoring policy summary">
+                  <div><strong>Active version</strong><span>v{scoringPolicy?.version || scoringDraft.version} · {scoringPolicy?.updated_by || scoringDraft.updated_by}</span></div>
+                  <div><strong>Weight total</strong><span className={Math.abs(draftWeightSum - 1) < 0.001 ? '' : 'warningText'}>{draftWeightSum.toFixed(2)} target 1.00</span></div>
+                  <div><strong>Bias rule</strong><span>Bias risk is inverted in scoring, so lower bias risk increases trust.</span></div>
+                </div>
+                <div className="scoringGrid">
+                  <section>
+                    <h3>Factor weights</h3>
+                    {WEIGHT_KEYS.map((key) => (
+                      <label key={key}>{key.replace('_', ' ')}<input min="0" max="1" step="0.01" type="number" value={scoringDraft.source_score_weights[key] ?? 0} onChange={(event) => updateScoringDraft('source_score_weights', key, event.target.value)} /></label>
+                    ))}
+                  </section>
+                  <section>
+                    <h3>Authority score</h3>
+                    {SOURCE_TYPE_KEYS.map((key) => (
+                      <label key={key}>{key}<input min="0" max="5" step="0.1" type="number" value={scoringDraft.source_type_authority[key] ?? 0} onChange={(event) => updateScoringDraft('source_type_authority', key, event.target.value)} /></label>
+                    ))}
+                  </section>
+                  <section>
+                    <h3>Independence score</h3>
+                    {SOURCE_TYPE_KEYS.map((key) => (
+                      <label key={key}>{key}<input min="0" max="5" step="0.1" type="number" value={scoringDraft.source_type_independence[key] ?? 0} onChange={(event) => updateScoringDraft('source_type_independence', key, event.target.value)} /></label>
+                    ))}
+                  </section>
+                  <section>
+                    <h3>Bias risk</h3>
+                    {SOURCE_TYPE_KEYS.map((key) => (
+                      <label key={key}>{key}<input min="0" max="5" step="0.1" type="number" value={scoringDraft.source_type_bias_risk[key] ?? 0} onChange={(event) => updateScoringDraft('source_type_bias_risk', key, event.target.value)} /></label>
+                    ))}
+                  </section>
+                </div>
+                <label className="notesField">Change note<textarea value={scoringChangeNote} onChange={(event) => setScoringChangeNote(event.target.value)} placeholder="Why this scoring policy changed" /></label>
+                <div className="formRow compactActions">
+                  <button disabled={busy || !scoringChangeNote.trim()} onClick={saveScoringPolicy} type="button">Save scoring policy</button>
+                  <button className="secondary" disabled={busy} onClick={loadScoringPolicy} type="button">Reload</button>
+                </div>
+                <div className="adminIssueList scoringHistory">
+                  {scoringHistory.slice(0, 5).map((item) => (
+                    <article key={item.version}>
+                      <div><strong>v{item.version}</strong><span>{item.updated_at} · {item.updated_by}</span></div>
+                      <p>{item.change_note || 'No change note.'}</p>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
+          </details>
 
           <details className="adminInviteBox">
             <summary><span>Support issues</span><small>Bug and help reports submitted from the product</small></summary>

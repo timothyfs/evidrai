@@ -147,6 +147,38 @@ def test_admin_users_marks_master_admin_access(monkeypatch):
 
 
 
+def test_admin_scoring_policy_requires_admin(monkeypatch):
+    monkeypatch.setattr(api_main, "admin_token", lambda: "secret-token")
+
+    response = client.get("/admin/scoring-policy")
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "admin_forbidden"
+
+
+def test_master_admin_can_view_and_update_scoring_policy(monkeypatch):
+    policy = api_main.get_scoring_policy()
+    saved = []
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "get_scoring_policy", lambda: policy)
+    monkeypatch.setattr(api_main, "list_scoring_policy_history", lambda limit=25: [api_main.policy_to_dict(policy)])
+    monkeypatch.setattr(api_main, "update_scoring_policy", lambda update, updated_by="admin", change_note="": saved.append((update, updated_by, change_note)) or policy)
+
+    get_response = client.get("/admin/scoring-policy", headers={"Authorization": "Bearer token"})
+    patch_response = client.patch(
+        "/admin/scoring-policy",
+        json={"source_type_independence": {"scientific": 5.0, "news": 2.4}, "change_note": "Tune source independence."},
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert get_response.status_code == 200
+    assert get_response.json()["policy"]["source_type_authority"]["scientific"] == 5.0
+    assert patch_response.status_code == 200
+    assert saved[0][1] == "master@example.com"
+    assert saved[0][2] == "Tune source independence."
+
+
 def test_admin_update_user_profile_details(monkeypatch):
     monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
     monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))

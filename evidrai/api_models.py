@@ -153,6 +153,7 @@ def _source_scoring_factors(source: Dict[str, Any]) -> Dict[str, float]:
         ("relevance", "relevance_score"),
         ("directness", "directness_score"),
         ("recency", "recency_score"),
+        ("independence", "independence_score"),
         ("bias_risk", "bias_risk_score"),
     ):
         value = _float_or_none(supplied.get(key))

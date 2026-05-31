@@ -16,6 +16,7 @@ from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.claim_semantics import analyze_claim_semantics, merge_semantic_queries
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import SCORING_CONFIG
+from evidrai.scoring import get_scoring_policy
 from evidrai.models import (
     ClaimAnalysisModel,
     ClaimAnalysisResult,
@@ -347,11 +348,21 @@ def score_source(item: Dict[str, Any], claim_text: str) -> EvidenceSource:
         if re.search(SCORING_CONFIG.term_pattern.format(term=re.escape(t)), haystack):
             overlap += 1
     relevance = min(5.0, 1.0 + overlap)
-    authority = 5.0 if source_type == "primary" else 3.8 if source_type == "secondary" else 2.2
+    policy = get_scoring_policy()
+    weights = policy.source_score_weights
+    authority = float(policy.source_type_authority.get(source_type, policy.source_type_authority.get("contextual", 2.2)))
     directness = 4.5 if any(re.search(SCORING_CONFIG.term_pattern.format(term=re.escape(t)), haystack) for t in terms[:3]) else 2.5
     recency = recency_score(item.get("published_date"))
-    bias_risk = 1.5 if source_type == "primary" else 2.5 if source_type == "secondary" else 3.5
-    weighted = authority * SCORING_CONFIG.authority_weight + relevance * SCORING_CONFIG.relevance_weight + directness * SCORING_CONFIG.directness_weight + recency * SCORING_CONFIG.recency_weight + (5 - bias_risk) * SCORING_CONFIG.bias_weight
+    independence = float(policy.source_type_independence.get(source_type, policy.source_type_independence.get("contextual", 2.0)))
+    bias_risk = float(policy.source_type_bias_risk.get(source_type, policy.source_type_bias_risk.get("contextual", 3.7)))
+    weighted = (
+        authority * weights.authority
+        + relevance * weights.relevance
+        + directness * weights.directness
+        + independence * weights.independence
+        + recency * weights.recency
+        + (5 - bias_risk) * weights.bias_risk
+    )
     return EvidenceSource(
         title=title,
         url=url,
@@ -364,6 +375,7 @@ def score_source(item: Dict[str, Any], claim_text: str) -> EvidenceSource:
         relevance_score=relevance,
         directness_score=directness,
         recency_score=recency,
+        independence_score=independence,
         bias_risk_score=bias_risk,
         weighted_score=round(weighted, 2),
     )
@@ -384,6 +396,7 @@ def known_counterexample_sources(claim_text: str) -> List[EvidenceSource]:
                 relevance_score=5.0,
                 directness_score=5.0,
                 recency_score=4.0,
+                independence_score=4.5,
                 bias_risk_score=1.0,
                 weighted_score=5.0,
                 claim_support="contradicts",

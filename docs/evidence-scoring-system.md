@@ -46,15 +46,19 @@ For each source:
 
 ```text
 source_score =
-  authority_score   * 0.30 +
-  relevance_score   * 0.25 +
-  directness_score  * 0.20 +
-  recency_score     * 0.10 +
+  authority_score    * 0.30 +
+  relevance_score    * 0.25 +
+  directness_score   * 0.20 +
   independence_score * 0.10 +
-  bias_risk_score   * 0.05
+  recency_score      * 0.10 +
+  inverted_bias_risk * 0.05
 ```
 
 All component scores are normalised to **0.0-5.0**.
+
+The current default policy ranks source independence/authority roughly as scientific first, then government/legal, then primary records, then news/contextual material. News sources are deliberately scored more harshly because editorial framing, political bias, and common wire-source chains can inflate apparent confidence.
+
+Admins can review and tune these values in the admin scoring-policy UI. Each saved change creates a versioned policy entry with the editor and change note.
 
 `bias_risk_score` is inverted before scoring: low bias risk produces a higher contribution.
 

@@ -31,6 +31,7 @@ class EvidenceSource:
     relevance_score: float = 0.0
     directness_score: float = 0.0
     recency_score: float = 0.0
+    independence_score: float = 2.5
     bias_risk_score: float = 2.5
     weighted_score: float = 0.0
     claim_support: str = "irrelevant"
@@ -55,11 +56,13 @@ class EvidenceSource:
             "relevance_score": self.relevance_score,
             "directness_score": self.directness_score,
             "recency_score": self.recency_score,
+            "independence_score": self.independence_score,
             "bias_risk_score": self.bias_risk_score,
             "scoring_factors": {
                 "authority": self.authority_score,
                 "relevance": self.relevance_score,
                 "directness": self.directness_score,
+                "independence": self.independence_score,
                 "recency": self.recency_score,
                 "bias_risk": self.bias_risk_score,
                 "weighted": self.weighted_score,
@@ -73,6 +76,7 @@ class EvidenceSource:
                 "authority": self.authority_score,
                 "relevance": self.relevance_score,
                 "directness": self.directness_score,
+                "independence": self.independence_score,
                 "recency": self.recency_score,
                 "bias_risk": self.bias_risk_score,
                 "weighted": self.weighted_score,
