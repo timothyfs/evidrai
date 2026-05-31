@@ -9,7 +9,7 @@ from evidrai.models import (
     VerificationResult,
     PipelineResultModel,
 )
-from evidrai.pipeline.verification import parse_claim_analysis, run_speech_audit, truncate_speech_transcript
+from evidrai.pipeline.verification import build_fast_evidence_context, parse_claim_analysis, run_speech_audit, truncate_speech_transcript
 
 
 def test_truncate_speech_transcript_limits_extraction_budget():
@@ -59,6 +59,30 @@ def test_run_speech_audit_defaults_to_fast_verification(monkeypatch):
     assert result["claims_checked_count"] == 1
     assert result["claims_checked"][0]["verification_mode"] == "fast"
     assert calls == ["A checkable claim\n\nOriginal quote: A quote"]
+
+
+def test_build_fast_evidence_context_scores_search_sources():
+    class FakeSearch:
+        configured = True
+
+        def search(self, query, max_results=5):
+            return [
+                {
+                    "title": "Official Paris record",
+                    "url": "https://example.gov/paris",
+                    "snippet": "Paris is the capital city of France according to the official record.",
+                    "published_date": "2025-01-01",
+                }
+            ]
+
+    _context, sources = build_fast_evidence_context("Paris is the capital city of France", FakeSearch())
+
+    assert sources[0]["weighted_score"] > 0
+    assert sources[0]["scoring_factors"]["authority"] > 0
+    assert sources[0]["scoring_factors"]["relevance"] > 0
+    assert sources[0]["scoring_factors"]["directness"] > 0
+    assert sources[0]["scoring_factors"]["recency"] > 0
+    assert sources[0]["scoring_factors"]["bias_risk"] > 0
 
 
 def test_parse_claim_analysis_returns_typed_result_with_fallback_subclaim():

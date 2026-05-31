@@ -134,8 +134,12 @@ def build_fast_evidence_context(user_input: str, search: TavilySearchClient | No
     deduped: Dict[str, Dict[str, Any]] = {}
     for item in [*known_items, *items]:
         key = item.get("url") or item.get("title") or str(len(deduped))
-        if key and key not in deduped:
+        if not key or key in deduped:
+            continue
+        if isinstance(item.get("scoring_factors"), dict) and item.get("weighted_score") is not None:
             deduped[key] = item
+        else:
+            deduped[key] = score_source(item, user_input).to_packet()
     items = list(deduped.values())
     if not items:
         return "", []
