@@ -3348,3 +3348,23 @@ html[data-theme="light"] .scoringGrid section { background: rgba(255,255,255,0.7
 html[data-theme="light"] .scoringExplainer,
 html[data-theme="light"] .sourceTypeGuide div { background: rgba(255,255,255,0.72); }
 @media (max-width: 760px) { .sourceTypeGuide { grid-template-columns: 1fr; } }
+.adminToolLinks a {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.035);
+  color: inherit;
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  text-decoration: none;
+}
+.adminToolLinks a:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  transform: translateY(-1px);
+}
+.adminToolLinks span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+html[data-theme="light"] .adminToolLinks a { background: rgba(255,255,255,0.72); }

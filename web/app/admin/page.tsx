@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { AccountProfile, MeResponse, ScoringPolicy, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAdminScoringPolicy, getAnonymousAccountProfile, inviteAdminUser, getMe, listAdminUsers, listSupportIssues, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminScoringPolicy, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
+import { AccountProfile, MeResponse, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, listAdminUsers, listSupportIssues, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut } from '../../lib/auth';
 
 const TIER_OPTIONS = [
@@ -27,26 +27,6 @@ type SortState = { key: SortKey; direction: 'asc' | 'desc' };
 type Filters = Partial<Record<SortKey, string>>;
 
 const sortableColumns = new Set<AdminColumnKey>(['email', 'company_name', 'billing_account_name', 'tier_label', 'admin_access', 'subscription_status']);
-const WEIGHT_KEYS = ['authority', 'relevance', 'directness', 'independence', 'recency', 'bias_risk'] as const;
-const SOURCE_TYPE_KEYS = ['scientific', 'government', 'legal', 'primary', 'news', 'secondary', 'contextual'] as const;
-const WEIGHT_EXPLANATIONS: Record<typeof WEIGHT_KEYS[number], string> = {
-  authority: 'Baseline trust in the source type for this claim. Higher means the source is likely authoritative before claim-fit adjustments.',
-  relevance: 'How closely the source text matches the specific claim, based on term overlap and claim focus.',
-  directness: 'How close the source is to underlying evidence. Original records and direct evidence should beat commentary.',
-  independence: 'Whether the source adds a separate evidence chain rather than repeating the same article, briefing, or wire copy.',
-  recency: 'How temporally appropriate the source is. Newer helps current claims; historical claims may still need old primary records.',
-  bias_risk: 'Raw bias/incentive risk. This is inverted in the score, so lower risk increases the final source score.',
-};
-const SOURCE_TYPE_EXPLANATIONS: Record<typeof SOURCE_TYPE_KEYS[number], string> = {
-  scientific: 'Recognised scientific, medical, research, standards, or peer-review/preprint domains such as NIH, WHO, Nature, Science, Lancet, NEJM, arXiv, medRxiv, and bioRxiv.',
-  government: 'Official government, public agency, statistics, health-service, or intergovernmental domains such as .gov, .gouv.fr, NHS, or OECD.',
-  legal: 'Legislation, parliament, court, judiciary, justice, or official legal-publication domains such as legislation.gov.uk or EUR-Lex.',
-  primary: 'Direct original evidence: filings, transcripts, datasets, recordings, source documents, or known counterexample records. Currently mostly reserved for explicitly identified records, not generic web domains.',
-  news: 'Recognised news publishers and wire/reporting outlets. Useful, but scored more cautiously because editorial framing and shared source chains can inflate confidence.',
-  secondary: 'Expert synthesis or reputable non-primary analysis that is not raw evidence. Kept for compatibility and future specialist classifiers; deterministic domain matching mostly uses news/contextual today.',
-  contextual: 'Default fallback for sources that do not match a recognised scientific, government, legal, or news domain. Can still be useful, but starts with lower priors.',
-};
-
 function valueFor(user: UserProfile, key: SortKey) {
   if (key === 'admin_access') return user.admin_access ? 'enabled' : 'none';
   if (key === 'company_name') return user.company_name || user.organisation_name || '';
@@ -99,11 +79,6 @@ export default function AdminPage() {
   const [tempPasswords, setTempPasswords] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [scoringPolicy, setScoringPolicy] = useState<ScoringPolicy | null>(null);
-  const [scoringHistory, setScoringHistory] = useState<ScoringPolicy[]>([]);
-  const [scoringWeightSum, setScoringWeightSum] = useState(0);
-  const [scoringDraft, setScoringDraft] = useState<ScoringPolicy | null>(null);
-  const [scoringChangeNote, setScoringChangeNote] = useState('');
 
   const isAdmin = Boolean(me?.is_admin);
 
@@ -129,7 +104,6 @@ export default function AdminPage() {
   const selectedUsers = selected.map((ownerId) => users.find((user) => user.owner_id === ownerId)).filter(Boolean) as UserProfile[];
   const allVisibleSelected = filteredUsers.length > 0 && filteredUsers.every((user) => selected.includes(user.owner_id));
   const editingUser = users.find((user) => user.owner_id === editing) || null;
-  const draftWeightSum = scoringDraft ? WEIGHT_KEYS.reduce((sum, key) => sum + Number(scoringDraft.source_score_weights[key] || 0), 0) : 0;
 
   async function refreshMe() {
     const payload = await getMe();
@@ -166,58 +140,6 @@ export default function AdminPage() {
     }
   }
 
-  async function loadScoringPolicy() {
-    setBusy(true);
-    setMessage('');
-    try {
-      const payload = await getAdminScoringPolicy();
-      setScoringPolicy(payload.policy);
-      setScoringDraft(payload.policy);
-      setScoringHistory(payload.history || []);
-      setScoringWeightSum(payload.weight_sum || 0);
-      setMessage(`Loaded scoring policy v${payload.policy.version}.`);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Could not load scoring policy.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function updateScoringDraft(section: 'source_score_weights' | 'source_type_authority' | 'source_type_independence' | 'source_type_bias_risk', key: string, value: string) {
-    const numeric = Number(value);
-    setScoringDraft((current) => current ? { ...current, [section]: { ...current[section], [key]: Number.isFinite(numeric) ? numeric : 0 } } : current);
-  }
-
-  async function saveScoringPolicy() {
-    if (!scoringDraft) return;
-    if (!scoringChangeNote.trim()) {
-      setMessage('A change note is required so scoring changes remain auditable.');
-      return;
-    }
-    setBusy(true);
-    setMessage('');
-    try {
-      const payload = await updateAdminScoringPolicy({
-        source_score_weights: scoringDraft.source_score_weights,
-        source_type_authority: scoringDraft.source_type_authority,
-        source_type_independence: scoringDraft.source_type_independence,
-        source_type_bias_risk: scoringDraft.source_type_bias_risk,
-        notes: scoringDraft.notes,
-        change_note: scoringChangeNote.trim(),
-      });
-      setScoringPolicy(payload.policy);
-      setScoringDraft(payload.policy);
-      setScoringHistory(payload.history || []);
-      setScoringWeightSum(payload.weight_sum || 0);
-      setScoringChangeNote('');
-      setMessage(`Saved scoring policy v${payload.policy.version}.`);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Could not save scoring policy.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   useEffect(() => {
     const fallback = getAnonymousAccountProfile();
     setAccount(fallback);
@@ -242,10 +164,7 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) {
-      loadUsers();
-      loadScoringPolicy();
-    }
+    if (isAdmin) loadUsers();
   }, [isAdmin]);
 
   function toggleSort(key: AdminColumnKey) {
@@ -494,6 +413,7 @@ export default function AdminPage() {
           <span>Account: {account?.label || 'checking...'}</span>
           <span>Product plan: {me?.user?.tier_label || 'not signed in'}</span>
           <span>Admin access: {isAdmin ? 'enabled' : 'not enabled'}</span>
+          {isAdmin && <a href="/admin/scoring-policy">Scoring policy</a>}
           {isAdmin && <a href="/admin/trust/analytics">Trust analytics</a>}
           <a href="/">Back to product</a>
         </div>
@@ -542,66 +462,13 @@ export default function AdminPage() {
             <div><strong>Billing grouping</strong><span>Company and billing group fields prepare for organisation contracts and consolidated billing.</span></div>
           </section>
 
-          <details open className="adminInviteBox scoringPolicyEditor">
-            <summary><span>Scoring policy</span><small>Source weights, source-type scores, and auditable change history</small></summary>
-            {!scoringDraft ? (
-              <div className="formRow compactActions"><button className="secondary" disabled={busy} onClick={loadScoringPolicy} type="button">Load scoring policy</button></div>
-            ) : (
-              <>
-                <div className="adminGuardRails" aria-label="Scoring policy summary">
-                  <div><strong>Active version</strong><span>v{scoringPolicy?.version || scoringDraft.version} · {scoringPolicy?.updated_by || scoringDraft.updated_by}</span></div>
-                  <div><strong>Weight total</strong><span className={Math.abs(draftWeightSum - 1) < 0.001 ? '' : 'warningText'}>{draftWeightSum.toFixed(2)} target 1.00</span></div>
-                  <div><strong>Bias rule</strong><span>Bias risk is inverted in scoring, so lower bias risk increases trust.</span></div>
-                </div>
-                <div className="scoringExplainer">
-                  <strong>How source categories are determined</strong>
-                  <p>Classification starts from the source domain using curated allowlists in <code>evidrai/utils.py</code>. Scientific, legal, and government checks run before news checks. If no recognised domain matches, the source is treated as contextual. “Primary” is reserved for direct records or explicitly identified source documents, not ordinary news or commentary.</p>
-                </div>
-                <div className="sourceTypeGuide" aria-label="Source type definitions">
-                  {SOURCE_TYPE_KEYS.map((key) => <div key={key}><strong>{key}</strong><span>{SOURCE_TYPE_EXPLANATIONS[key]}</span></div>)}
-                </div>
-                <div className="scoringGrid">
-                  <section>
-                    <h3>Factor weights</h3>
-                    {WEIGHT_KEYS.map((key) => (
-                      <label key={key} title={WEIGHT_EXPLANATIONS[key]}>{key.replace('_', ' ')}<small>{WEIGHT_EXPLANATIONS[key]}</small><input min="0" max="1" step="0.01" type="number" value={scoringDraft.source_score_weights[key] ?? 0} onChange={(event) => updateScoringDraft('source_score_weights', key, event.target.value)} /></label>
-                    ))}
-                  </section>
-                  <section>
-                    <h3>Authority score</h3>
-                    {SOURCE_TYPE_KEYS.map((key) => (
-                      <label key={key} title={SOURCE_TYPE_EXPLANATIONS[key]}>{key}<small>{SOURCE_TYPE_EXPLANATIONS[key]}</small><input min="0" max="5" step="0.1" type="number" value={scoringDraft.source_type_authority[key] ?? 0} onChange={(event) => updateScoringDraft('source_type_authority', key, event.target.value)} /></label>
-                    ))}
-                  </section>
-                  <section>
-                    <h3>Independence score</h3>
-                    {SOURCE_TYPE_KEYS.map((key) => (
-                      <label key={key} title={SOURCE_TYPE_EXPLANATIONS[key]}>{key}<small>{SOURCE_TYPE_EXPLANATIONS[key]}</small><input min="0" max="5" step="0.1" type="number" value={scoringDraft.source_type_independence[key] ?? 0} onChange={(event) => updateScoringDraft('source_type_independence', key, event.target.value)} /></label>
-                    ))}
-                  </section>
-                  <section>
-                    <h3>Bias risk</h3>
-                    {SOURCE_TYPE_KEYS.map((key) => (
-                      <label key={key} title={SOURCE_TYPE_EXPLANATIONS[key]}>{key}<small>{SOURCE_TYPE_EXPLANATIONS[key]}</small><input min="0" max="5" step="0.1" type="number" value={scoringDraft.source_type_bias_risk[key] ?? 0} onChange={(event) => updateScoringDraft('source_type_bias_risk', key, event.target.value)} /></label>
-                    ))}
-                  </section>
-                </div>
-                <label className="notesField">Change note<textarea value={scoringChangeNote} onChange={(event) => setScoringChangeNote(event.target.value)} placeholder="Why this scoring policy changed" /></label>
-                <div className="formRow compactActions">
-                  <button disabled={busy || !scoringChangeNote.trim()} onClick={saveScoringPolicy} type="button">Save scoring policy</button>
-                  <button className="secondary" disabled={busy} onClick={loadScoringPolicy} type="button">Reload</button>
-                </div>
-                <div className="adminIssueList scoringHistory">
-                  {scoringHistory.slice(0, 5).map((item) => (
-                    <article key={item.version}>
-                      <div><strong>v{item.version}</strong><span>{item.updated_at} · {item.updated_by}</span></div>
-                      <p>{item.change_note || 'No change note.'}</p>
-                    </article>
-                  ))}
-                </div>
-              </>
-            )}
-          </details>
+          <section className="adminGuardRails adminToolLinks" aria-label="Admin tools">
+            <a href="/admin/scoring-policy"><strong>Scoring policy</strong><span>Tune source weights, source-type priors, and audit scoring changes.</span></a>
+            <a href="/admin/trust/analytics"><strong>Trust analytics</strong><span>Review evidence, feedback, and reliability signal trends.</span></a>
+            <a href="/"><strong>Product</strong><span>Return to claim assessment and report workflows.</span></a>
+          </section>
+
+
 
           <details className="adminInviteBox">
             <summary><span>Support issues</span><small>Bug and help reports submitted from the product</small></summary>
