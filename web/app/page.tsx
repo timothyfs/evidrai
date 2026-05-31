@@ -32,6 +32,7 @@ import {
   verifySpeechClaims,
 } from '../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, sendPasswordReset, signInWithEmailPassword, signInWithGoogle, signOut, signUpWithEmailPassword, updatePassword } from '../lib/auth';
+import { downloadText, evidencePacketJson, fileSafe, journalistBriefMarkdown } from '../lib/reportExport';
 
 const verdictClass: Record<string, string> = {
   Supported: 'good',
@@ -1635,6 +1636,7 @@ export default function Home() {
   const [reportShareLinks, setReportShareLinks] = useState<Record<string, string>>({});
   const [reportShareMessages, setReportShareMessages] = useState<Record<string, string>>({});
   const [sharingReportId, setSharingReportId] = useState('');
+  const [exportingReportId, setExportingReportId] = useState('');
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
   const [reportIdInput, setReportIdInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -1649,6 +1651,7 @@ export default function Home() {
   const canUseDeep = Boolean(userFeatures.deep_claims);
   const canUseSpeech = Boolean(userFeatures.speech_audit);
   const canShareReports = Boolean(userFeatures.share_reports);
+  const canExportReports = Boolean(userFeatures.exports);
   const canLabelReports = me?.user?.tier === 'researcher';
   const botReady = !TURNSTILE_SITE_KEY || Boolean(botToken);
   const ready = useMemo(() => signedIn && botReady && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, botReady, claim, sourceUrl]);
@@ -2009,6 +2012,31 @@ export default function Home() {
     }
   }
 
+  async function exportSavedReport(report: ReportSummary, format: 'journalist' | 'json') {
+    setError('');
+    if (!canExportReports) {
+      setReportShareMessages((current) => ({ ...current, [report.assessment_id]: 'Exports are available on Pro and Researcher / Journalist plans.' }));
+      return;
+    }
+    setExportingReportId(report.assessment_id);
+    setReportShareMessages((current) => ({ ...current, [report.assessment_id]: '' }));
+    try {
+      const fullReport = await getReport(report.assessment_id);
+      const base = fileSafe(fullReport.request.claim || report.claim || fullReport.assessment_id);
+      if (format === 'journalist') {
+        downloadText(`${base}-journalist-brief.md`, journalistBriefMarkdown(fullReport), 'text/markdown;charset=utf-8');
+        setReportShareMessages((current) => ({ ...current, [report.assessment_id]: 'Journalist brief downloaded.' }));
+      } else {
+        downloadText(`${base}-evidence-packet.json`, evidencePacketJson(fullReport), 'application/json;charset=utf-8');
+        setReportShareMessages((current) => ({ ...current, [report.assessment_id]: 'Evidence packet downloaded.' }));
+      }
+    } catch (err) {
+      setReportShareMessages((current) => ({ ...current, [report.assessment_id]: err instanceof Error ? err.message : 'Could not export report' }));
+    } finally {
+      setExportingReportId('');
+    }
+  }
+
   async function shareSavedReport(report: ReportSummary, platform = 'copy') {
     setError('');
     setSharingReportId(report.assessment_id);
@@ -2244,6 +2272,8 @@ export default function Home() {
                   <button className="secondary" onClick={() => openReportInNewTab(report.assessment_id)} type="button">View</button>
                   <button className="secondary" onClick={() => loadReport(report.assessment_id)} type="button">Load here</button>
                   <button className="secondary" disabled={sharingReportId === report.assessment_id} onClick={() => shareSavedReport(report)} type="button">{sharingReportId === report.assessment_id ? 'Creating…' : reportShareLinks[report.assessment_id] ? 'Copy share text' : 'Share'}</button>
+                  {canExportReports && <button className="secondary" disabled={exportingReportId === report.assessment_id} onClick={() => exportSavedReport(report, 'journalist')} type="button">{exportingReportId === report.assessment_id ? 'Exporting…' : 'Journalist brief'}</button>}
+                  {canExportReports && <button className="secondary" disabled={exportingReportId === report.assessment_id} onClick={() => exportSavedReport(report, 'json')} type="button">Evidence JSON</button>}
                   <button className="secondary" onClick={() => toggleReportProtected(report)} type="button">{report.protected ? 'Allow cycling' : 'Do not delete'}</button>
                   <button className="secondary dangerAction" onClick={() => removeReport(report)} type="button">Delete</button>
                 </div>

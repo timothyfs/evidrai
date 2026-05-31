@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { AssessmentResponse } from '../../../lib/api';
-import { createReportShare, getReport, setAccessToken } from '../../../lib/api';
+import type { AssessmentResponse, MeResponse } from '../../../lib/api';
+import { createReportShare, getMe, getReport, setAccessToken } from '../../../lib/api';
 import { getCurrentSession } from '../../../lib/auth';
-import { downloadText, reportMarkdown } from './export';
+import { downloadText, evidencePacketJson, fileSafe, journalistBriefMarkdown, reportMarkdown } from './export';
 
 function formatDate(value?: string) {
   if (!value) return '';
@@ -16,10 +16,6 @@ function formatDate(value?: string) {
 function truncateText(value: string, max = 180) {
   const text = value.replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
-}
-
-function fileSafe(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 72) || 'evidrai-report';
 }
 
 function scoreLabel(score?: number | null, max = 10) {
@@ -34,6 +30,7 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
   const [busy, setBusy] = useState(true);
   const [shareUrl, setShareUrl] = useState('');
   const [notice, setNotice] = useState('');
+  const [me, setMe] = useState<MeResponse | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -44,8 +41,11 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
         const session = await getCurrentSession();
         setAccessToken(session?.access_token || '');
         if (!session?.access_token) throw new Error('Sign in to view this report.');
-        const payload = await getReport(reportId);
-        if (active) setReport(payload);
+        const [payload, profile] = await Promise.all([getReport(reportId), getMe().catch(() => null)]);
+        if (active) {
+          setReport(payload);
+          setMe(profile);
+        }
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : 'Could not load report');
       } finally {
@@ -84,15 +84,26 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
 
   function downloadMarkdown() {
     if (!report) return;
-    downloadText(`${fileSafe(report.request.claim)}.md`, reportMarkdown(report), 'text/markdown;charset=utf-8');
+    if (!canExport) return setNotice('Exports are available on Pro and Researcher / Journalist plans.');
+    downloadText(`${fileSafe(report.request.claim)}-full-report.md`, reportMarkdown(report), 'text/markdown;charset=utf-8');
     setNotice('Markdown report downloaded.');
+  }
+
+  function downloadJournalistBrief() {
+    if (!report) return;
+    if (!canExport) return setNotice('Exports are available on Pro and Researcher / Journalist plans.');
+    downloadText(`${fileSafe(report.request.claim)}-journalist-brief.md`, journalistBriefMarkdown(report), 'text/markdown;charset=utf-8');
+    setNotice('Journalist brief downloaded.');
   }
 
   function downloadJson() {
     if (!report) return;
-    downloadText(`${fileSafe(report.request.claim)}.json`, JSON.stringify(report, null, 2), 'application/json;charset=utf-8');
+    if (!canExport) return setNotice('Exports are available on Pro and Researcher / Journalist plans.');
+    downloadText(`${fileSafe(report.request.claim)}-evidence-packet.json`, evidencePacketJson(report), 'application/json;charset=utf-8');
     setNotice('Full evidence packet downloaded.');
   }
+
+  const canExport = Boolean(me?.user?.features?.exports);
 
   if (busy) return <section className="card marketingPage"><p className="eyebrow">Report</p><h1>Loading report…</h1></section>;
   if (error || !report) return <section className="card marketingPage"><p className="eyebrow">Report</p><h1>Report not available.</h1><p className="lead">{error || 'This report could not be loaded.'}</p><a className="button secondary" href="/">Back to Evidrai</a></section>;
@@ -127,12 +138,14 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
         <p className="eyebrow">Share / export</p>
         <div className="shareActions">
           <button className="button secondary" onClick={() => window.print()} type="button">Print / Save PDF</button>
-          <button className="button secondary" onClick={downloadMarkdown} type="button">Export Markdown</button>
-          <button className="button secondary" onClick={downloadJson} type="button">Export JSON</button>
+          <button className="button secondary" disabled={!canExport} onClick={downloadJournalistBrief} type="button">Export journalist brief</button>
+          <button className="button secondary" disabled={!canExport} onClick={downloadMarkdown} type="button">Export full Markdown</button>
+          <button className="button secondary" disabled={!canExport} onClick={downloadJson} type="button">Export evidence JSON</button>
           <button className="button secondary" onClick={copyExecutiveSummary} type="button">Copy summary</button>
           <button className="button secondary" onClick={shareReport} type="button">Create public share link</button>
           <a className="button secondary" href="/">Verify another claim</a>
         </div>
+        {!canExport && <p className="muted">Exports are available on Pro and Researcher / Journalist plans.</p>}
         {notice && <p className="success">{notice}</p>}
         {shareUrl && <p className="success">Share link copied: <a href={shareUrl} rel="noreferrer" target="_blank">{shareUrl}</a></p>}
       </section>
