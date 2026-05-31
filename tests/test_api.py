@@ -1010,3 +1010,70 @@ def test_assessment_job_completes_and_returns_assessment(monkeypatch, tmp_path):
     assert status["status"] == "completed"
     assert status["assessment"]["mode"] == "deep"
     assert status["assessment"]["sources"][0]["url"] == "https://example.com"
+
+
+def test_llm_client_preserves_rate_limit_after_retries(monkeypatch):
+    from evidrai.clients.llm import OpenAICompatibleClient
+    from evidrai.errors import LLMRequestError
+
+    class Response:
+        status_code = 429
+        headers = {}
+        text = '{"error":{"message":"rate limited"}}'
+        def json(self):
+            return {"error": {"message": "rate limited"}}
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_MODEL", "test-model")
+    monkeypatch.setenv("OPENAI_FALLBACK_MODELS", "")
+    monkeypatch.setattr("evidrai.clients.llm.time.sleep", lambda _: None)
+    monkeypatch.setattr("evidrai.clients.llm.requests.post", lambda *args, **kwargs: Response())
+
+    client = OpenAICompatibleClient()
+    try:
+        client.complete_json([{"role": "user", "content": "Return JSON"}])
+    except LLMRequestError as exc:
+        assert str(exc) == "OpenAI rate limit hit."
+        assert exc.status_code == 429
+    else:
+        raise AssertionError("Expected LLMRequestError")
+
+
+def test_llm_client_falls_back_to_secondary_model_on_rate_limit(monkeypatch):
+    from evidrai.clients.llm import OpenAICompatibleClient
+
+    calls = []
+
+    class RateLimitedResponse:
+        status_code = 429
+        headers = {}
+        text = '{"error":{"message":"rate limited"}}'
+        def json(self):
+            return {"error": {"message": "rate limited"}}
+
+    class SuccessResponse:
+        status_code = 200
+        headers = {}
+        text = '{"choices":[{"message":{"content":"{\\"ok\\":true}"}}]}'
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"choices": [{"message": {"content": "{\"ok\": true}"}}]}
+
+    def fake_post(*args, **kwargs):
+        model = kwargs["json"]["model"]
+        calls.append(model)
+        if model == "primary-model":
+            return RateLimitedResponse()
+        return SuccessResponse()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_MODEL", "primary-model")
+    monkeypatch.setenv("OPENAI_FALLBACK_MODELS", "fallback-model")
+    monkeypatch.setattr("evidrai.clients.llm.time.sleep", lambda _: None)
+    monkeypatch.setattr("evidrai.clients.llm.requests.post", fake_post)
+
+    client = OpenAICompatibleClient()
+    assert client.complete_json([{"role": "user", "content": "Return JSON"}]) == {"ok": True}
+    assert "primary-model" in calls
+    assert calls[-1] == "fallback-model"
