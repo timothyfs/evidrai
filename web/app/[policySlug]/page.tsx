@@ -26,7 +26,7 @@ export default async function PolicyPage({ params }: PageProps) {
       <article className="card marketingPage policyPage">
         <p className="eyebrow">{policy.group}</p>
         <h1>{policy.title}</h1>
-        <p className="lastUpdated">Last Updated: [DATE]</p>
+        <p className="lastUpdated">Last Updated: 31 May 2026</p>
         <p className="lead">{policy.intro}</p>
         {policy.legalReviewNote && <p className="policyNotice">These documents are provided for transparency and are subject to legal review.</p>}
 
