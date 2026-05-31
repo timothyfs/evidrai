@@ -3,6 +3,8 @@
 Status: Draft v0.1  
 Scope: Deep verification flow, source ranking, source weighting, and user-facing confidence display.
 
+Related audit-facing architecture document: [`source-classification-and-scoring-architecture.md`](source-classification-and-scoring-architecture.md).
+
 ## Purpose
 
 Evidrai scores evidence so users can see not just *what* verdict was reached, but *why* the underlying source set deserves more or less trust.

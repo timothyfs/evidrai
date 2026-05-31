@@ -3294,3 +3294,57 @@ html[data-theme="light"] .methodologyGuardrails {
 html[data-theme="light"] .scoringGrid section { background: rgba(255,255,255,0.72); }
 @media (max-width: 1100px) { .scoringGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 680px) { .scoringGrid { grid-template-columns: 1fr; } }
+.scoringExplainer {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.035);
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 14px;
+}
+.scoringExplainer p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+.scoringExplainer code {
+  color: var(--ink);
+  font-weight: 850;
+}
+.sourceTypeGuide {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 16px 0;
+}
+.sourceTypeGuide div {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.028);
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+.sourceTypeGuide strong { text-transform: capitalize; }
+.sourceTypeGuide span,
+.scoringGrid small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-transform: none;
+}
+.scoringGrid label {
+  grid-template-columns: minmax(0, 1fr) 84px;
+}
+.scoringGrid label small {
+  grid-column: 1 / 2;
+}
+.scoringGrid label input {
+  grid-column: 2 / 3;
+  grid-row: 1 / span 2;
+}
+html[data-theme="light"] .scoringExplainer,
+html[data-theme="light"] .sourceTypeGuide div { background: rgba(255,255,255,0.72); }
+@media (max-width: 760px) { .sourceTypeGuide { grid-template-columns: 1fr; } }
