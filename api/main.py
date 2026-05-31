@@ -222,9 +222,12 @@ def _supabase_auth_url(path: str) -> str:
 
 
 
-def _supabase_request(method: str, path: str, *, body: dict[str, Any] | None = None) -> dict[str, Any]:
+def _supabase_request(method: str, path: str, *, body: dict[str, Any] | None = None, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    request_kwargs: dict[str, Any] = {"headers": _supabase_admin_headers(), "params": params or {}, "timeout": 20}
+    if body is not None:
+        request_kwargs["json"] = body
     try:
-        response = requests.request(method, _supabase_auth_url(path), headers=_supabase_admin_headers(), json=body or {}, timeout=20)
+        response = requests.request(method, _supabase_auth_url(path), **request_kwargs)
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail={"code": "supabase_admin_request_failed", "message": "Could not reach Supabase admin API.", "developer_detail": str(exc)})
     if response.status_code >= 400:
@@ -269,20 +272,74 @@ def _update_supabase_user_password(owner_id: str, password: str) -> dict[str, An
     return _supabase_request("PUT", f"admin/user/{owner_id.strip()}", body={"password": password})
 
 
-def _delete_supabase_auth_user(owner_id: str) -> bool:
+def _list_supabase_auth_users(limit: int = 1000) -> list[dict[str, Any]]:
+    users: list[dict[str, Any]] = []
+    per_page = 100
+    max_pages = max(1, (limit + per_page - 1) // per_page)
+    for page in range(1, max_pages + 1):
+        payload = _supabase_request("GET", "admin/users", params={"page": page, "per_page": per_page})
+        page_users = payload.get("users") if isinstance(payload, dict) else None
+        if not isinstance(page_users, list):
+            return users
+        users.extend([user for user in page_users if isinstance(user, dict)])
+        if len(page_users) < per_page or len(users) >= limit:
+            break
+    return users[:limit]
+
+
+def _supabase_auth_user_by_email(email: str) -> dict[str, Any] | None:
+    clean_email = email.strip().lower()
+    if not clean_email:
+        return None
+    for user in _list_supabase_auth_users():
+        if str(user.get("email") or "").strip().lower() == clean_email:
+            return user
+    return None
+
+
+def _user_profile_email(owner_id: str) -> str:
+    clean_owner_id = owner_id.strip()
+    if not clean_owner_id:
+        return ""
+    for profile in list_user_profiles(limit=1000):
+        if profile.owner_id == clean_owner_id:
+            return profile.email
+    return ""
+
+
+def _delete_supabase_auth_user(owner_id: str, email: str = "") -> bool:
     clean_owner_id = owner_id.strip()
     if not clean_owner_id:
         raise HTTPException(status_code=400, detail={"code": "owner_required", "message": "owner_id is required."})
     try:
         _supabase_request("DELETE", f"admin/users/{clean_owner_id}")
+        return True
     except HTTPException as exc:
-        if exc.status_code == 404:
-            return False
-        raise
+        if exc.status_code not in {400, 404} or not email.strip():
+            if exc.status_code == 404:
+                return False
+            raise
+    existing = _supabase_auth_user_by_email(email)
+    existing_id = str(existing.get("id") or "").strip() if existing else ""
+    if not existing_id:
+        return False
+    _supabase_request("DELETE", f"admin/users/{existing_id}")
     return True
 
 
 def _create_or_invite_supabase_user(request: AdminInviteUserRequest) -> dict[str, Any]:
+    if request.send_invite:
+        existing = _supabase_auth_user_by_email(request.email)
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "supabase_auth_user_already_exists",
+                    "message": f"Supabase Auth already has a user for {request.email.strip().lower()}. Delete that auth user first, then resend the invite.",
+                    "supabase_user_id": str(existing.get("id") or ""),
+                    "email": str(existing.get("email") or request.email).strip().lower(),
+                },
+            )
     email = request.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail={"code": "invalid_email", "message": "A valid email address is required."})
@@ -789,7 +846,8 @@ def admin_delete_user(owner_id: str, http_request: Request) -> Dict[str, Any]:
     _require_admin(http_request)
     if _auth_context_from_request(http_request).owner_id == owner_id:
         raise HTTPException(status_code=400, detail={"code": "cannot_delete_self", "message": "You cannot delete your own admin account."})
-    auth_deleted = _delete_supabase_auth_user(owner_id)
+    profile_email = _user_profile_email(owner_id)
+    auth_deleted = _delete_supabase_auth_user(owner_id, email=profile_email)
     profile_deleted = delete_user_profile(owner_id)
     return {
         "ok": True,

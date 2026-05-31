@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 import api.main as api_main
@@ -215,7 +216,7 @@ def test_admin_delete_user_removes_supabase_auth_user_and_profile(monkeypatch):
     supabase_calls = []
     monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
     monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
-    monkeypatch.setattr(api_main, "_supabase_request", lambda method, path, body=None: supabase_calls.append((method, path, body)) or {})
+    monkeypatch.setattr(api_main, "_supabase_request", lambda method, path, body=None, params=None: supabase_calls.append((method, path, body, params)) or {})
     monkeypatch.setattr(api_main, "delete_user_profile", lambda owner_id: deleted.append(owner_id) or True)
 
     response = client.delete("/admin/users/user-1", headers={"Authorization": "Bearer token"})
@@ -225,8 +226,36 @@ def test_admin_delete_user_removes_supabase_auth_user_and_profile(monkeypatch):
     assert payload["deleted"] is True
     assert payload["auth_deleted"] is True
     assert payload["profile_deleted"] is True
-    assert supabase_calls == [("DELETE", "admin/users/user-1", None)]
+    assert supabase_calls == [("DELETE", "admin/users/user-1", None, None)]
     assert deleted == ["user-1"]
+
+
+def test_admin_delete_user_falls_back_to_profile_email_when_owner_id_is_not_auth_id(monkeypatch):
+    calls = []
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "list_user_profiles", lambda limit=1000: [UserProfile(owner_id="profile-id", email="user@example.com", tier="free")])
+    monkeypatch.setattr(api_main, "delete_user_profile", lambda owner_id: True)
+
+    def fake_supabase_request(method, path, body=None, params=None):
+        calls.append((method, path, params))
+        if method == "DELETE" and path == "admin/users/profile-id":
+            raise api_main.HTTPException(status_code=404, detail={"code": "not_found"})
+        if method == "GET" and path == "admin/users":
+            return {"users": [{"id": "auth-id", "email": "user@example.com"}]}
+        return {}
+
+    monkeypatch.setattr(api_main, "_supabase_request", fake_supabase_request)
+
+    response = client.delete("/admin/users/profile-id", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    assert response.json()["auth_deleted"] is True
+    assert calls == [
+        ("DELETE", "admin/users/profile-id", None),
+        ("GET", "admin/users", {"page": 1, "per_page": 100}),
+        ("DELETE", "admin/users/auth-id", None),
+    ]
 
 
 def test_admin_delete_user_profile_cannot_delete_self(monkeypatch):
@@ -750,6 +779,17 @@ def test_admin_invite_user_creates_profile(monkeypatch):
     assert payload["sent_invite"] is True
     assert payload["owner_id"] == "new-user"
     assert payload["user"]["tier_label"] == "Pro"
+
+
+def test_create_or_invite_supabase_user_blocks_existing_auth_email(monkeypatch):
+    monkeypatch.setattr(api_main, "_supabase_auth_user_by_email", lambda email: {"id": "auth-id", "email": email.lower()})
+
+    with pytest.raises(api_main.HTTPException) as exc:
+        api_main._create_or_invite_supabase_user(api_main.AdminInviteUserRequest(email="User@example.com", tier="free", send_invite=True))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["code"] == "supabase_auth_user_already_exists"
+    assert exc.value.detail["supabase_user_id"] == "auth-id"
 
 
 def test_speech_extract_youtube_bot_check_returns_safe_fallback(monkeypatch):
