@@ -1033,7 +1033,7 @@ def test_llm_client_preserves_rate_limit_after_retries(monkeypatch):
     try:
         client.complete_json([{"role": "user", "content": "Return JSON"}])
     except LLMRequestError as exc:
-        assert str(exc) == "OpenAI rate limit hit."
+        assert str(exc) == "LLM rate limit hit."
         assert exc.status_code == 429
     else:
         raise AssertionError("Expected LLMRequestError")

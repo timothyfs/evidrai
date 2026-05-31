@@ -75,9 +75,9 @@ class OpenAICompatibleClient:
                         timeout=60,
                     )
                     if response.status_code in {401, 403}:
-                        raise LLMRequestError("OpenAI authentication failed.", developer_detail=http_error_detail(response), status_code=503)
+                        raise LLMRequestError("LLM authentication failed.", developer_detail=http_error_detail(response), status_code=503)
                     if response.status_code == 429:
-                        last_exc = LLMRequestError("OpenAI rate limit hit.", developer_detail=http_error_detail(response), status_code=429)
+                        last_exc = LLMRequestError("LLM rate limit hit.", developer_detail=http_error_detail(response), status_code=429)
                         if attempt == SCORING_CONFIG.max_retries - 1:
                             break
                         retry_after = response.headers.get("Retry-After")
@@ -85,7 +85,7 @@ class OpenAICompatibleClient:
                         time.sleep(sleep_for)
                         continue
                     if 400 <= response.status_code < 500:
-                        raise LLMRequestError("OpenAI request was rejected.", developer_detail=http_error_detail(response), status_code=503)
+                        raise LLMRequestError("LLM request was rejected.", developer_detail=http_error_detail(response), status_code=503)
                     response.raise_for_status()
                     data = response.json()
                     content = data["choices"][0]["message"]["content"]
