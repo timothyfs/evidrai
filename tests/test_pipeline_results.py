@@ -164,10 +164,13 @@ def test_verification_result_serializes_ui_compatibility_and_trace_boundaries():
     assert payload["claim"] == "Typed claim"
     assert payload["subclaims"] == ["Typed claim"]
     assert payload["sources"][0]["summary"] == "Evidence summary"
+    assert payload["sources"][0]["scoring_factors"]["weighted"] == 4.5
     assert payload["queries"] == ["Typed claim evidence"]
     assert payload["claim_analysis"]["subclaims"][0]["risk_flags"] == ["named_person"]
     assert payload["evidence_packet"]["claim"] == "Typed claim"
+    assert payload["evidence_packet"]["sources"][0]["scoring_factors"]["weighted"] == 4.5
     assert payload["retrieval"]["sources"][0]["title"] == "Evidence"
+    assert payload["retrieval"]["sources"][0]["scoring_factors"]["weighted"] == 4.5
     assert payload["pendulum"]["band"] == "Strongly evidenced"
     assert payload["rule_engine"]["verdict"] == "Supported"
     assert payload["provisional_confidence"] == 77

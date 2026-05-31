@@ -301,6 +301,7 @@ class SourcePacketModel(BaseModel):
     source_role: str = "context"
     narrative_cluster: str = ""
     weighted_score: float = 0.0
+    scoring_factors: Dict[str, float] = Field(default_factory=dict)
 
 
 class RetrievalPacketModel(BaseModel):
