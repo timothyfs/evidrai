@@ -42,6 +42,10 @@ function statusTone(message: string) {
   return 'good';
 }
 
+function authRedirectTo() {
+  return typeof window === 'undefined' ? '' : window.location.origin;
+}
+
 function blankDetails(user?: UserProfile) {
   return {
     email: user?.email || '',
@@ -249,7 +253,7 @@ export default function AdminPage() {
     setBusy(true);
     setMessage('');
     try {
-      const payload = await sendAdminPasswordReset({ owner_id: user.owner_id, email: user.email });
+      const payload = await sendAdminPasswordReset({ owner_id: user.owner_id, email: user.email, redirect_to: authRedirectTo() });
       setMessage(payload.message || `Password reset sent to ${user.email}.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not send password reset.');
@@ -287,7 +291,7 @@ export default function AdminPage() {
     setBusy(true);
     setMessage('');
     try {
-      const payload = await resendAdminInvite({ owner_id: user.owner_id, email: user.email });
+      const payload = await resendAdminInvite({ owner_id: user.owner_id, email: user.email, redirect_to: authRedirectTo() });
       setMessage(payload.message || `Invite resent to ${user.email}.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not resend invite.');
@@ -298,17 +302,19 @@ export default function AdminPage() {
 
   async function deleteUser(user: UserProfile) {
     const label = user.email || user.owner_id;
-    const confirmed = window.confirm(`Delete Evidrai profile for ${label}? This removes permissions/profile data only. The Supabase auth account is not deleted, and the user will reappear as Free if they sign in again.`);
+    const confirmed = window.confirm(`Delete ${label}? This will remove the Supabase auth user and the Evidrai profile. The user will no longer be able to sign in with this account.`);
     if (!confirmed) return;
+    const doubleConfirmed = window.confirm(`Are you absolutely sure you want to permanently delete ${label}? This cannot be undone.`);
+    if (!doubleConfirmed) return;
     setBusy(true);
     setMessage('');
     try {
       const payload = await deleteAdminUser(user.owner_id);
       setUsers((current) => current.filter((item) => item.owner_id !== user.owner_id));
       setSelected((current) => current.filter((ownerId) => ownerId !== user.owner_id));
-      setMessage(payload.deleted ? `Deleted profile for ${label}.` : `No profile existed for ${label}.`);
+      setMessage(payload.message || (payload.deleted ? `Deleted ${label}.` : `No user/profile existed for ${label}.`));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Could not delete user profile.');
+      setMessage(err instanceof Error ? err.message : 'Could not delete user.');
     } finally {
       setBusy(false);
     }
@@ -353,7 +359,7 @@ export default function AdminPage() {
     setBusy(true);
     setMessage('');
     try {
-      const payload = await inviteAdminUser({ email: inviteEmail.trim(), tier: inviteTier, send_invite: sendInvite });
+      const payload = await inviteAdminUser({ email: inviteEmail.trim(), tier: inviteTier, send_invite: sendInvite, redirect_to: authRedirectTo() });
       setMessage(payload.message || `Created ${payload.email}.`);
       setInviteEmail('');
       setInviteTier('free');
@@ -541,7 +547,7 @@ export default function AdminPage() {
                     <option value="details">Edit details</option>
                     <option disabled={!user.email} value="reset">Send password reset</option>
                     <option disabled={!user.email} value="invite">Resend invite</option>
-                    <option disabled={user.owner_id === account?.owner_id} value="delete">Delete profile</option>
+                    <option disabled={user.owner_id === account?.owner_id} value="delete">Delete user</option>
                   </select>
                 </article>
               );

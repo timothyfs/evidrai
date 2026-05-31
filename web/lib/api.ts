@@ -459,8 +459,8 @@ export function inviteAdminUser(input: { email: string; tier: TierName; send_inv
   });
 }
 
-export function deleteAdminUser(owner_id: string): Promise<{ ok: boolean; owner_id: string; deleted: boolean; message: string }> {
-  return request<{ ok: boolean; owner_id: string; deleted: boolean; message: string }>(`/admin/users/${encodeURIComponent(owner_id)}`, {
+export function deleteAdminUser(owner_id: string): Promise<{ ok: boolean; owner_id: string; deleted: boolean; auth_deleted: boolean; profile_deleted: boolean; message: string }> {
+  return request<{ ok: boolean; owner_id: string; deleted: boolean; auth_deleted: boolean; profile_deleted: boolean; message: string }>(`/admin/users/${encodeURIComponent(owner_id)}`, {
     method: 'DELETE',
   });
 }

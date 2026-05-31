@@ -210,16 +210,22 @@ def test_admin_user_tier_update_sets_profile(monkeypatch):
     assert payload["user"]["tier_label"] == "Pro"
 
 
-def test_admin_delete_user_profile(monkeypatch):
+def test_admin_delete_user_removes_supabase_auth_user_and_profile(monkeypatch):
     deleted = []
+    supabase_calls = []
     monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
     monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "_supabase_request", lambda method, path, body=None: supabase_calls.append((method, path, body)) or {})
     monkeypatch.setattr(api_main, "delete_user_profile", lambda owner_id: deleted.append(owner_id) or True)
 
     response = client.delete("/admin/users/user-1", headers={"Authorization": "Bearer token"})
 
     assert response.status_code == 200
-    assert response.json()["deleted"] is True
+    payload = response.json()
+    assert payload["deleted"] is True
+    assert payload["auth_deleted"] is True
+    assert payload["profile_deleted"] is True
+    assert supabase_calls == [("DELETE", "admin/users/user-1", None)]
     assert deleted == ["user-1"]
 
 

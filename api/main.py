@@ -268,6 +268,20 @@ def _update_supabase_user_password(owner_id: str, password: str) -> dict[str, An
         raise HTTPException(status_code=400, detail={"code": "password_too_short", "message": "Temporary password must be at least 8 characters."})
     return _supabase_request("PUT", f"admin/user/{owner_id.strip()}", body={"password": password})
 
+
+def _delete_supabase_auth_user(owner_id: str) -> bool:
+    clean_owner_id = owner_id.strip()
+    if not clean_owner_id:
+        raise HTTPException(status_code=400, detail={"code": "owner_required", "message": "owner_id is required."})
+    try:
+        _supabase_request("DELETE", f"admin/users/{clean_owner_id}")
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            return False
+        raise
+    return True
+
+
 def _create_or_invite_supabase_user(request: AdminInviteUserRequest) -> dict[str, Any]:
     email = request.email.strip().lower()
     if not email or "@" not in email:
@@ -774,9 +788,17 @@ def admin_invite_user(request: AdminInviteUserRequest, http_request: Request) ->
 def admin_delete_user(owner_id: str, http_request: Request) -> Dict[str, Any]:
     _require_admin(http_request)
     if _auth_context_from_request(http_request).owner_id == owner_id:
-        raise HTTPException(status_code=400, detail={"code": "cannot_delete_self", "message": "You cannot delete your own admin profile."})
-    deleted = delete_user_profile(owner_id)
-    return {"ok": True, "owner_id": owner_id, "deleted": deleted, "message": "User profile deleted. Supabase auth account was not deleted."}
+        raise HTTPException(status_code=400, detail={"code": "cannot_delete_self", "message": "You cannot delete your own admin account."})
+    auth_deleted = _delete_supabase_auth_user(owner_id)
+    profile_deleted = delete_user_profile(owner_id)
+    return {
+        "ok": True,
+        "owner_id": owner_id,
+        "deleted": bool(auth_deleted or profile_deleted),
+        "auth_deleted": auth_deleted,
+        "profile_deleted": profile_deleted,
+        "message": "Supabase auth user and Evidrai profile deleted." if auth_deleted else "Evidrai profile deleted. Supabase auth user was already missing.",
+    }
 
 
 @app.get("/reports/{report_id}", response_model=AssessmentResponse)
