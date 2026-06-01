@@ -20,6 +20,10 @@ class ScoringConfig:
     bias_weight: float = 0.10
     max_source_summaries: int = 8
     max_summary_workers: int = 4
+    max_deep_search_queries: int = 4
+    max_deep_search_workers: int = 4
+    search_timeout_seconds: int = 15
+    search_max_retries: int = 2
     max_retries: int = 3
     retry_base_sleep: float = 1.0
     term_pattern: str = r"\b{term}\b"

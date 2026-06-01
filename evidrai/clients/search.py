@@ -26,7 +26,7 @@ class TavilySearchClient:
         if not self.configured:
             return []
         last_exc: Optional[Exception] = None
-        for attempt in range(SCORING_CONFIG.max_retries):
+        for attempt in range(max(1, SCORING_CONFIG.search_max_retries)):
             try:
                 response = requests.post(
                     "https://api.tavily.com/search",
@@ -37,7 +37,7 @@ class TavilySearchClient:
                         "search_depth": "basic",
                         "include_raw_content": True,
                     },
-                    timeout=60,
+                    timeout=SCORING_CONFIG.search_timeout_seconds,
                 )
                 if response.status_code in {401, 403}:
                     raise SearchRequestError("Tavily authentication failed.", developer_detail=http_error_detail(response), status_code=503)
@@ -61,7 +61,7 @@ class TavilySearchClient:
                 raise
             except (requests.RequestException, ValueError, TypeError) as exc:
                 last_exc = exc
-                if attempt == SCORING_CONFIG.max_retries - 1:
+                if attempt == max(1, SCORING_CONFIG.search_max_retries) - 1:
                     break
                 time.sleep(SCORING_CONFIG.retry_base_sleep * (2 ** attempt))
         raise SearchRequestError("Search request failed after retries.", developer_detail=str(last_exc))

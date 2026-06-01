@@ -410,12 +410,19 @@ def known_counterexample_sources(claim_text: str) -> List[EvidenceSource]:
 
 def retrieve_sources(search: TavilySearchClient, queries: List[str], claim_text: str) -> List[EvidenceSource]:
     dedup: Dict[str, EvidenceSource] = {source.url: source for source in known_counterexample_sources(claim_text)}
-    for query in queries[:8]:
-        for item in search.search(query, max_results=4):
-            url = item.get("url") or ""
-            if not url or url in dedup:
-                continue
-            dedup[url] = score_source(item, claim_text)
+    selected_queries = queries[: max(1, SCORING_CONFIG.max_deep_search_queries)]
+    if not selected_queries:
+        return sorted(dedup.values(), key=lambda x: x.weighted_score, reverse=True)[:SCORING_CONFIG.max_source_summaries]
+
+    max_workers = min(max(1, SCORING_CONFIG.max_deep_search_workers), len(selected_queries))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(search.search, query, 4): query for query in selected_queries}
+        for future in as_completed(futures):
+            for item in future.result():
+                url = item.get("url") or ""
+                if not url or url in dedup:
+                    continue
+                dedup[url] = score_source(item, claim_text)
     return sorted(dedup.values(), key=lambda x: x.weighted_score, reverse=True)[:SCORING_CONFIG.max_source_summaries]
 
 
