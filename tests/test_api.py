@@ -484,6 +484,26 @@ def test_claim_check_rejects_invalid_source_url():
     assert "source_url" in response.json()["detail"]
 
 
+def test_bot_check_skips_authenticated_users(monkeypatch):
+    monkeypatch.setattr(api_main, "turnstile_configured", lambda: True)
+    monkeypatch.setattr(api_main.requests, "post", lambda *args, **kwargs: pytest.fail("Turnstile should not run for authenticated users"))
+
+    request = api_main.Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+
+    api_main._require_bot_check(request, authenticated=True)
+
+
+def test_bot_check_still_requires_token_for_unauthenticated_users(monkeypatch):
+    monkeypatch.setattr(api_main, "turnstile_configured", lambda: True)
+    request = api_main.Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+
+    with pytest.raises(api_main.HTTPException) as exc:
+        api_main._require_bot_check(request, authenticated=False)
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "bot_check_required"
+
+
 def test_speech_audit_requires_transcript_or_accessible_url(monkeypatch):
     grant_tier(monkeypatch, "pro")
     response = client.post("/speech/audit", json={"transcript": "", "source_url": ""})

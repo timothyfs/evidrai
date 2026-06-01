@@ -554,7 +554,9 @@ def _require_authenticated(request: Request) -> AuthContext:
     return context
 
 
-def _require_bot_check(request: Request, bot_token: str = "") -> None:
+def _require_bot_check(request: Request, bot_token: str = "", *, authenticated: bool = False) -> None:
+    if authenticated:
+        return
     if not turnstile_configured():
         return
     token = (bot_token or request.headers.get("x-turnstile-token") or "").strip()
@@ -1259,7 +1261,7 @@ def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelop
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims" if request.mode == "deep" else "fast_claims", authenticated=context.authenticated)
     _require_current_consent(context, profile)
-    _require_bot_check(http_request, request.bot_token)
+    _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
     result = _run_claim_assessment(claim=claim, source_url=source_url, category=request.category, mode=request.mode)
     assessment = serialize_assessment_response(
         result,
@@ -1286,7 +1288,7 @@ def create_fast_assessment(request: AssessmentCreateRequest, http_request: Reque
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "fast_claims", authenticated=context.authenticated)
     _require_current_consent(context, profile)
-    _require_bot_check(http_request, request.bot_token)
+    _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
     return _assessment_response_from_request(request, "fast", owner_id=context.owner_id, profile=profile)
 
 
@@ -1295,7 +1297,7 @@ def create_deep_assessment(request: AssessmentCreateRequest, http_request: Reque
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims", authenticated=context.authenticated)
     _require_current_consent(context, profile)
-    _require_bot_check(http_request, request.bot_token)
+    _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
     return _assessment_response_from_request(request, "deep", owner_id=context.owner_id, profile=profile)
 
 
@@ -1306,7 +1308,7 @@ def create_assessment_job(mode: str, request: AssessmentCreateRequest, http_requ
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims" if mode == "deep" else "fast_claims", authenticated=context.authenticated)
     _require_current_consent(context, profile)
-    _require_bot_check(http_request, request.bot_token)
+    _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
     _validate_claim_request((request.claim or "").strip(), (request.source_url or "").strip())
     store = get_assessment_job_store()
     job = store.create(owner_id=context.owner_id, mode=mode, request=request.model_dump(mode="json"))
@@ -1326,7 +1328,7 @@ def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiE
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
     _require_current_consent(context, profile)
-    _require_bot_check(http_request, request.bot_token)
+    _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
     enforce_speech_claim_limit(profile, request.max_claims)
     source_url = (request.source_url or "").strip()
     transcript = _speech_transcript_from_request(request.transcript, source_url, request.try_youtube_captions)
@@ -1395,7 +1397,7 @@ def speech_audit(request: SpeechAuditRequest, http_request: Request) -> ApiEnvel
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
     _require_current_consent(context, profile)
-    _require_bot_check(http_request, request.bot_token)
+    _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
     enforce_speech_claim_limit(profile, request.max_claims)
     source_url = (request.source_url or "").strip()
     transcript = _speech_transcript_from_request(request.transcript, source_url, request.try_youtube_captions)

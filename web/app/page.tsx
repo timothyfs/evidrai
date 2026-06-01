@@ -1717,7 +1717,7 @@ export default function Home() {
   const canShareReports = Boolean(userFeatures.share_reports);
   const canExportReports = Boolean(userFeatures.exports);
   const canLabelReports = me?.user?.tier === 'researcher';
-  const botReady = !TURNSTILE_SITE_KEY || Boolean(botToken);
+  const botReady = signedIn || !TURNSTILE_SITE_KEY || Boolean(botToken);
   const ready = useMemo(() => signedIn && botReady && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, botReady, claim, sourceUrl]);
   const speechReady = useMemo(() => signedIn && botReady && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, botReady, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
   const consentRequired = signedIn && Boolean(me?.consent?.required);
@@ -2299,7 +2299,7 @@ export default function Home() {
                   </select>
                 </label>
               </div>
-              {(claim.trim() || sourceUrl.trim()) && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="check this claim" />}
+              {!signedIn && (claim.trim() || sourceUrl.trim()) && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="check this claim" />}
               <button className="primaryAction" disabled={!ready || loading}>{loading && loadingKind === 'claim' ? 'Checking evidence…' : 'Check claim'}</button>
               <VerifyGuide mode="claim" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
             </form>
@@ -2338,7 +2338,7 @@ export default function Home() {
                 <SpeechInputState transcript={speechTranscript} sourceUrl={speechSourceUrl} tryYouTubeCaptions={tryYouTubeCaptions} />
               </div>
               <VerifyGuide mode="speech" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
-              {(speechTranscript.trim() || speechSourceUrl.trim()) && !speechExtraction && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="extract claims" />}
+              {!signedIn && (speechTranscript.trim() || speechSourceUrl.trim()) && !speechExtraction && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="extract claims" />}
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
               {!speechTranscript.trim() && speechSourceUrl.trim() && tryYouTubeCaptions && <p className="fieldHint">No transcript pasted, so Evidrai will try to extract captions from the URL first.</p>}
               {!speechTranscript.trim() && speechSourceUrl.trim() && !tryYouTubeCaptions && <p className="fieldHint">Paste the transcript above, or enable automatic YouTube captions for a best-effort URL-only attempt.</p>}
