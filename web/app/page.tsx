@@ -1319,10 +1319,9 @@ function LoginGate({
                 <span><strong>Optional:</strong> I’d like to receive Evidrai product updates, research notes, and marketing emails. I can unsubscribe at any time.</span>
               </label>
             </div>
-            <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="create an account" />
             <div className="formRow">
               <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} type="submit">Sign in</button>
-              <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6 || !termsAccepted || Boolean(TURNSTILE_SITE_KEY && !botToken)} onClick={onSignUp} type="button">Create free account</button>
+              <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6 || !termsAccepted} onClick={onSignUp} type="button">Create free account</button>
               <button className="linkButton" disabled={authBusy || !email.trim()} onClick={onPasswordReset} type="button">Set/reset password</button>
             </div>
           </form>
@@ -1891,7 +1890,6 @@ export default function Home() {
     setAuthMessage('');
     try {
       if (!termsAccepted) throw new Error('Accept the Terms of Use and acknowledge the Privacy Policy before creating an account.');
-      if (TURNSTILE_SITE_KEY && !botToken) throw new Error('Complete the bot check before creating an account.');
       const session = await signUpWithEmailPassword(authEmail.trim(), authPassword, {
         termsAccepted,
         marketingOptIn,
