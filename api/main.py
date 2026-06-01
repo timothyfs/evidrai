@@ -24,6 +24,7 @@ from evidrai.entitlements import (
     list_user_profiles,
     require_feature,
     set_user_tier,
+    UserProfile,
     update_user_consent,
     update_user_profile_details,
 )
@@ -473,6 +474,8 @@ def _owner_id_from_request(request: Request) -> str:
 
 def _profile_from_request(request: Request):
     context = _auth_context_from_request(request)
+    if not context.authenticated:
+        return context, UserProfile(owner_id=context.owner_id, tier="free")
     profile = get_or_create_profile(context.owner_id, email=context.email)
     if _is_master_admin(context) and profile.tier != "researcher":
         profile = set_user_tier(context.owner_id, "researcher", email=context.email)

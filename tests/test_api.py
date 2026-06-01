@@ -98,6 +98,30 @@ def test_me_endpoint_returns_current_profile(monkeypatch):
     assert payload["consent"]["required"] is False
 
 
+def test_me_with_anonymous_header_does_not_create_profile(monkeypatch):
+    calls = []
+    monkeypatch.setattr(api_main, "get_or_create_profile", lambda owner_id, email="": calls.append((owner_id, email)) or UserProfile(owner_id=owner_id, email=email, tier="free"))
+
+    response = client.get("/me", headers={"X-Evidrai-User-Id": "anon_test"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["authenticated"] is False
+    assert payload["user"]["owner_id"] == "anon_test"
+    assert calls == []
+
+
+def test_anonymous_assessment_is_blocked_without_creating_profile(monkeypatch):
+    calls = []
+    monkeypatch.setattr(api_main, "get_or_create_profile", lambda owner_id, email="": calls.append((owner_id, email)) or UserProfile(owner_id=owner_id, email=email, tier="free"))
+
+    response = client.post("/assessments/fast", json={"claim": "Anonymous claim"}, headers={"X-Evidrai-User-Id": "anon_test"})
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "auth_required"
+    assert calls == []
+
+
 def test_me_consent_update_records_profile_consent(monkeypatch):
     context = api_main.AuthContext(owner_id="jwt-user", auth_method="supabase_jwt", email="user@example.com")
     monkeypatch.setattr(api_main, "_auth_context_from_request", lambda request: context)
