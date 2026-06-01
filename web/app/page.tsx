@@ -2299,9 +2299,9 @@ export default function Home() {
                   </select>
                 </label>
               </div>
-              <VerifyGuide mode="claim" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
               {(claim.trim() || sourceUrl.trim()) && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="check this claim" />}
               <button className="primaryAction" disabled={!ready || loading}>{loading && loadingKind === 'claim' ? 'Checking evidence…' : 'Check claim'}</button>
+              <VerifyGuide mode="claim" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
             </form>
           ) : (
             <form className="verifyForm" onSubmit={extractSpeech}>
