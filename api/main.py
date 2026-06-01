@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import requests
@@ -22,6 +24,7 @@ from evidrai.entitlements import (
     list_user_profiles,
     require_feature,
     set_user_tier,
+    update_user_consent,
     update_user_profile_details,
 )
 from evidrai.errors import EvidraiError, safe_error_payload
@@ -42,6 +45,8 @@ from evidrai.utils import build_analysis_input, is_probable_url
 
 
 API_VERSION = "api.v1"
+CURRENT_TERMS_VERSION = "terms-of-use-2026-06-01"
+CURRENT_PRIVACY_VERSION = "privacy-policy-2026-06-01"
 
 
 app = FastAPI(
@@ -176,6 +181,14 @@ class AdminInviteUserRequest(BaseModel):
     tier: str = Field(default="free", pattern="^(free|pro|researcher)$")
     send_invite: bool = True
     redirect_to: str = ""
+
+
+class ConsentUpdateRequest(BaseModel):
+    terms_accepted: bool = False
+    marketing_opt_in: bool = False
+    terms_version: str = CURRENT_TERMS_VERSION
+    privacy_version: str = CURRENT_PRIVACY_VERSION
+    consent_source: str = "web_app"
 
 
 class AdminScoringPolicyUpdateRequest(BaseModel):
@@ -461,6 +474,67 @@ def _is_master_admin(context: AuthContext) -> bool:
     return context.authenticated and context.email.strip().lower() in master_admin_emails()
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _hash_ip(value: str) -> str:
+    clean = (value or "").strip()
+    if not clean:
+        return ""
+    return hashlib.sha256(clean.encode("utf-8")).hexdigest()
+
+
+def _consent_status(profile: Any) -> Dict[str, Any]:
+    terms_version = str(getattr(profile, "terms_version", "") or "")
+    privacy_version = str(getattr(profile, "privacy_version", "") or "")
+    accepted = bool(getattr(profile, "terms_accepted_at", "")) and bool(getattr(profile, "privacy_acknowledged_at", ""))
+    current = terms_version == CURRENT_TERMS_VERSION and privacy_version == CURRENT_PRIVACY_VERSION
+    required = not (accepted and current)
+    return {
+        "required": required,
+        "current_terms_version": CURRENT_TERMS_VERSION,
+        "current_privacy_version": CURRENT_PRIVACY_VERSION,
+        "accepted_terms_version": terms_version,
+        "accepted_privacy_version": privacy_version,
+        "terms_accepted_at": getattr(profile, "terms_accepted_at", "") or "",
+        "privacy_acknowledged_at": getattr(profile, "privacy_acknowledged_at", "") or "",
+        "marketing_opt_in": bool(getattr(profile, "marketing_opt_in", False)),
+        "marketing_opt_in_at": getattr(profile, "marketing_opt_in_at", "") or "",
+        "consent_source": getattr(profile, "consent_source", "") or "",
+    }
+
+
+def _require_current_consent(context: AuthContext, profile: Any) -> None:
+    if context.authenticated and _consent_status(profile)["required"]:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "consent_required",
+                "message": "Accept the current Terms of Use and acknowledge the Privacy Policy before continuing.",
+                "consent": _consent_status(profile),
+            },
+        )
+
+
+def _record_profile_consent(context: AuthContext, request: Request, payload: ConsentUpdateRequest):
+    if not payload.terms_accepted:
+        raise HTTPException(status_code=400, detail={"code": "terms_required", "message": "Accept the Terms of Use and acknowledge the Privacy Policy before continuing."})
+    now = _utc_now_iso()
+    return update_user_consent(
+        context.owner_id,
+        terms_version=CURRENT_TERMS_VERSION,
+        privacy_version=CURRENT_PRIVACY_VERSION,
+        terms_accepted_at=now,
+        privacy_acknowledged_at=now,
+        marketing_opt_in=payload.marketing_opt_in,
+        marketing_opt_in_at=now if payload.marketing_opt_in else "",
+        consent_source=payload.consent_source or "web_app",
+        consent_user_agent=(request.headers.get("user-agent") or "")[:500],
+        consent_ip_hash=_hash_ip(request.client.host if request.client else ""),
+    )
+
+
 def _require_authenticated(request: Request) -> AuthContext:
     context, _profile = _profile_from_request(request)
     if not context.authenticated:
@@ -701,6 +775,7 @@ def reports_index(http_request: Request, limit: int = 50) -> Dict[str, Any]:
     context, profile = _profile_from_request(http_request)
     if not context.authenticated:
         raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in with an email address before using Evidrai."})
+    _require_current_consent(context, profile)
     profile_payload = profile.to_dict() if hasattr(profile, "to_dict") else {}
     report_limit = int((profile_payload.get("limits") or {}).get("saved_reports") or limit)
     return {"ok": True, "owner_id": context.owner_id, "report_limit": report_limit, "reports": list_reports(limit=max(limit, report_limit), owner_id=context.owner_id)}
@@ -715,6 +790,7 @@ def create_report_share_endpoint(report_id: str, request: ReportShareCreateReque
         context, profile = _profile_from_request(http_request)
         if not context.authenticated:
             raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in is required to share reports."})
+        _require_current_consent(context, profile)
         assessment = load_report(report_id)
         assessment_owner = _assessment_field(assessment, "owner_id") or ""
         if (not assessment_owner or assessment_owner != context.owner_id) and not _is_master_admin(context):
@@ -758,7 +834,17 @@ def me(http_request: Request) -> Dict[str, Any]:
     user = profile.to_dict()
     user["admin_access"] = _is_master_admin(context)
     user["admin_access_source"] = "master_admin_email" if user["admin_access"] else "none"
-    return {"ok": True, "authenticated": context.authenticated, "is_admin": _is_master_admin(context), "user": user, "feature_matrix": feature_matrix()}
+    return {"ok": True, "authenticated": context.authenticated, "is_admin": _is_master_admin(context), "user": user, "consent": _consent_status(profile), "feature_matrix": feature_matrix()}
+
+
+@app.post("/me/consent", response_model=Dict[str, Any])
+def update_my_consent(request: ConsentUpdateRequest, http_request: Request) -> Dict[str, Any]:
+    context = _require_authenticated(http_request)
+    profile = _record_profile_consent(context, http_request, request)
+    user = profile.to_dict()
+    user["admin_access"] = _is_master_admin(context)
+    user["admin_access_source"] = "master_admin_email" if user["admin_access"] else "none"
+    return {"ok": True, "authenticated": True, "is_admin": _is_master_admin(context), "user": user, "consent": _consent_status(profile), "feature_matrix": feature_matrix()}
 
 
 @app.get("/admin/users", response_model=Dict[str, Any])
@@ -1097,6 +1183,7 @@ def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelop
 
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims" if request.mode == "deep" else "fast_claims", authenticated=context.authenticated)
+    _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token)
     result = _run_claim_assessment(claim=claim, source_url=source_url, category=request.category, mode=request.mode)
     assessment = serialize_assessment_response(
@@ -1123,6 +1210,7 @@ def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelop
 def create_fast_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "fast_claims", authenticated=context.authenticated)
+    _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token)
     return _assessment_response_from_request(request, "fast", owner_id=context.owner_id, profile=profile)
 
@@ -1131,6 +1219,7 @@ def create_fast_assessment(request: AssessmentCreateRequest, http_request: Reque
 def create_deep_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims", authenticated=context.authenticated)
+    _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token)
     return _assessment_response_from_request(request, "deep", owner_id=context.owner_id, profile=profile)
 
@@ -1141,6 +1230,7 @@ def create_assessment_job(mode: str, request: AssessmentCreateRequest, http_requ
         raise HTTPException(status_code=404, detail="Not Found")
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "deep_claims" if mode == "deep" else "fast_claims", authenticated=context.authenticated)
+    _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token)
     _validate_claim_request((request.claim or "").strip(), (request.source_url or "").strip())
     store = get_assessment_job_store()
@@ -1160,6 +1250,7 @@ def get_assessment_job(job_id: str, http_request: Request) -> AssessmentJobStatu
 def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiEnvelope:
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
+    _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token)
     enforce_speech_claim_limit(profile, request.max_claims)
     source_url = (request.source_url or "").strip()
@@ -1184,6 +1275,7 @@ def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiE
 def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnvelope:
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
+    _require_current_consent(context, profile)
     # Bot protection is enforced on /speech/extract. Verification is the second
     # stage of the same signed-in, entitlement-limited workflow; requiring a
     # fresh Turnstile token here causes single-use token failures after a
@@ -1227,6 +1319,7 @@ def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnv
 def speech_audit(request: SpeechAuditRequest, http_request: Request) -> ApiEnvelope:
     context, profile = _profile_from_request(http_request)
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
+    _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token)
     enforce_speech_claim_limit(profile, request.max_claims)
     source_url = (request.source_url or "").strip()

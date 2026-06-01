@@ -107,10 +107,30 @@ export type UserProfile = {
   billing_account_name?: string;
   billing_account_id?: string;
   admin_notes?: string;
+  terms_version?: string;
+  privacy_version?: string;
+  terms_accepted_at?: string;
+  privacy_acknowledged_at?: string;
+  marketing_opt_in?: boolean;
+  marketing_opt_in_at?: string;
+  consent_source?: string;
   admin_access?: boolean;
   admin_access_source?: 'master_admin_email' | 'none' | string;
   features: Record<string, boolean>;
   limits: Record<string, number>;
+};
+
+export type ConsentStatus = {
+  required: boolean;
+  current_terms_version: string;
+  current_privacy_version: string;
+  accepted_terms_version: string;
+  accepted_privacy_version: string;
+  terms_accepted_at: string;
+  privacy_acknowledged_at: string;
+  marketing_opt_in: boolean;
+  marketing_opt_in_at: string;
+  consent_source: string;
 };
 
 export type MeResponse = {
@@ -118,6 +138,7 @@ export type MeResponse = {
   authenticated: boolean;
   is_admin?: boolean;
   user: UserProfile;
+  consent?: ConsentStatus;
   feature_matrix: { schema_version: string; tiers: TierDefinition[] };
 };
 
@@ -371,6 +392,13 @@ export function getRuntime(): Promise<RuntimeStatus> {
 
 export function getMe(): Promise<MeResponse> {
   return request<MeResponse>('/me');
+}
+
+export function updateMyConsent(input: { terms_accepted: boolean; marketing_opt_in: boolean; terms_version?: string; privacy_version?: string; consent_source?: string }): Promise<MeResponse> {
+  return request<MeResponse>('/me/consent', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 export function getAuthDiagnostics(): Promise<AuthDiagnosticsResponse> {

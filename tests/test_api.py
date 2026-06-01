@@ -16,7 +16,15 @@ def grant_tier(monkeypatch, tier="pro", owner_id="test-user", email="user@exampl
         "_profile_from_request",
         lambda request: (
             api_main.AuthContext(owner_id=owner_id, auth_method="supabase_jwt", email=email),
-            UserProfile(owner_id=owner_id, email=email, tier=tier),
+            UserProfile(
+                owner_id=owner_id,
+                email=email,
+                tier=tier,
+                terms_version=api_main.CURRENT_TERMS_VERSION,
+                privacy_version=api_main.CURRENT_PRIVACY_VERSION,
+                terms_accepted_at="2026-06-01T00:00:00+00:00",
+                privacy_acknowledged_at="2026-06-01T00:00:00+00:00",
+            ),
         ),
     )
 
@@ -87,6 +95,55 @@ def test_me_endpoint_returns_current_profile(monkeypatch):
     assert payload["user"]["owner_id"] == "jwt-user"
     assert payload["user"]["tier_label"] == "Researcher / Journalist"
     assert payload["user"]["features"]["evidence_ledger"] is True
+    assert payload["consent"]["required"] is False
+
+
+def test_me_consent_update_records_profile_consent(monkeypatch):
+    context = api_main.AuthContext(owner_id="jwt-user", auth_method="supabase_jwt", email="user@example.com")
+    monkeypatch.setattr(api_main, "_auth_context_from_request", lambda request: context)
+    monkeypatch.setattr(api_main, "get_or_create_profile", lambda owner_id, email="": UserProfile(owner_id=owner_id, email=email, tier="free"))
+
+    captured = {}
+
+    def fake_update_user_consent(owner_id, **details):
+        captured["owner_id"] = owner_id
+        captured.update(details)
+        return UserProfile(
+            owner_id=owner_id,
+            email="user@example.com",
+            tier="free",
+            terms_version=details["terms_version"],
+            privacy_version=details["privacy_version"],
+            terms_accepted_at=details["terms_accepted_at"],
+            privacy_acknowledged_at=details["privacy_acknowledged_at"],
+            marketing_opt_in=details["marketing_opt_in"],
+            marketing_opt_in_at=details["marketing_opt_in_at"],
+            consent_source=details["consent_source"],
+        )
+
+    monkeypatch.setattr(api_main, "update_user_consent", fake_update_user_consent)
+
+    response = client.post("/me/consent", json={"terms_accepted": True, "marketing_opt_in": True})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["consent"]["required"] is False
+    assert captured["owner_id"] == "jwt-user"
+    assert captured["terms_version"] == api_main.CURRENT_TERMS_VERSION
+    assert captured["privacy_version"] == api_main.CURRENT_PRIVACY_VERSION
+    assert captured["marketing_opt_in"] is True
+    assert captured["terms_accepted_at"]
+
+
+def test_me_consent_update_requires_terms_acceptance(monkeypatch):
+    context = api_main.AuthContext(owner_id="jwt-user", auth_method="supabase_jwt", email="user@example.com")
+    monkeypatch.setattr(api_main, "_auth_context_from_request", lambda request: context)
+    monkeypatch.setattr(api_main, "get_or_create_profile", lambda owner_id, email="": UserProfile(owner_id=owner_id, email=email, tier="free"))
+
+    response = client.post("/me/consent", json={"terms_accepted": False, "marketing_opt_in": False})
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "terms_required"
 
 
 def test_free_tier_cannot_run_deep_assessment(monkeypatch):
@@ -656,7 +713,15 @@ def test_report_history_can_be_scoped_by_owner_header(monkeypatch, tmp_path):
         owner_id = request.headers.get("x-evidrai-user-id") or "alice"
         return (
             api_main.AuthContext(owner_id=owner_id, auth_method="supabase_jwt", email=f"{owner_id}@example.com"),
-            UserProfile(owner_id=owner_id, email=f"{owner_id}@example.com", tier="free"),
+            UserProfile(
+                owner_id=owner_id,
+                email=f"{owner_id}@example.com",
+                tier="free",
+                terms_version=api_main.CURRENT_TERMS_VERSION,
+                privacy_version=api_main.CURRENT_PRIVACY_VERSION,
+                terms_accepted_at="2026-06-01T00:00:00+00:00",
+                privacy_acknowledged_at="2026-06-01T00:00:00+00:00",
+            ),
         )
 
     monkeypatch.setattr(api_main, "_profile_from_request", profile_from_owner_header)

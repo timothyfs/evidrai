@@ -42,6 +42,15 @@ class UserProfile:
     billing_account_name: str = ""
     billing_account_id: str = ""
     admin_notes: str = ""
+    terms_version: str = ""
+    privacy_version: str = ""
+    terms_accepted_at: str = ""
+    privacy_acknowledged_at: str = ""
+    marketing_opt_in: bool = False
+    marketing_opt_in_at: str = ""
+    consent_source: str = ""
+    consent_user_agent: str = ""
+    consent_ip_hash: str = ""
     features: Dict[str, bool] = field(default_factory=dict)
     limits: Dict[str, int] = field(default_factory=dict)
 
@@ -160,6 +169,9 @@ class UserProfileStore(Protocol):
     def update_details(self, owner_id: str, **details: str) -> UserProfile:
         ...
 
+    def update_consent(self, owner_id: str, **details: Any) -> UserProfile:
+        ...
+
     def list(self, limit: int = 100) -> List[UserProfile]:
         ...
 
@@ -195,7 +207,7 @@ class LocalUserProfileStore:
         elif owner_id not in data:
             data[owner_id] = record
             self._write(data)
-        return UserProfile(owner_id=owner_id, email=record.get("email") or "", tier=normalize_tier(record.get("tier") or "free"), company_name=record.get("company_name") or "", organisation_name=record.get("organisation_name") or "", billing_account_name=record.get("billing_account_name") or "", billing_account_id=record.get("billing_account_id") or "", admin_notes=record.get("admin_notes") or "")
+        return _profile_from_mapping(record, owner_id=owner_id)
 
     def set_tier(self, owner_id: str, tier: str, email: str = "") -> UserProfile:
         if not owner_id:
@@ -222,11 +234,31 @@ class LocalUserProfileStore:
         self._write(data)
         return self.get_or_create(owner_id, email=record.get("email") or "")
 
+    def update_consent(self, owner_id: str, **details: Any) -> UserProfile:
+        if not owner_id:
+            raise EntitlementError("owner_id is required", code="owner_required", status_code=400)
+        allowed = {
+            "terms_version",
+            "privacy_version",
+            "terms_accepted_at",
+            "privacy_acknowledged_at",
+            "marketing_opt_in",
+            "marketing_opt_in_at",
+            "consent_source",
+            "consent_user_agent",
+            "consent_ip_hash",
+        }
+        data = self._read()
+        record = data.get(owner_id) or {"owner_id": owner_id, "email": details.get("email", ""), "tier": "free"}
+        for key, value in details.items():
+            if key in allowed:
+                record[key] = bool(value) if key == "marketing_opt_in" else str(value or "").strip()
+        data[owner_id] = record
+        self._write(data)
+        return self.get_or_create(owner_id, email=record.get("email") or "")
+
     def list(self, limit: int = 100) -> List[UserProfile]:
-        return [
-            UserProfile(owner_id=record.get("owner_id") or owner_id, email=record.get("email") or "", tier=normalize_tier(record.get("tier") or "free"), company_name=record.get("company_name") or "", organisation_name=record.get("organisation_name") or "", billing_account_name=record.get("billing_account_name") or "", billing_account_id=record.get("billing_account_id") or "", admin_notes=record.get("admin_notes") or "")
-            for owner_id, record in list(self._read().items())[:limit]
-        ]
+        return [_profile_from_mapping(record, owner_id=owner_id) for owner_id, record in list(self._read().items())[:limit]]
 
     def delete(self, owner_id: str) -> bool:
         if not owner_id:
@@ -267,7 +299,7 @@ class PostgresUserProfileStore:
                     ON CONFLICT (owner_id) DO UPDATE SET
                         email = COALESCE(NULLIF(EXCLUDED.email, ''), user_profiles.email),
                         updated_at = now()
-                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash
                     """,
                     (owner_id, email),
                 )
@@ -290,7 +322,7 @@ class PostgresUserProfileStore:
                         email = COALESCE(NULLIF(EXCLUDED.email, ''), user_profiles.email),
                         tier = EXCLUDED.tier,
                         updated_at = now()
-                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash
                     """,
                     (owner_id, email, normalized),
                 )
@@ -315,7 +347,7 @@ class PostgresUserProfileStore:
                     UPDATE user_profiles
                     SET {columns}, updated_at = now()
                     WHERE owner_id = %s
-                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash
                     """,
                     tuple(params),
                 )
@@ -325,11 +357,49 @@ class PostgresUserProfileStore:
             return self.get_or_create(owner_id, email=updates.get("email", ""))
         return _profile_from_row(row)
 
+    def update_consent(self, owner_id: str, **details: Any) -> UserProfile:
+        if not owner_id:
+            raise EntitlementError("owner_id is required", code="owner_required", status_code=400)
+        allowed = {
+            "terms_version",
+            "privacy_version",
+            "terms_accepted_at",
+            "privacy_acknowledged_at",
+            "marketing_opt_in",
+            "marketing_opt_in_at",
+            "consent_source",
+            "consent_user_agent",
+            "consent_ip_hash",
+        }
+        updates = {key: value for key, value in details.items() if key in allowed}
+        if not updates:
+            return self.get_or_create(owner_id)
+        self._ensure_schema()
+        columns = ", ".join(f"{key} = %s" for key in updates)
+        params = list(updates.values()) + [owner_id]
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    UPDATE user_profiles
+                    SET {columns}, updated_at = now()
+                    WHERE owner_id = %s
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash
+                    """,
+                    tuple(params),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        if not row:
+            self.get_or_create(owner_id)
+            return self.update_consent(owner_id, **details)
+        return _profile_from_row(row)
+
     def list(self, limit: int = 100) -> List[UserProfile]:
         self._ensure_schema()
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes FROM user_profiles ORDER BY updated_at DESC LIMIT %s", (limit,))
+                cur.execute("SELECT owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash FROM user_profiles ORDER BY updated_at DESC LIMIT %s", (limit,))
                 rows = cur.fetchall()
         return [_profile_from_row(row) for row in rows]
 
@@ -349,9 +419,9 @@ def _dt_value(value: Any) -> str:
     return value.isoformat() if hasattr(value, "isoformat") else str(value or "")
 
 
-def _profile_from_row(row: Dict[str, Any]) -> UserProfile:
+def _profile_from_mapping(row: Dict[str, Any], *, owner_id: str = "") -> UserProfile:
     return UserProfile(
-        owner_id=row["owner_id"],
+        owner_id=row.get("owner_id") or owner_id,
         email=row.get("email") or "",
         tier=normalize_tier(row.get("tier") or "free"),
         subscription_status=row.get("subscription_status") or "none",
@@ -363,7 +433,20 @@ def _profile_from_row(row: Dict[str, Any]) -> UserProfile:
         billing_account_name=row.get("billing_account_name") or "",
         billing_account_id=row.get("billing_account_id") or "",
         admin_notes=row.get("admin_notes") or "",
+        terms_version=row.get("terms_version") or "",
+        privacy_version=row.get("privacy_version") or "",
+        terms_accepted_at=_dt_value(row.get("terms_accepted_at")),
+        privacy_acknowledged_at=_dt_value(row.get("privacy_acknowledged_at")),
+        marketing_opt_in=bool(row.get("marketing_opt_in")),
+        marketing_opt_in_at=_dt_value(row.get("marketing_opt_in_at")),
+        consent_source=row.get("consent_source") or "",
+        consent_user_agent=row.get("consent_user_agent") or "",
+        consent_ip_hash=row.get("consent_ip_hash") or "",
     )
+
+
+def _profile_from_row(row: Dict[str, Any]) -> UserProfile:
+    return _profile_from_mapping(row)
 
 
 def get_user_profile_store() -> UserProfileStore:
@@ -383,6 +466,10 @@ def set_user_tier(owner_id: str, tier: str, email: str = "", store: UserProfileS
 
 def update_user_profile_details(owner_id: str, store: UserProfileStore | None = None, **details: str) -> UserProfile:
     return (store or get_user_profile_store()).update_details(owner_id, **details)
+
+
+def update_user_consent(owner_id: str, store: UserProfileStore | None = None, **details: Any) -> UserProfile:
+    return (store or get_user_profile_store()).update_consent(owner_id, **details)
 
 
 def list_user_profiles(limit: int = 100, store: UserProfileStore | None = None) -> List[UserProfile]:

@@ -28,6 +28,7 @@ import {
   setAccountProfile,
   submitFeedback,
   submitSupportIssue,
+  updateMyConsent,
   updateReportMetadata,
   verifySpeechClaims,
 } from '../lib/api';
@@ -1335,6 +1336,48 @@ function LoginGate({
   );
 }
 
+function ConsentUpdateGate({
+  me,
+  termsAccepted,
+  setTermsAccepted,
+  marketingOptIn,
+  setMarketingOptIn,
+  busy,
+  message,
+  onAccept,
+}: {
+  me: MeResponse | null;
+  termsAccepted: boolean;
+  setTermsAccepted: (value: boolean) => void;
+  marketingOptIn: boolean;
+  setMarketingOptIn: (value: boolean) => void;
+  busy: boolean;
+  message: string;
+  onAccept: () => void;
+}) {
+  const consent = me?.consent;
+  return (
+    <section className="card loginGate consentRequiredGate">
+      <p className="eyebrow">Consent update required</p>
+      <h2>Review Evidrai’s current terms</h2>
+      <p className="muted">Before you continue, please accept the current Terms of Use and acknowledge the Privacy Policy. We record the policy versions and timestamp for audit purposes.</p>
+      {consent && <p className="muted">Current versions: {consent.current_terms_version} · {consent.current_privacy_version}</p>}
+      <div className="consentPanel">
+        <label className="checkboxLine">
+          <input checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} type="checkbox" />
+          <span>I agree to the <a href="/terms-of-use" target="_blank" rel="noreferrer">Terms of Use</a> and acknowledge the <a href="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
+        </label>
+        <label className="checkboxLine optionalConsent">
+          <input checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} type="checkbox" />
+          <span>I’d like to receive Evidrai product updates, research notes, and marketing emails. I can unsubscribe at any time.</span>
+        </label>
+      </div>
+      <button disabled={busy || !termsAccepted} onClick={onAccept} type="button">{busy ? 'Saving…' : 'Accept and continue'}</button>
+      {message && <p className={message.toLowerCase().includes('accept') || message.toLowerCase().includes('could') ? 'error' : 'muted'}>{message}</p>}
+    </section>
+  );
+}
+
 function AccountMenu({ account, me, theme, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; theme: ThemeMode; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
   const label = account.label || 'Signed in';
   const displayName = label.includes('@') ? label.split('@')[0] : label;
@@ -1678,6 +1721,7 @@ export default function Home() {
   const botReady = !TURNSTILE_SITE_KEY || Boolean(botToken);
   const ready = useMemo(() => signedIn && botReady && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, botReady, claim, sourceUrl]);
   const speechReady = useMemo(() => signedIn && botReady && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, botReady, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
+  const consentRequired = signedIn && Boolean(me?.consent?.required);
 
   function rememberReport(result: AssessmentResponse) {
     const summary: ReportSummary = {
@@ -1861,10 +1905,40 @@ export default function Home() {
       setAccountProfile(profile);
       setReports([]);
       setAuthMessage(session ? 'Free account created.' : 'Account created. Check your email to confirm before signing in.');
+      if (session) {
+        await updateMyConsent({
+          terms_accepted: true,
+          marketing_opt_in: marketingOptIn,
+          terms_version: TERMS_VERSION,
+          privacy_version: PRIVACY_VERSION,
+          consent_source: 'web_signup',
+        });
+      }
       await refreshMe();
       await refreshReports(profile.owner_id);
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-up failed');
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleConsentUpdate() {
+    setAuthBusy(true);
+    setAuthMessage('');
+    try {
+      if (!termsAccepted) throw new Error('Accept the Terms of Use and acknowledge the Privacy Policy before continuing.');
+      const payload = await updateMyConsent({
+        terms_accepted: true,
+        marketing_opt_in: marketingOptIn,
+        terms_version: TERMS_VERSION,
+        privacy_version: PRIVACY_VERSION,
+        consent_source: 'web_reconsent',
+      });
+      setMe(payload);
+      setAuthMessage('Consent recorded.');
+    } catch (err) {
+      setAuthMessage(err instanceof Error ? err.message : 'Could not record consent');
     } finally {
       setAuthBusy(false);
     }
@@ -2170,11 +2244,13 @@ export default function Home() {
         />
       )}
 
-      {signedIn && <section className="workspaceIntro"><p>Evidence-based assessment · Sources grouped by role · Confidence is not certainty · Reasoning is inspectable</p></section>}
-      {signedIn && <TrustLanguageStrip />}
-      {signedIn && !assessment && !speechExtraction && <ProgressiveTrustJourney />}
+      {consentRequired && <ConsentUpdateGate me={me} termsAccepted={termsAccepted} setTermsAccepted={setTermsAccepted} marketingOptIn={marketingOptIn} setMarketingOptIn={setMarketingOptIn} busy={authBusy} message={authMessage} onAccept={handleConsentUpdate} />}
 
-      {signedIn && <div className="layout">
+      {signedIn && !consentRequired && <section className="workspaceIntro"><p>Evidence-based assessment · Sources grouped by role · Confidence is not certainty · Reasoning is inspectable</p></section>}
+      {signedIn && !consentRequired && <TrustLanguageStrip />}
+      {signedIn && !consentRequired && !assessment && !speechExtraction && <ProgressiveTrustJourney />}
+
+      {signedIn && !consentRequired && <div className="layout">
         <section className="card verifyCard">
           <div className="verifyHeader">
             <div>
