@@ -171,6 +171,24 @@ button.secondary {
 .accountPanel small { line-height: 1.4; }
 .authActions, .emailLogin { display: grid; gap: 8px; }
 .emailLogin input { padding: 10px 12px; }
+.consentPanel {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.checkboxLine {
+  align-items: flex-start;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.85rem;
+  gap: 8px;
+  line-height: 1.4;
+}
+.checkboxLine input { margin-top: 3px; }
+.checkboxLine a { color: var(--accent); }
+.optionalConsent { color: color-mix(in srgb, var(--muted), var(--ink) 20%); }
 .reportItem {
   display: grid;
   width: 100%;

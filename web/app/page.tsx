@@ -105,6 +105,8 @@ const REPORT_LABELS = [
   ['needs-follow-up', 'Needs follow-up'],
 ] as const;
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
+const TERMS_VERSION = 'terms-of-use-2026-06-01';
+const PRIVACY_VERSION = 'privacy-policy-2026-06-01';
 
 function applyTheme(theme: ThemeMode) {
   if (typeof document === 'undefined') return;
@@ -1265,6 +1267,10 @@ function LoginGate({
   onPasswordReset,
   botToken,
   setBotToken,
+  termsAccepted,
+  setTermsAccepted,
+  marketingOptIn,
+  setMarketingOptIn,
 }: {
   account: AccountProfile | null;
   authReady: boolean;
@@ -1280,6 +1286,10 @@ function LoginGate({
   onPasswordReset: () => void;
   botToken: string;
   setBotToken: (value: string) => void;
+  termsAccepted: boolean;
+  setTermsAccepted: (value: boolean) => void;
+  marketingOptIn: boolean;
+  setMarketingOptIn: (value: boolean) => void;
 }) {
   return (
     <section className="card loginGate" id="sign-in">
@@ -1298,10 +1308,20 @@ function LoginGate({
               Password
               <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Minimum 6 characters" type="password" />
             </label>
+            <div className="consentPanel">
+              <label className="checkboxLine">
+                <input checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} type="checkbox" />
+                <span>I agree to the <a href="/terms-of-use" target="_blank" rel="noreferrer">Terms of Use</a> and acknowledge the <a href="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
+              </label>
+              <label className="checkboxLine optionalConsent">
+                <input checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} type="checkbox" />
+                <span>I’d like to receive Evidrai product updates, research notes, and marketing emails. I can unsubscribe at any time.</span>
+              </label>
+            </div>
             <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="create an account" />
             <div className="formRow">
               <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6} type="submit">Sign in</button>
-              <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6 || Boolean(TURNSTILE_SITE_KEY && !botToken)} onClick={onSignUp} type="button">Create free account</button>
+              <button className="secondary" disabled={authBusy || !email.trim() || password.length < 6 || !termsAccepted || Boolean(TURNSTILE_SITE_KEY && !botToken)} onClick={onSignUp} type="button">Create free account</button>
               <button className="linkButton" disabled={authBusy || !email.trim()} onClick={onPasswordReset} type="button">Set/reset password</button>
             </div>
           </form>
@@ -1631,6 +1651,8 @@ export default function Home() {
   const [authDiagnostics, setAuthDiagnostics] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [botToken, setBotToken] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [reportsOpen, setReportsOpen] = useState(false);
   const [reportShareLinks, setReportShareLinks] = useState<Record<string, string>>({});
@@ -1824,8 +1846,15 @@ export default function Home() {
     setAuthBusy(true);
     setAuthMessage('');
     try {
+      if (!termsAccepted) throw new Error('Accept the Terms of Use and acknowledge the Privacy Policy before creating an account.');
       if (TURNSTILE_SITE_KEY && !botToken) throw new Error('Complete the bot check before creating an account.');
-      const session = await signUpWithEmailPassword(authEmail.trim(), authPassword);
+      const session = await signUpWithEmailPassword(authEmail.trim(), authPassword, {
+        termsAccepted,
+        marketingOptIn,
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
+        consentCapturedAt: new Date().toISOString(),
+      });
       setAccessToken(session?.access_token || '');
       const profile = profileFromSession(session, getAnonymousAccountProfile());
       setAccount(profile);
@@ -2134,6 +2163,10 @@ export default function Home() {
           onPasswordReset={handlePasswordReset}
           botToken={botToken}
           setBotToken={setBotToken}
+          termsAccepted={termsAccepted}
+          setTermsAccepted={setTermsAccepted}
+          marketingOptIn={marketingOptIn}
+          setMarketingOptIn={setMarketingOptIn}
         />
       )}
 

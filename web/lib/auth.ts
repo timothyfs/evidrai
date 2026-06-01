@@ -59,13 +59,32 @@ export async function signInWithEmailPassword(email: string, password: string) {
   return data.session;
 }
 
-export async function signUpWithEmailPassword(email: string, password: string) {
+export type SignupConsent = {
+  termsAccepted: boolean;
+  marketingOptIn: boolean;
+  termsVersion: string;
+  privacyVersion: string;
+  consentCapturedAt: string;
+};
+
+export async function signUpWithEmailPassword(email: string, password: string, consent: SignupConsent) {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase Auth is not configured.');
+  if (!consent.termsAccepted) throw new Error('Accept the Terms of Use and acknowledge the Privacy Policy before creating an account.');
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: window.location.origin },
+    options: {
+      emailRedirectTo: window.location.origin,
+      data: {
+        terms_accepted: true,
+        terms_version: consent.termsVersion,
+        privacy_version: consent.privacyVersion,
+        marketing_opt_in: consent.marketingOptIn,
+        consent_captured_at: consent.consentCapturedAt,
+        consent_source: 'web_signup',
+      },
+    },
   });
   if (error) throw error;
   return data.session;
