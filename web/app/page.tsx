@@ -1312,11 +1312,11 @@ function LoginGate({
             <div className="consentPanel">
               <label className="checkboxLine">
                 <input checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} type="checkbox" />
-                <span>I agree to the <a href="/terms-of-use" target="_blank" rel="noreferrer">Terms of Use</a> and acknowledge the <a href="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
+                <span><strong>Required:</strong> I agree to the <a href="/terms-of-use" target="_blank" rel="noreferrer">Terms of Use</a> and acknowledge the <a href="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
               </label>
               <label className="checkboxLine optionalConsent">
                 <input checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} type="checkbox" />
-                <span>I’d like to receive Evidrai product updates, research notes, and marketing emails. I can unsubscribe at any time.</span>
+                <span><strong>Optional:</strong> I’d like to receive Evidrai product updates, research notes, and marketing emails. I can unsubscribe at any time.</span>
               </label>
             </div>
             <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="create an account" />
@@ -1365,11 +1365,11 @@ function ConsentUpdateGate({
       <div className="consentPanel">
         <label className="checkboxLine">
           <input checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} type="checkbox" />
-          <span>I agree to the <a href="/terms-of-use" target="_blank" rel="noreferrer">Terms of Use</a> and acknowledge the <a href="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
+          <span><strong>Required:</strong> I agree to the <a href="/terms-of-use" target="_blank" rel="noreferrer">Terms of Use</a> and acknowledge the <a href="/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span>
         </label>
         <label className="checkboxLine optionalConsent">
           <input checked={marketingOptIn} onChange={(event) => setMarketingOptIn(event.target.checked)} type="checkbox" />
-          <span>I’d like to receive Evidrai product updates, research notes, and marketing emails. I can unsubscribe at any time.</span>
+          <span><strong>Optional:</strong> I’d like to receive Evidrai product updates, research notes, and marketing emails. I can unsubscribe at any time.</span>
         </label>
       </div>
       <button disabled={busy || !termsAccepted} onClick={onAccept} type="button">{busy ? 'Saving…' : 'Accept and continue'}</button>

@@ -159,6 +159,37 @@ def test_me_consent_update_records_profile_consent(monkeypatch):
     assert captured["terms_accepted_at"]
 
 
+def test_me_consent_update_allows_marketing_opt_out(monkeypatch):
+    context = api_main.AuthContext(owner_id="jwt-user", auth_method="supabase_jwt", email="user@example.com")
+    monkeypatch.setattr(api_main, "_auth_context_from_request", lambda request: context)
+    monkeypatch.setattr(api_main, "get_or_create_profile", lambda owner_id, email="": UserProfile(owner_id=owner_id, email=email, tier="free"))
+
+    captured = {}
+
+    def fake_update_user_consent(owner_id, **details):
+        captured.update(details)
+        return UserProfile(
+            owner_id=owner_id,
+            email="user@example.com",
+            tier="free",
+            terms_version=details["terms_version"],
+            privacy_version=details["privacy_version"],
+            terms_accepted_at=details["terms_accepted_at"],
+            privacy_acknowledged_at=details["privacy_acknowledged_at"],
+            marketing_opt_in=details["marketing_opt_in"],
+            marketing_opt_in_at=details["marketing_opt_in_at"],
+        )
+
+    monkeypatch.setattr(api_main, "update_user_consent", fake_update_user_consent)
+
+    response = client.post("/me/consent", json={"terms_accepted": True, "marketing_opt_in": False})
+
+    assert response.status_code == 200
+    assert captured["marketing_opt_in"] is False
+    assert captured["marketing_opt_in_at"] == ""
+    assert response.json()["consent"]["required"] is False
+
+
 def test_me_consent_update_requires_terms_acceptance(monkeypatch):
     context = api_main.AuthContext(owner_id="jwt-user", auth_method="supabase_jwt", email="user@example.com")
     monkeypatch.setattr(api_main, "_auth_context_from_request", lambda request: context)
