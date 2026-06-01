@@ -56,6 +56,21 @@ function blankDetails(user?: UserProfile) {
   };
 }
 
+function formatAuditDate(value?: string) {
+  if (!value) return 'Not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function consentBadge(ok: boolean) {
+  return ok ? 'Recorded' : 'Missing / stale';
+}
+
+function consentBadgeClass(ok: boolean) {
+  return ok ? 'consentStatusBadge good' : 'consentStatusBadge bad';
+}
+
 export default function AdminPage() {
   const [account, setAccount] = useState<AccountProfile | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -564,6 +579,9 @@ export default function AdminPage() {
 
           {editingUser && (() => {
             const edit = details[editingUser.owner_id] || blankDetails(editingUser);
+            const termsRecorded = Boolean(editingUser.terms_version && editingUser.terms_accepted_at);
+            const privacyRecorded = Boolean(editingUser.privacy_version && editingUser.privacy_acknowledged_at);
+            const marketingRecorded = Boolean(editingUser.marketing_opt_in);
             return (
               <section className="adminUserDetailsEditor" aria-label="Edit user details">
                 <div className="editorHeader">
@@ -580,6 +598,36 @@ export default function AdminPage() {
                 <label>Billing account ID<input value={edit.billing_account_id} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, billing_account_id: event.target.value } }))} /></label>
                 <label>Temporary password<input value={tempPasswords[editingUser.owner_id] || ''} onChange={(event) => setTempPasswords((current) => ({ ...current, [editingUser.owner_id]: event.target.value }))} type="password" placeholder="Set temporary password" /></label>
                 <label className="notesField">Admin notes<textarea value={edit.admin_notes} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, admin_notes: event.target.value } }))} /></label>
+                <div className="adminConsentAudit wide" aria-label="Consent audit status">
+                  <div className="consentAuditHeader">
+                    <strong>Consent audit</strong>
+                    <small>Captured profile consent status for Terms, Privacy, and marketing.</small>
+                  </div>
+                  <article>
+                    <span className={consentBadgeClass(termsRecorded)}>{consentBadge(termsRecorded)}</span>
+                    <strong>Terms of Use</strong>
+                    <small>Version: {editingUser.terms_version || 'Not recorded'}</small>
+                    <small>Accepted: {formatAuditDate(editingUser.terms_accepted_at)}</small>
+                  </article>
+                  <article>
+                    <span className={consentBadgeClass(privacyRecorded)}>{consentBadge(privacyRecorded)}</span>
+                    <strong>Privacy Policy</strong>
+                    <small>Version: {editingUser.privacy_version || 'Not recorded'}</small>
+                    <small>Acknowledged: {formatAuditDate(editingUser.privacy_acknowledged_at)}</small>
+                  </article>
+                  <article>
+                    <span className={consentBadgeClass(marketingRecorded)}>{marketingRecorded ? 'Opted in' : 'Not opted in'}</span>
+                    <strong>Marketing consent</strong>
+                    <small>Status: {marketingRecorded ? 'Yes' : 'No'}</small>
+                    <small>Captured: {formatAuditDate(editingUser.marketing_opt_in_at)}</small>
+                  </article>
+                  <article>
+                    <span className="consentStatusBadge neutral">Audit metadata</span>
+                    <strong>Capture source</strong>
+                    <small>{editingUser.consent_source || 'Not recorded'}</small>
+                    <small>User agent and hashed IP are retained server-side in the profile record.</small>
+                  </article>
+                </div>
                 <div className="rowActions wide">
                   <button disabled={busy} onClick={() => saveUserDetails(editingUser)} type="button">Save details</button>
                   <button className="secondary" disabled={busy || (tempPasswords[editingUser.owner_id] || '').length < 8} onClick={() => setTemporaryPassword(editingUser)} type="button">Set temporary password</button>

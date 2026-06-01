@@ -2845,12 +2845,42 @@ html[data-theme="light"] .methodologyGuardrails {
   justify-content: space-between;
 }
 .adminUserDetailsEditor textarea { min-height: 86px; }
+.adminConsentAudit {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 12px;
+}
+.adminConsentAudit .consentAuditHeader { grid-column: 1 / -1; }
+.adminConsentAudit article {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+}
+.adminConsentAudit small { color: var(--muted); overflow-wrap: anywhere; }
+.consentStatusBadge {
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 850;
+  justify-self: start;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+.consentStatusBadge.good { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+.consentStatusBadge.bad { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.consentStatusBadge.neutral { background: rgba(255,255,255,0.06); color: var(--muted); }
 @media (max-width: 780px) {
   .adminUserTable.scalable { max-height: none; overflow-x: auto; }
   .adminUserHeader.scalable { display: grid; }
   .adminUserHeader.scalable,
   .adminUserRow.scalable { min-width: 1180px; }
   .adminUserDetailsEditor { grid-template-columns: 1fr; }
+  .adminConsentAudit { grid-template-columns: 1fr; }
 }
 
 /* Header cleanup: conventional desktop nav, compact mobile menu, slimmer account pill. */
