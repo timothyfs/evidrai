@@ -210,6 +210,13 @@ export type SupportIssueResponse = {
   message: string;
 };
 
+export type ContactMessageResponse = {
+  ok: boolean;
+  message_id: string;
+  destination: string;
+  message: string;
+};
+
 export type AssessmentJobCreateResponse = {
   ok: boolean;
   job_id: string;
@@ -592,6 +599,27 @@ export function submitSupportIssue(input: {
       page_url: input.page_url || '',
       assessment_id: input.assessment_id || '',
       browser_context: input.browser_context || {},
+    }),
+  });
+}
+
+export function submitContactMessage(input: {
+  name: string;
+  email: string;
+  organisation?: string;
+  topic: 'general' | 'early_access' | 'research' | 'partnership' | 'support' | 'press' | 'other';
+  message: string;
+  page_url?: string;
+}): Promise<ContactMessageResponse> {
+  return request<ContactMessageResponse>('/contact/messages', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: input.name,
+      email: input.email,
+      organisation: input.organisation || '',
+      topic: input.topic,
+      message: input.message,
+      page_url: input.page_url || '',
     }),
   });
 }

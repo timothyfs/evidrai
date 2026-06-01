@@ -126,6 +126,15 @@ class SupportIssueRequest(BaseModel):
     browser_context: Dict[str, Any] = Field(default_factory=dict)
 
 
+class ContactMessageRequest(BaseModel):
+    name: str = ""
+    email: str = ""
+    organisation: str = ""
+    topic: str = Field(default="general", pattern="^(general|early_access|research|partnership|support|press|other)$")
+    message: str = ""
+    page_url: str = ""
+
+
 class FeedbackCreateRequest(BaseModel):
     rating: str = Field(default="Useful", pattern="^(Useful|Partly useful|Not useful)$")
     reasons: list[str] = Field(default_factory=list)
@@ -1046,6 +1055,51 @@ def create_support_issue(request: SupportIssueRequest, http_request: Request) ->
         "destination": saved.destination,
         "message": "Support issue sent for review.",
     }
+
+
+@app.post("/contact/messages", response_model=Dict[str, Any])
+def create_contact_message(request: ContactMessageRequest, http_request: Request) -> Dict[str, Any]:
+    name = (request.name or "").strip()[:120]
+    email = (request.email or "").strip().lower()[:180]
+    organisation = (request.organisation or "").strip()[:180]
+    message = (request.message or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail={"code": "contact_name_required", "message": "Add your name before sending."})
+    if not email or "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=400, detail={"code": "contact_email_required", "message": "Add a valid email address before sending."})
+    if len(message) < 10:
+        raise HTTPException(status_code=400, detail={"code": "contact_message_required", "message": "Add a short message before sending."})
+    owner_id = f"contact:{email}"
+    subject = f"Contact form: {request.topic.replace('_', ' ')}"
+    record = build_feedback_record(
+        result_key="support_issue",
+        rating="Contact form",
+        reasons=["contact", request.topic],
+        comment=message,
+        result={
+            "assessment_id": "",
+            "owner_id": owner_id,
+            "support_issue": {
+                "issue_type": "support" if request.topic in {"support", "early_access"} else "other",
+                "severity": "normal",
+                "subject": subject,
+                "description": message,
+                "page_url": request.page_url,
+                "browser_context": {
+                    "name": name,
+                    "email": email,
+                    "organisation": organisation,
+                    "topic": request.topic,
+                    "user_agent": (http_request.headers.get("user-agent") or "")[:500],
+                },
+            },
+        },
+        source_url=request.page_url,
+        settings={"support_channel": "contact_form", "email": email, "name": name, "organisation": organisation},
+        owner_id=owner_id,
+    )
+    saved = save_feedback(record)
+    return {"ok": saved.ok, "message_id": saved.feedback_id, "destination": saved.destination, "message": "Thanks. Your message has been sent."}
 
 
 @app.get("/admin/support/issues", response_model=Dict[str, Any])

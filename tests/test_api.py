@@ -146,6 +146,50 @@ def test_me_consent_update_requires_terms_acceptance(monkeypatch):
     assert response.json()["detail"]["code"] == "terms_required"
 
 
+def test_public_contact_form_creates_support_queue_item(monkeypatch):
+    captured = {}
+
+    class Saved:
+        ok = True
+        feedback_id = "contact-1"
+        destination = "local"
+
+    def fake_save_feedback(record):
+        captured.update(record)
+        return Saved()
+
+    monkeypatch.setattr(api_main, "save_feedback", fake_save_feedback)
+
+    response = client.post(
+        "/contact/messages",
+        json={
+            "name": "Alex Tester",
+            "email": "alex@example.com",
+            "organisation": "Example Org",
+            "topic": "research",
+            "message": "I need evidence exports for a newsroom workflow.",
+            "page_url": "https://evidrai.com/contact",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["message_id"] == "contact-1"
+    assert captured["result_key"] == "support_issue"
+    assert captured["owner_id"] == "contact:alex@example.com"
+    assert captured["assessment_output"]["support_issue"]["browser_context"]["email"] == "alex@example.com"
+
+
+def test_public_contact_form_validates_email():
+    response = client.post(
+        "/contact/messages",
+        json={"name": "Alex", "email": "not-email", "topic": "general", "message": "Please contact me about Evidrai."},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "contact_email_required"
+
+
 def test_free_tier_cannot_run_deep_assessment(monkeypatch):
     grant_tier(monkeypatch, "free")
 
