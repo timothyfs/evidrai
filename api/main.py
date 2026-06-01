@@ -865,6 +865,24 @@ def admin_users(http_request: Request, limit: int = 100) -> Dict[str, Any]:
     return {"ok": True, "users": [_profile_admin_view(profile) for profile in list_user_profiles(limit=limit)], "feature_matrix": feature_matrix()}
 
 
+@app.get("/admin/users/activity", response_model=Dict[str, Any])
+def admin_user_activity(http_request: Request, email: str = "", owner_id: str = "", limit: int = 25) -> Dict[str, Any]:
+    _require_admin(http_request)
+    target_email = (email or "").strip().lower()
+    target_owner = (owner_id or "").strip()
+    profiles = list_user_profiles(limit=1000)
+    profile = None
+    if target_owner:
+        profile = next((item for item in profiles if item.owner_id == target_owner), None)
+    if not profile and target_email:
+        profile = next((item for item in profiles if (item.email or "").strip().lower() == target_email), None)
+    if not profile:
+        raise HTTPException(status_code=404, detail={"code": "user_not_found", "message": "No user profile matched that email or owner ID."})
+    safe_limit = max(1, min(limit, 100))
+    reports = list_reports(limit=safe_limit, owner_id=profile.owner_id)
+    return {"ok": True, "user": _profile_admin_view(profile), "reports": reports, "count": len(reports)}
+
+
 @app.patch("/admin/users/tier", response_model=Dict[str, Any])
 def admin_set_user_tier(request: AdminSetTierRequest, http_request: Request) -> Dict[str, Any]:
     _require_admin(http_request)

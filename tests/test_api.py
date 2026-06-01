@@ -271,6 +271,20 @@ def test_admin_users_marks_master_admin_access(monkeypatch):
     assert users[1]["tier_label"] == "Pro"
 
 
+def test_admin_user_activity_finds_reports_by_email(monkeypatch):
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "list_user_profiles", lambda limit=1000: [UserProfile(owner_id="user-1", email="alex@example.com", tier="pro")])
+    monkeypatch.setattr(api_main, "list_reports", lambda limit=25, owner_id="": [{"assessment_id": "r1", "claim": "Test claim", "verdict": "Supported", "owner_id": owner_id}])
+
+    response = client.get("/admin/users/activity?email=alex@example.com", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["user"]["owner_id"] == "user-1"
+    assert payload["reports"] == [{"assessment_id": "r1", "claim": "Test claim", "verdict": "Supported", "owner_id": "user-1"}]
+
+
 
 def test_admin_scoring_policy_requires_admin(monkeypatch):
     monkeypatch.setattr(api_main, "admin_token", lambda: "secret-token")

@@ -497,6 +497,14 @@ export function listAdminUsers(): Promise<{ ok: boolean; users: UserProfile[]; f
   return request<{ ok: boolean; users: UserProfile[]; feature_matrix: { schema_version: string; tiers: TierDefinition[] } }>('/admin/users');
 }
 
+export function getAdminUserActivity(input: { email?: string; owner_id?: string; limit?: number }): Promise<{ ok: boolean; user: UserProfile; reports: ReportSummary[]; count: number }> {
+  const params = new URLSearchParams();
+  if (input.email) params.set('email', input.email);
+  if (input.owner_id) params.set('owner_id', input.owner_id);
+  params.set('limit', String(input.limit || 25));
+  return request<{ ok: boolean; user: UserProfile; reports: ReportSummary[]; count: number }>(`/admin/users/activity?${params.toString()}`);
+}
+
 export function getAdminScoringPolicy(): Promise<{ ok: boolean; policy: ScoringPolicy; weight_sum: number; history: ScoringPolicy[] }> {
   return request<{ ok: boolean; policy: ScoringPolicy; weight_sum: number; history: ScoringPolicy[] }>('/admin/scoring-policy');
 }

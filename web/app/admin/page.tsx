@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { AccountProfile, MeResponse, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, listAdminUsers, listSupportIssues, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
+import { AccountProfile, MeResponse, ReportSummary, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, getAdminUserActivity, listAdminUsers, listSupportIssues, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut } from '../../lib/auth';
 
 const TIER_OPTIONS = [
@@ -89,6 +89,7 @@ export default function AdminPage() {
   const [bulkTier, setBulkTier] = useState<TierName>('pro');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [supportIssues, setSupportIssues] = useState<SupportIssue[]>([]);
+  const [userActivity, setUserActivity] = useState<{ user: UserProfile; reports: ReportSummary[]; count: number } | null>(null);
   const [editing, setEditing] = useState<string>('');
   const [details, setDetails] = useState<Record<string, ReturnType<typeof blankDetails>>>({});
   const [tempPasswords, setTempPasswords] = useState<Record<string, string>>({});
@@ -135,6 +136,20 @@ export default function AdminPage() {
       setMessage(`Loaded ${payload.count || 0} support issues.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not load support issues.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadUserActivity(user: UserProfile) {
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await getAdminUserActivity({ owner_id: user.owner_id, limit: 25 });
+      setUserActivity({ user: payload.user, reports: payload.reports || [], count: payload.count || 0 });
+      setMessage(`Loaded ${payload.count || 0} reports for ${payload.user.email || payload.user.owner_id}.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not load user activity.');
     } finally {
       setBusy(false);
     }
@@ -562,12 +577,14 @@ export default function AdminPage() {
                       setEditing(editing === user.owner_id ? '' : user.owner_id);
                       setDetails((current) => ({ ...current, [user.owner_id]: current[user.owner_id] || blankDetails(user) }));
                     }
+                    if (action === 'activity') loadUserActivity(user);
                     if (action === 'reset') sendReset(user);
                     if (action === 'invite') resendInvite(user);
                     if (action === 'delete') deleteUser(user);
                   }}>
                     <option value="">Actions…</option>
                     <option value="details">Edit details</option>
+                    <option value="activity">View tests</option>
                     <option disabled={!user.email} value="reset">Send password reset</option>
                     <option disabled={!user.email} value="invite">Resend invite</option>
                     <option disabled={user.owner_id === account?.owner_id} value="delete">Delete user</option>
@@ -635,6 +652,32 @@ export default function AdminPage() {
               </section>
             );
           })()}
+
+          {userActivity && (
+            <section className="adminUserActivityPanel" aria-label="User test activity">
+              <div className="editorHeader">
+                <div>
+                  <strong>User test activity</strong>
+                  <small>{userActivity.user.email || userActivity.user.owner_id}</small>
+                </div>
+                <button className="secondary" disabled={busy} onClick={() => setUserActivity(null)} type="button">Close</button>
+              </div>
+              {userActivity.reports.length === 0 ? <p className="muted">No saved reports found for this user.</p> : (
+                <div className="adminActivityList">
+                  {userActivity.reports.map((report) => (
+                    <article key={report.assessment_id}>
+                      <div>
+                        <strong>{report.claim || 'Untitled check'}</strong>
+                        <small>{report.created_at || 'No timestamp'} · {report.mode || 'unknown mode'}</small>
+                      </div>
+                      <span>{report.verdict || 'No verdict'}</span>
+                      <a href={`/reports/${encodeURIComponent(report.assessment_id)}`} target="_blank" rel="noreferrer">Open</a>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           <details>
             <summary><span>Manual update by user ID</span><small>Fallback for repairing a specific product-tier profile</small></summary>
