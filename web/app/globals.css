@@ -3022,11 +3022,17 @@ html[data-theme="light"] .methodologyGuardrails {
   min-width: 0;
   padding: 4px 5px 4px 12px;
 }
-.headerQuickCheck span {
+.headerQuickCheck .quickIconButton {
+  background: transparent;
+  border: 0;
   color: var(--muted);
   font-size: 1rem;
   font-weight: 900;
+  min-height: 28px;
+  padding: 0;
+  width: 24px;
 }
+.headerQuickCheck .quickIconButton:hover:not(:disabled) { box-shadow: none; color: var(--ink); transform: none; }
 .headerQuickCheck input {
   background: transparent;
   border: 0;
@@ -3037,7 +3043,7 @@ html[data-theme="light"] .methodologyGuardrails {
   padding: 8px 4px;
 }
 .headerQuickCheck input::placeholder { color: color-mix(in srgb, var(--muted) 78%, transparent); }
-.headerQuickCheck button {
+.headerQuickCheck button:not(.quickIconButton) {
   border-radius: 999px;
   font-size: 0.78rem;
   min-height: 32px;
@@ -3060,7 +3066,7 @@ html[data-theme="light"] .methodologyGuardrails {
 @media (max-width: 560px) {
   .homeChip { display: none; }
   .headerBrandCluster .brand { padding: 7px 10px; }
-  .headerQuickCheck button { padding-inline: 10px; }
+  .headerQuickCheck button:not(.quickIconButton) { padding-inline: 10px; }
 }
 
 /* Header follow-up: remove redundant home chip behaviour and keep menus above quick search. */

@@ -1420,7 +1420,7 @@ function SiteHeader({ account, me, signedIn, theme, quickClaim, onQuickClaimChan
       </details>
       {signedIn ? (
         <form className="headerQuickCheck" onSubmit={onQuickSubmit}>
-          <span aria-hidden="true">⌕</span>
+          <button className="quickIconButton" disabled={quickDisabled} type="submit" aria-label="Run quick claim check">⌕</button>
           <input value={quickClaim} onChange={(event) => onQuickClaimChange(event.target.value)} placeholder="Quick claim check…" aria-label="Quick claim check" />
           <button disabled={quickDisabled} type="submit">{quickLoading ? 'Checking…' : 'Check'}</button>
         </form>
