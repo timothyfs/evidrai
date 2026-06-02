@@ -80,7 +80,7 @@ def test_tiers_endpoint_returns_feature_matrix():
     payload = response.json()
     assert payload["schema_version"] == "feature_matrix.v1"
     assert [tier["tier"] for tier in payload["tiers"]] == ["free", "pro", "researcher"]
-    assert payload["tiers"][0]["features"]["deep_claims"] is False
+    assert payload["tiers"][0]["features"]["deep_claims"] is True
     assert payload["tiers"][1]["features"]["speech_audit"] is True
 
 
@@ -245,13 +245,13 @@ def test_public_contact_form_validates_email():
     assert response.json()["detail"]["code"] == "contact_email_required"
 
 
-def test_free_tier_cannot_run_deep_assessment(monkeypatch):
+def test_free_tier_can_request_standard_assessment(monkeypatch):
     grant_tier(monkeypatch, "free")
 
     response = client.post("/assessments/deep", json={"claim": "Test claim"})
 
-    assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "feature_not_available"
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "configuration_error"
 
 
 def test_admin_user_tier_update_requires_token(monkeypatch):

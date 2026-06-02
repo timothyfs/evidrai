@@ -21,8 +21,7 @@ const principles = [
 ];
 
 const liveNow = [
-  'Fast claim checks',
-  'Deep evidence review for eligible users',
+  'Standard claim checks with evidence review',
   'Article/source URL context',
   'Pasted transcript speech audits',
   'Best-effort YouTube transcript extraction',

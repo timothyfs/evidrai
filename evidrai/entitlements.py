@@ -67,10 +67,10 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
     "free": TierDefinition(
         tier="free",
         label="Free",
-        description="Fast individual claim checks with limited saved report history.",
+        description="Standard individual claim checks with limited saved report history.",
         features={
             "fast_claims": True,
-            "deep_claims": False,
+            "deep_claims": True,
             "speech_audit": False,
             "feedback": True,
             "simple_share_reports": True,
@@ -80,12 +80,12 @@ TIER_DEFINITIONS: Dict[str, TierDefinition] = {
             "source_snapshots": False,
             "api_access": False,
         },
-        limits={"saved_reports": 5, "max_speech_claims": 0, "monthly_fast_checks": 25, "monthly_deep_checks": 0, "monthly_speech_audits": 0},
+        limits={"saved_reports": 5, "max_speech_claims": 0, "monthly_fast_checks": 25, "monthly_deep_checks": 25, "monthly_speech_audits": 0},
     ),
     "pro": TierDefinition(
         tier="pro",
         label="Pro",
-        description="Deep verification and speech/video audits for serious individual use.",
+        description="Higher usage limits, full report sharing, exports, and speech/video audits for serious individual use.",
         features={
             "fast_claims": True,
             "deep_claims": True,

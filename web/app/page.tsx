@@ -1027,7 +1027,7 @@ function useWakeLock(enabled: boolean) {
   }, [enabled]);
 }
 
-function VerifyGuide({ mode, canUseDeep, canUseSpeech }: { mode: 'claim' | 'speech'; canUseDeep: boolean; canUseSpeech: boolean }) {
+function VerifyGuide({ mode, canUseSpeech }: { mode: 'claim' | 'speech'; canUseSpeech: boolean }) {
   return (
     <aside className="verifyGuide">
       <p className="eyebrow">What happens next</p>
@@ -1036,7 +1036,6 @@ function VerifyGuide({ mode, canUseDeep, canUseSpeech }: { mode: 'claim' | 'spee
           <li>We isolate the checkable factual claim.</li>
           <li>Evidence is grouped by source role, not raw volume.</li>
           <li>You get a verdict, confidence level, caveats, and inspectable reasoning. Confidence is not certainty.</li>
-          {!canUseDeep && <li>Deep evidence checks unlock on Pro and Researcher tiers.</li>}
         </ul>
       ) : (
         <ul>
@@ -1695,13 +1694,10 @@ export default function Home() {
   const [claim, setClaim] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [category, setCategory] = useState('auto-detect');
-  const [mode, setMode] = useState<'fast' | 'deep'>('fast');
-  const [fastOutputStyle, setFastOutputStyle] = useState<'standard' | 'absurdity_humour'>('standard');
   const [speechTranscript, setSpeechTranscript] = useState('');
   const [speechSourceUrl, setSpeechSourceUrl] = useState('');
   const [tryYouTubeCaptions, setTryYouTubeCaptions] = useState(true);
   const [maxClaims, setMaxClaims] = useState(3);
-  const [speechMode, setSpeechMode] = useState<'fast' | 'deep'>('fast');
   const [speechExtraction, setSpeechExtraction] = useState<SpeechExtractionResult | null>(null);
   const [selectedSpeechClaims, setSelectedSpeechClaims] = useState<string[]>([]);
   const [speechVerification, setSpeechVerification] = useState<SpeechVerificationResult | null>(null);
@@ -1735,17 +1731,10 @@ export default function Home() {
   const signedIn = Boolean(account?.owner_id && !account.owner_id.startsWith('anon_'));
   const userFeatures = me?.user?.features || {};
   const userLimits = me?.user?.limits || {};
-  const canUseDeep = Boolean(userFeatures.deep_claims);
   const canUseSpeech = Boolean(userFeatures.speech_audit);
   const canShareReports = Boolean(userFeatures.share_reports);
   const canExportReports = Boolean(userFeatures.exports);
   const canLabelReports = me?.user?.tier === 'researcher';
-  useEffect(() => {
-    if (canUseDeep) {
-      setMode((current) => current === 'fast' ? 'deep' : current);
-      setSpeechMode((current) => current === 'fast' ? 'deep' : current);
-    }
-  }, [canUseDeep]);
   const botReady = signedIn || !TURNSTILE_SITE_KEY || Boolean(botToken);
   const ready = useMemo(() => signedIn && botReady && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, botReady, claim, sourceUrl]);
   const speechReady = useMemo(() => signedIn && botReady && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, botReady, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
@@ -2039,9 +2028,7 @@ export default function Home() {
     setLoading(true);
     setError('');
     try {
-      const requestedMode = canUseDeep ? mode : 'fast';
-      const requestedStyle = requestedMode === 'fast' ? fastOutputStyle : 'standard';
-      const job = await createAssessmentJob({ claim, source_url: sourceUrl, category, mode: requestedMode, output_style: requestedStyle, bot_token: botToken });
+      const job = await createAssessmentJob({ claim, source_url: sourceUrl, category, mode: 'deep', output_style: 'standard', bot_token: botToken });
       const key = pendingJobStorageKey(account?.owner_id);
       if (key) window.localStorage.setItem(key, job.job_id);
       setBotToken('');
@@ -2088,7 +2075,7 @@ export default function Home() {
     setVerifyingSpeech(true);
     setError('');
     try {
-      const result = await verifySpeechClaims({ claims, source_url: speechSourceUrl || speechExtraction.source_url, verification_mode: canUseDeep ? speechMode : 'fast' });
+      const result = await verifySpeechClaims({ claims, source_url: speechSourceUrl || speechExtraction.source_url, verification_mode: 'deep' });
       setBotToken('');
       setSpeechVerification(result);
     } catch (err) {
@@ -2313,29 +2300,11 @@ export default function Home() {
                     {['auto-detect', 'politics', 'health', 'science', 'finance', 'history', 'general'].map((item) => <option key={item}>{item}</option>)}
                   </select>
                 </label>
-                <label>
-                  Mode
-                  <select value={mode} onChange={(event) => setMode(event.target.value as 'fast' | 'deep')}>
-                    <option value="fast">First-pass check</option>
-                    <option disabled={!canUseDeep} value="deep">Deep evidence review{canUseDeep ? ' · recommended' : ' · Pro+'}</option>
-                  </select>
-                </label>
-                <label>
-                  First-pass style
-                  <select disabled={mode !== 'fast'} value={fastOutputStyle} onChange={(event) => setFastOutputStyle(event.target.value as 'standard' | 'absurdity_humour')}>
-                    <option value="standard">Standard</option>
-                    <option value="absurdity_humour">Absurdity check · experimental</option>
-                  </select>
-                </label>
               </div>
-              <p className="modeHint">
-                {mode === 'deep'
-                  ? 'Recommended for normal verification: fuller retrieval, source scoring, contradiction checks, and inspectable reasoning.'
-                  : 'Lighter triage: quicker and cheaper, but it may miss context or counter-evidence. Use Deep for serious checks.'}
-              </p>
+              <p className="modeHint">Standard claim check: evidence retrieval, source scoring, contradiction checks, and inspectable reasoning.</p>
               {!signedIn && (claim.trim() || sourceUrl.trim()) && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="check this claim" />}
               <button className="primaryAction" disabled={!ready || loading}>{loading && loadingKind === 'claim' ? 'Checking evidence…' : 'Check claim'}</button>
-              <VerifyGuide mode="claim" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
+              <VerifyGuide mode="claim" canUseSpeech={canUseSpeech} />
             </form>
           ) : (
             <form className="verifyForm" onSubmit={extractSpeech}>
@@ -2358,25 +2327,14 @@ export default function Home() {
                     {Array.from({ length: Math.max(1, Math.min(20, Number(userLimits.max_speech_claims || 0))) }, (_, index) => index + 1).map((item) => <option key={item} value={item}>{item}</option>)}
                   </select>
                 </label>
-                <label>
-                  Verification mode
-                  <select value={speechMode} onChange={(event) => setSpeechMode(event.target.value as 'fast' | 'deep')}>
-                    <option value="fast">First-pass check</option>
-                    <option disabled={!canUseDeep} value="deep">Deep evidence review{canUseDeep ? ' · recommended' : ' · Pro+'}</option>
-                  </select>
-                </label>
               </div>
-              <p className="modeHint">
-                {speechMode === 'deep'
-                  ? 'Recommended for selected claims: fuller retrieval, source scoring, and a stronger evidence trail for each claim.'
-                  : 'Lighter triage for selected claims. It is useful for a quick pass, but Deep is the safer default when accuracy matters.'}
-              </p>
+              <p className="modeHint">Selected claims use the standard evidence review path with retrieval, source scoring, and contradiction checks.</p>
               <div className="youtubeFallbackBox">
                 <label className="checkPill"><input checked={tryYouTubeCaptions} onChange={(event) => setTryYouTubeCaptions(event.target.checked)} type="checkbox" /> Try automatic YouTube captions when transcript is empty</label>
                 <p className="muted">URL-only audits are best-effort. If YouTube blocks caption access, paste the transcript above and run again.</p>
                 <SpeechInputState transcript={speechTranscript} sourceUrl={speechSourceUrl} tryYouTubeCaptions={tryYouTubeCaptions} />
               </div>
-              <VerifyGuide mode="speech" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
+              <VerifyGuide mode="speech" canUseSpeech={canUseSpeech} />
               {!signedIn && (speechTranscript.trim() || speechSourceUrl.trim()) && !speechExtraction && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="extract claims" />}
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
               {!speechTranscript.trim() && speechSourceUrl.trim() && tryYouTubeCaptions && <p className="fieldHint">No transcript pasted, so Evidrai will try to extract captions from the URL first.</p>}

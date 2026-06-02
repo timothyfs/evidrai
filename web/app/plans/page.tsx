@@ -1,8 +1,8 @@
 import { getTiers } from '../../lib/api';
 
 const featureLabels: Record<string, string> = {
-  fast_claims: 'Fast claim checks',
-  deep_claims: 'Deep claim checks',
+  fast_claims: 'Standard claim checks',
+  deep_claims: 'Evidence review',
   speech_audit: 'Speech/video audit',
   feedback: 'Feedback loop',
   simple_share_reports: 'Simple branded shares',
@@ -29,6 +29,10 @@ const comingSoon = new Set([
   'api_access',
 ]);
 
+const hiddenCompatibilityFeatures = new Set([
+  'fast_claims',
+]);
+
 function featureState(feature: string) {
   if (availableNow.has(feature)) return 'available';
   if (comingSoon.has(feature)) return 'soon';
@@ -36,8 +40,8 @@ function featureState(feature: string) {
 }
 
 function tierNote(tier: string) {
-  if (tier === 'free') return 'Good for lightweight early-access testing, occasional checks, and simple branded sharing.';
-  if (tier === 'pro') return 'Deep checks, speech/video workflows, public report shares, and exports are available now.';
+  if (tier === 'free') return 'Good for occasional checks and simple branded sharing. Same core claim-check quality, lower limits.';
+  if (tier === 'pro') return 'More checks, speech/video workflows, public report shares, and exports are available now.';
   if (tier === 'researcher') return 'Preview tier for heavier research workflows. Higher limits and exports are active; ledger, snapshots, and API access are being built out.';
   return '';
 }
@@ -54,8 +58,8 @@ export default async function PlansPage() {
       <header className="siteHeader"><a className="brand logoBrand eyeBrand" href="/" aria-label="Evidrai home"><img className="logoLight" src="/brand/evidrai-eye-light.png" alt="" /><img className="logoDark" src="/brand/evidrai-eye-dark.png" alt="" /></a><nav className="staticNav"><a href="/product">Product</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/team">Team</a><a href="/contact">Contact</a><a href="/">Verify</a></nav></header>
       <section className="card marketingPage">
         <p className="eyebrow">Plans</p>
-        <h1>Choose the level of verification you need.</h1>
-        <p className="lead">Evidrai is in controlled early access. Core verification, saved reports, feedback, and speech/video workflows are live; advanced research workflows are being added carefully rather than over-promised.</p>
+        <h1>Choose the workflow capacity you need.</h1>
+        <p className="lead">Every plan uses the same core claim-check quality. Plans differ by volume, saved history, sharing, exports, and research workflows.</p>
         <div className="earlyAccessNotice">
           <strong>Early access promise</strong>
           <span>Every plan below separates what works now from what is coming next. No fake enterprise bingo. Refreshing, frankly.</span>
@@ -63,7 +67,7 @@ export default async function PlansPage() {
         {tiers.length > 0 ? (
           <div className="planCards">
             {tiers.map((tier) => {
-              const enabledFeatures = Object.entries(tier.features).filter(([, enabled]) => enabled);
+              const enabledFeatures = Object.entries(tier.features).filter(([feature, enabled]) => enabled && !hiddenCompatibilityFeatures.has(feature));
               const nowFeatures = enabledFeatures.filter(([feature]) => featureState(feature) === 'available');
               const soonFeatures = enabledFeatures.filter(([feature]) => featureState(feature) === 'soon');
               return (
@@ -90,7 +94,7 @@ export default async function PlansPage() {
                       </ul>
                     </div>
                   )}
-                  <p className="planLimits">Saved reports: {tier.limits.saved_reports} · Speech claims/audit: {tier.limits.max_speech_claims}</p>
+                  <p className="planLimits">Saved reports: {tier.limits.saved_reports} · Monthly claim checks: {tier.limits.monthly_deep_checks || tier.limits.monthly_fast_checks} · Speech claims/audit: {tier.limits.max_speech_claims}</p>
                 </article>
               );
             })}
