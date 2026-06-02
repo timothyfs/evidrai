@@ -69,3 +69,66 @@ def test_assessment_export_excludes_raw_content_and_includes_trace():
     assert payload["sources"][0]["summary"] == "Public summary"
     assert "content" not in payload["sources"][0]
     assert payload["debug"]["schema_version"] == "pipeline_trace.v1"
+
+
+def test_assessment_export_aligns_supported_verdict_with_contradiction_role():
+    payload = assessment_export_payload(
+        {
+            "verified_verdict": "Supported",
+            "verified_confidence": "High",
+            "claim": "Typed claim",
+            "sources": [
+                {
+                    "title": "Contradicting source",
+                    "url": "https://example.com/source",
+                    "claim_support": "supports",
+                    "evidence_category": "credible_reporting",
+                    "source_role": "contradiction",
+                    "weighted_score": 4.2,
+                }
+            ],
+        },
+        claim="Typed claim",
+        mode="deep",
+    )
+
+    assert payload["verdict"]["label"] == "False / contradicted"
+    assert payload["verdict"]["confidence"] == "Medium"
+    assert payload["evidence_map"]["supports_factual_core"] == []
+    assert payload["evidence_map"]["contradicts_factual_core"] == ["src_1"]
+    assert payload["claim_breakdown"] == []
+    assert "Verdict adjusted" in payload["verdict"]["key_caveat"]
+
+
+def test_assessment_export_softens_supportive_verdict_when_contradictions_match_support():
+    payload = assessment_export_payload(
+        {
+            "verified_verdict": "Supported",
+            "verified_confidence": "High",
+            "claim": "Typed claim",
+            "sources": [
+                {
+                    "title": "Supporting source",
+                    "url": "https://example.com/support",
+                    "claim_support": "supports",
+                    "evidence_category": "direct_evidence",
+                    "source_role": "evidence",
+                    "weighted_score": 4.2,
+                },
+                {
+                    "title": "Contradicting source",
+                    "url": "https://example.com/contradiction",
+                    "claim_support": "mixed",
+                    "evidence_category": "credible_contradiction",
+                    "source_role": "context",
+                    "weighted_score": 4.1,
+                },
+            ],
+        },
+        claim="Typed claim",
+        mode="deep",
+    )
+
+    assert payload["verdict"]["label"] == "Weakly supported / likely incorrect"
+    assert payload["evidence_map"]["supports_factual_core"] == ["src_1"]
+    assert payload["evidence_map"]["contradicts_factual_core"] == ["src_2"]

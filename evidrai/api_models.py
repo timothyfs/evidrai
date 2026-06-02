@@ -131,6 +131,62 @@ def _source_ids_by_role(sources: List[Dict[str, Any]], roles: set[str]) -> List[
     return [_source_id(i) for i, source in enumerate(sources) if normalize_source_role_label(source.get("source_role")) in normalized_roles]
 
 
+def _source_ids_by_contradiction_signal(sources: List[Dict[str, Any]]) -> List[str]:
+    ids: List[str] = []
+    contradiction_categories = {"credible_contradiction", "denial_or_rebuttal"}
+    for i, source in enumerate(sources):
+        stance = normalize_claim_support_label(source.get("claim_support"))
+        role = normalize_source_role_label(source.get("source_role"))
+        category = normalize_evidence_category_label(source.get("evidence_category"))
+        if stance == "contradicts" or role == "contradiction" or category in contradiction_categories:
+            ids.append(_source_id(i))
+    return ids
+
+
+def _source_ids_by_support_signal(sources: List[Dict[str, Any]]) -> List[str]:
+    ids: List[str] = []
+    contradiction_ids = set(_source_ids_by_contradiction_signal(sources))
+    for i, source in enumerate(sources):
+        source_id = _source_id(i)
+        if source_id in contradiction_ids:
+            continue
+        if normalize_claim_support_label(source.get("claim_support")) == "supports":
+            ids.append(source_id)
+    return ids
+
+
+def _verdict_aligned_with_evidence(verdict: str, confidence: str, sources: List[Dict[str, Any]]) -> tuple[str, str, str]:
+    """Last-mile guard so the public payload cannot contradict its own evidence map."""
+    support_ids = _source_ids_by_support_signal(sources)
+    contradiction_ids = _source_ids_by_contradiction_signal(sources)
+    if not contradiction_ids:
+        return verdict, confidence, ""
+
+    supportive_verdicts = {"Supported", "Likely supported", "Partly supported"}
+    if verdict not in supportive_verdicts:
+        return verdict, confidence, ""
+
+    if not support_ids:
+        return (
+            "False / contradicted",
+            "Medium" if confidence == "High" else confidence,
+            "Verdict adjusted because the reviewed evidence contains contradiction signals and no clear supporting source.",
+        )
+    if len(contradiction_ids) >= len(support_ids):
+        return (
+            "Weakly supported / likely incorrect",
+            "Medium" if confidence == "High" else confidence,
+            "Verdict adjusted because contradiction signals are at least as strong as supporting signals in the reviewed evidence.",
+        )
+    if verdict in {"Supported", "Likely supported"}:
+        return (
+            "Partly supported",
+            "Medium" if confidence == "High" else confidence,
+            "Verdict softened because the reviewed evidence includes material contradiction signals.",
+        )
+    return verdict, confidence, ""
+
+
 def _float_or_none(value: Any) -> Optional[float]:
     try:
         if value is None or value == "":
@@ -201,6 +257,7 @@ def serialize_assessment_response(
 
     verdict_label = normalize_verdict_label(result.get("verified_verdict") or result.get("verdict") or "Unverified")
     confidence = normalize_confidence_label(result.get("verified_confidence") or result.get("confidence") or "Low")
+    verdict_label, confidence, verdict_alignment_note = _verdict_aligned_with_evidence(verdict_label, confidence, sources)
     pendulum = result.get("pendulum") or {}
     evidence_score = pendulum.get("score") if isinstance(pendulum, dict) else None
     if evidence_score is None:
@@ -218,20 +275,30 @@ def serialize_assessment_response(
             assessment=verdict_label,
             confidence=confidence,
             rationale=(result.get("rule_engine") or {}).get("rationale", ""),
-            supporting_source_ids=_source_ids_by_stance(sources, "supports"),
-            contradicting_source_ids=_source_ids_by_stance(sources, "contradicts"),
+            supporting_source_ids=_source_ids_by_support_signal(sources),
+            contradicting_source_ids=_source_ids_by_contradiction_signal(sources),
         )
         for i, item in enumerate(raw_subclaims)
     ]
 
     evidence_map = EvidenceMap(
-        supports_factual_core=_source_ids_by_stance(sources, "supports"),
-        contradicts_factual_core=_source_ids_by_stance(sources, "contradicts"),
+        supports_factual_core=_source_ids_by_support_signal(sources),
+        contradicts_factual_core=_source_ids_by_contradiction_signal(sources),
         supports_interpretation=_source_ids_by_role(sources, {"evidence"}),
         disputes_interpretation=_source_ids_by_stance(sources, "mixed"),
         context_only=_source_ids_by_role(sources, {"context"}),
         weak_or_irrelevant=_source_ids_by_stance(sources, "irrelevant"),
     )
+    consensus_summary = result.get("consensus_summary")
+    evidence_assessment = result.get("evidence_assessment")
+    if verdict_alignment_note:
+        consensus_summary = f"{verdict_alignment_note} {consensus_summary or ''}".strip()
+        if not isinstance(evidence_assessment, dict):
+            evidence_assessment = {}
+        gaps = list(evidence_assessment.get("evidence_gaps") or [])
+        if verdict_alignment_note not in gaps:
+            gaps.append(verdict_alignment_note)
+        evidence_assessment["evidence_gaps"] = gaps
 
     return AssessmentResponse(
         build=build,
@@ -251,8 +318,8 @@ def serialize_assessment_response(
         verdict=AssessmentVerdict(
             label=verdict_label,
             confidence=confidence,
-            summary=result.get("tldr") or result.get("summary") or result.get("consensus_summary") or "",
-            key_caveat=result.get("one_line_correction") or result.get("evidence_access_note") or "",
+            summary=consensus_summary or result.get("tldr") or result.get("summary") or "",
+            key_caveat=verdict_alignment_note or result.get("one_line_correction") or result.get("evidence_access_note") or "",
             evidence_strength_score=evidence_score,
         ),
         claim_breakdown=claim_breakdown,
@@ -260,9 +327,9 @@ def serialize_assessment_response(
         sources=source_models,
         reasoning={
             "consensus_strength": result.get("consensus_strength"),
-            "consensus_summary": result.get("consensus_summary"),
+            "consensus_summary": consensus_summary,
             "reasoning_summary": result.get("reasoning_summary"),
-            "evidence_assessment": result.get("evidence_assessment"),
+            "evidence_assessment": evidence_assessment,
             "rule_engine": result.get("rule_engine"),
             "amplification_warning": result.get("amplification_warning"),
             "claim_semantics": result.get("claim_semantics"),
