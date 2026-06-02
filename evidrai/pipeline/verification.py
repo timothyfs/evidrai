@@ -118,6 +118,22 @@ def call_legacy_model(claim: str, category: str, detail_mode: str, llm: OpenAICo
 # -----------------------------
 
 
+def build_fast_search_queries(user_input: str) -> List[str]:
+    base = re.sub(r"\s+", " ", (user_input or "").strip())
+    if not base:
+        return []
+    jurisdiction = _claim_jurisdiction(base)
+    queries = [base]
+    queries.extend(f"site:{domain} {base}" for domain in _official_search_domains(jurisdiction))
+    seen = set()
+    deduped = []
+    for query in queries:
+        if query and query not in seen:
+            seen.add(query)
+            deduped.append(query)
+    return deduped[:4]
+
+
 def build_fast_evidence_context(user_input: str, search: TavilySearchClient | None = None) -> tuple[str, List[Dict[str, Any]]]:
     """Fetch a small snippet-only evidence packet for Fast mode.
 
@@ -128,10 +144,11 @@ def build_fast_evidence_context(user_input: str, search: TavilySearchClient | No
     known_items = [source.to_packet() for source in known_counterexample_sources(user_input)]
     items: List[Dict[str, Any]] = []
     if search and search.configured:
-        try:
-            items = search.search(user_input, max_results=5)
-        except Exception:
-            items = []
+        for query in build_fast_search_queries(user_input):
+            try:
+                items.extend(search.search(query, max_results=3))
+            except Exception:
+                continue
     deduped: Dict[str, Dict[str, Any]] = {}
     for item in [*known_items, *items]:
         key = item.get("url") or item.get("title") or str(len(deduped))

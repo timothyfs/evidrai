@@ -9,7 +9,7 @@ from evidrai.models import (
     VerificationResult,
     PipelineResultModel,
 )
-from evidrai.pipeline.verification import build_fast_evidence_context, parse_claim_analysis, run_speech_audit, truncate_speech_transcript
+from evidrai.pipeline.verification import build_fast_evidence_context, build_fast_search_queries, parse_claim_analysis, run_speech_audit, truncate_speech_transcript
 
 
 def test_truncate_speech_transcript_limits_extraction_budget():
@@ -83,6 +83,15 @@ def test_build_fast_evidence_context_scores_search_sources():
     assert sources[0]["scoring_factors"]["directness"] > 0
     assert sources[0]["scoring_factors"]["recency"] > 0
     assert sources[0]["scoring_factors"]["bias_risk"] > 0
+
+
+def test_fast_search_queries_include_uk_official_domains():
+    queries = build_fast_search_queries("The UK spends more on debt interest than on defence")
+
+    assert queries[0] == "The UK spends more on debt interest than on defence"
+    assert any(query.startswith("site:gov.uk ") for query in queries)
+    assert any(query.startswith("site:commonslibrary.parliament.uk ") for query in queries)
+    assert any(query.startswith("site:obr.uk ") for query in queries)
 
 
 def test_parse_claim_analysis_returns_typed_result_with_fallback_subclaim():
