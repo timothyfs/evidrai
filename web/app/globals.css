@@ -879,8 +879,12 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
   --claim-support-angle: 0deg;
   aspect-ratio: 2 / 1;
   background:
-    radial-gradient(circle at 50% 100%, var(--card) 0 46%, transparent 47%),
-    conic-gradient(from 270deg at 50% 100%, var(--bad) 0 28%, var(--mixed) 40% 62%, var(--good) 76% 100%);
+    radial-gradient(circle at 50% 100%, var(--card) 0 44%, transparent 45%),
+    conic-gradient(from 270deg at 50% 100%,
+      #c45d5d 0deg 54deg,
+      #d99a3e 72deg 108deg,
+      #4f9f78 126deg 180deg,
+      transparent 180deg 360deg);
   border-radius: 999px 999px 0 0;
   margin-top: 16px;
   max-width: 240px;
@@ -889,11 +893,12 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
   width: 100%;
 }
 .claimSupportDial::before {
-  background: rgba(255,255,255,0.18);
+  background: linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06));
   border-radius: 999px 999px 0 0;
   content: "";
   inset: 8px 8px 0;
   position: absolute;
+  z-index: 1;
 }
 .claimSupportDial::after {
   background: var(--card);
@@ -905,18 +910,31 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
   left: 18%;
   position: absolute;
   right: 18%;
+  z-index: 2;
 }
 .claimSupportNeedle {
   background: var(--ink);
   border-radius: 999px;
   bottom: 0;
-  height: 4px;
-  left: 50%;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.25);
+  height: 5px;
+  left: 8%;
   position: absolute;
   transform: rotate(var(--claim-support-angle));
-  transform-origin: 0 50%;
+  transform-origin: 100% 50%;
   width: 42%;
-  z-index: 2;
+  z-index: 3;
+}
+.claimSupportNeedle::before {
+  background: var(--ink);
+  border-radius: 2px;
+  content: "";
+  height: 11px;
+  left: -1px;
+  position: absolute;
+  top: 50%;
+  transform: translate(-15%, -50%) rotate(45deg);
+  width: 11px;
 }
 .claimSupportNeedle::after {
   background: var(--ink);
@@ -925,7 +943,7 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
   bottom: -6px;
   content: "";
   height: 12px;
-  left: -6px;
+  right: -6px;
   position: absolute;
   width: 12px;
 }

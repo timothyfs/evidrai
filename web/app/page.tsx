@@ -1567,7 +1567,7 @@ function AssessmentResult({ assessment, canShare = false }: { assessment: Assess
   const tone = verdictTone(assessment.verdict.label);
   const evidenceStrength = evidenceStrengthLabel(assessment.verdict.evidence_strength_score, assessment.verdict.label);
   const claimSupport = claimSupportPercent(assessment.verdict.label, assessment.verdict.evidence_strength_score);
-  const claimSupportAngle = -90 + (claimSupport * 1.8);
+  const claimSupportAngle = claimSupport * 1.8;
   const stats = sourceStats(assessment.sources || []);
   const reasoning = assessment.reasoning ? reasoningEntries(assessment.reasoning) : [];
   const isFastMode = assessment.mode.toLowerCase() === 'fast';
