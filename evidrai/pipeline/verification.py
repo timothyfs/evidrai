@@ -304,8 +304,11 @@ def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
     queries: List[str] = []
     seen = set()
     for sub in subclaims:
+        jurisdiction = _claim_jurisdiction(sub.text) or _claim_jurisdiction(sub.jurisdiction or "")
+        country_queries = [f"site:{domain} {sub.text}" for domain in _official_search_domains(jurisdiction)]
         candidates = [
             sub.text,
+            *country_queries,
             f'"{sub.text}"',
             f"{sub.text} official source",
             f"{sub.text} evidence",
@@ -332,6 +335,162 @@ def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
                 seen.add(q)
                 queries.append(q)
     return queries[:16]
+
+
+def _jurisdiction_text(text: str) -> str:
+    return " " + re.sub(r"[^a-z0-9]+", " ", (text or "").lower()) + " "
+
+
+COUNTRY_JURISDICTIONS: Dict[str, Dict[str, tuple[str, ...]]] = {
+    "uk": {
+        "aliases": (" uk ", " united kingdom ", " britain ", " british ", " england ", " scotland ", " wales ", " northern ireland "),
+        "source_terms": (" uk ", " united kingdom ", " britain ", " british ", " defence ", " hm treasury ", " parliament "),
+        "domains": ("gov.uk", "parliament.uk", "commonslibrary.parliament.uk", "obr.uk", "mod.uk"),
+        "search_domains": ("gov.uk", "commonslibrary.parliament.uk", "obr.uk"),
+    },
+    "us": {
+        "aliases": (" united states ", " america ", " american ", " u s ", " usa "),
+        "source_terms": (" united states ", " u s ", " usa ", " american ", " fiscal year "),
+        "domains": ("gov", "congress.gov", "house.gov", "senate.gov", "whitehouse.gov", "cbo.gov", "treasury.gov", "cfr.org"),
+        "search_domains": ("gov", "congress.gov", "cbo.gov"),
+    },
+    "ireland": {
+        "aliases": (" ireland ", " irish "),
+        "source_terms": (" ireland ", " irish ", " oireachtas "),
+        "domains": ("gov.ie", "oireachtas.ie"),
+        "search_domains": ("gov.ie", "oireachtas.ie"),
+    },
+    "france": {
+        "aliases": (" france ", " french "),
+        "source_terms": (" france ", " french ", " republique francaise "),
+        "domains": ("gouvernement.fr", "service-public.fr", "assemblee-nationale.fr", "senat.fr", "insee.fr"),
+        "search_domains": ("gouvernement.fr", "service-public.fr", "insee.fr"),
+    },
+    "germany": {
+        "aliases": (" germany ", " german ", " deutschland "),
+        "source_terms": (" germany ", " german ", " deutschland ", " bundestag ", " bundesregierung "),
+        "domains": ("bund.de", "bundestag.de", "bundesregierung.de", "destatis.de"),
+        "search_domains": ("bund.de", "bundestag.de", "destatis.de"),
+    },
+    "canada": {
+        "aliases": (" canada ", " canadian "),
+        "source_terms": (" canada ", " canadian "),
+        "domains": ("canada.ca", "parl.ca", "statcan.gc.ca"),
+        "search_domains": ("canada.ca", "statcan.gc.ca"),
+    },
+    "australia": {
+        "aliases": (" australia ", " australian "),
+        "source_terms": (" australia ", " australian "),
+        "domains": ("gov.au", "aph.gov.au", "abs.gov.au"),
+        "search_domains": ("gov.au", "aph.gov.au", "abs.gov.au"),
+    },
+    "new_zealand": {
+        "aliases": (" new zealand ", " nz "),
+        "source_terms": (" new zealand ", " nz "),
+        "domains": ("govt.nz", "parliament.nz", "stats.govt.nz"),
+        "search_domains": ("govt.nz", "stats.govt.nz"),
+    },
+    "india": {
+        "aliases": (" india ", " indian "),
+        "source_terms": (" india ", " indian "),
+        "domains": ("gov.in", "parliamentofindia.nic.in", "rbi.org.in"),
+        "search_domains": ("gov.in", "rbi.org.in"),
+    },
+    "china": {
+        "aliases": (" china ", " chinese "),
+        "source_terms": (" china ", " chinese ", " people's republic "),
+        "domains": ("gov.cn", "stats.gov.cn"),
+        "search_domains": ("gov.cn", "stats.gov.cn"),
+    },
+    "japan": {
+        "aliases": (" japan ", " japanese "),
+        "source_terms": (" japan ", " japanese "),
+        "domains": ("go.jp", "stat.go.jp"),
+        "search_domains": ("go.jp", "stat.go.jp"),
+    },
+    "italy": {
+        "aliases": (" italy ", " italian "),
+        "source_terms": (" italy ", " italian "),
+        "domains": ("governo.it", "istat.it", "camera.it", "senato.it"),
+        "search_domains": ("governo.it", "istat.it"),
+    },
+    "spain": {
+        "aliases": (" spain ", " spanish "),
+        "source_terms": (" spain ", " spanish "),
+        "domains": ("lamoncloa.gob.es", "ine.es", "congreso.es", "senado.es"),
+        "search_domains": ("lamoncloa.gob.es", "ine.es"),
+    },
+    "netherlands": {
+        "aliases": (" netherlands ", " dutch ", " holland "),
+        "source_terms": (" netherlands ", " dutch ", " holland "),
+        "domains": ("government.nl", "rijksoverheid.nl", "cbs.nl"),
+        "search_domains": ("government.nl", "cbs.nl"),
+    },
+    "brazil": {
+        "aliases": (" brazil ", " brazilian ", " brasil "),
+        "source_terms": (" brazil ", " brazilian ", " brasil "),
+        "domains": ("gov.br", "camara.leg.br", "senado.leg.br", "ibge.gov.br"),
+        "search_domains": ("gov.br", "ibge.gov.br"),
+    },
+    "south_africa": {
+        "aliases": (" south africa ", " south african "),
+        "source_terms": (" south africa ", " south african "),
+        "domains": ("gov.za", "parliament.gov.za", "statssa.gov.za"),
+        "search_domains": ("gov.za", "statssa.gov.za"),
+    },
+}
+
+
+def _official_search_domains(jurisdiction: str) -> tuple[str, ...]:
+    return COUNTRY_JURISDICTIONS.get(jurisdiction, {}).get("search_domains", ())
+
+
+def _claim_jurisdiction(text: str) -> str:
+    lowered = _jurisdiction_text(text)
+    for country, config in COUNTRY_JURISDICTIONS.items():
+        if any(term in lowered for term in config.get("aliases", ())):
+            return country
+    return ""
+
+
+def _source_jurisdiction(text: str, domain: str) -> str:
+    lowered = _jurisdiction_text(text)
+    domain_lower = (domain or "").lower()
+    for country, config in COUNTRY_JURISDICTIONS.items():
+        for source_domain in config.get("domains", ()):
+            if domain_lower == source_domain or domain_lower.endswith(f".{source_domain}"):
+                return country
+    hits = {
+        country: sum(1 for term in config.get("source_terms", ()) if term in lowered)
+        for country, config in COUNTRY_JURISDICTIONS.items()
+    }
+    best_country, best_count = max(hits.items(), key=lambda item: item[1])
+    tied = sum(1 for count in hits.values() if count == best_count)
+    if best_count >= 1 and tied == 1:
+        return best_country
+    return ""
+
+
+def _jurisdiction_mismatch(claim_text: str, source_text: str, domain: str) -> bool:
+    claim_jurisdiction = _claim_jurisdiction(claim_text)
+    source_jurisdiction = _source_jurisdiction(source_text, domain)
+    return bool(claim_jurisdiction and source_jurisdiction and claim_jurisdiction != source_jurisdiction)
+
+
+def _apply_jurisdiction_guard(source: EvidenceSource, claim_text: str) -> EvidenceSource:
+    source_text = f"{source.title} {source.snippet} {source.content}"
+    if not _jurisdiction_mismatch(claim_text, source_text, source.domain):
+        return source
+    source.claim_support = "irrelevant"
+    source.evidence_category = "irrelevant"
+    source.source_role = "context"
+    source.relevance_score = min(source.relevance_score, 1.5)
+    source.directness_score = min(source.directness_score, 1.5)
+    source.weighted_score = min(source.weighted_score, 2.0)
+    note = "Jurisdiction mismatch: source appears to address a different country than the claim."
+    if note not in source.snippet:
+        source.snippet = f"{note} {source.snippet}".strip()
+    return source
 
 
 def score_source(item: Dict[str, Any], claim_text: str) -> EvidenceSource:
@@ -363,7 +522,7 @@ def score_source(item: Dict[str, Any], claim_text: str) -> EvidenceSource:
         + recency * weights.recency
         + (5 - bias_risk) * weights.bias_risk
     )
-    return EvidenceSource(
+    source = EvidenceSource(
         title=title,
         url=url,
         domain=domain,
@@ -379,6 +538,7 @@ def score_source(item: Dict[str, Any], claim_text: str) -> EvidenceSource:
         bias_risk_score=bias_risk,
         weighted_score=round(weighted, 2),
     )
+    return _apply_jurisdiction_guard(source, claim_text)
 
 
 def known_counterexample_sources(claim_text: str) -> List[EvidenceSource]:
@@ -429,7 +589,7 @@ def retrieve_sources(search: TavilySearchClient, queries: List[str], claim_text:
 def _summarize_one_source(llm: OpenAICompatibleClient, subclaim_text: str, source: EvidenceSource) -> EvidenceSource:
     text = source.content or source.snippet
     if not text:
-        return source
+        return _apply_jurisdiction_guard(source, subclaim_text)
     payload = llm.complete_json(build_source_summary_messages(subclaim_text, source.title, source.url, text[:6000]))
     validated = validate_model(payload, SourceSummaryModel)
     source.claim_support = validated.get("claim_support", "irrelevant")
@@ -437,7 +597,7 @@ def _summarize_one_source(llm: OpenAICompatibleClient, subclaim_text: str, sourc
     source.source_role = validated.get("source_role", "context")
     source.narrative_cluster = validated.get("narrative_cluster", "")
     source.snippet = validated.get("summary", source.snippet)
-    return source
+    return _apply_jurisdiction_guard(source, subclaim_text)
 
 
 def summarize_sources(llm: OpenAICompatibleClient, subclaim: SubClaim, sources: List[EvidenceSource]) -> List[EvidenceSource]:
