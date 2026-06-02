@@ -1740,6 +1740,12 @@ export default function Home() {
   const canShareReports = Boolean(userFeatures.share_reports);
   const canExportReports = Boolean(userFeatures.exports);
   const canLabelReports = me?.user?.tier === 'researcher';
+  useEffect(() => {
+    if (canUseDeep) {
+      setMode((current) => current === 'fast' ? 'deep' : current);
+      setSpeechMode((current) => current === 'fast' ? 'deep' : current);
+    }
+  }, [canUseDeep]);
   const botReady = signedIn || !TURNSTILE_SITE_KEY || Boolean(botToken);
   const ready = useMemo(() => signedIn && botReady && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, botReady, claim, sourceUrl]);
   const speechReady = useMemo(() => signedIn && botReady && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, botReady, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
@@ -2310,18 +2316,23 @@ export default function Home() {
                 <label>
                   Mode
                   <select value={mode} onChange={(event) => setMode(event.target.value as 'fast' | 'deep')}>
-                    <option value="fast">Fast assessment</option>
-                    <option disabled={!canUseDeep} value="deep">Deep evidence review{canUseDeep ? '' : ' · Pro+'}</option>
+                    <option value="fast">First-pass check</option>
+                    <option disabled={!canUseDeep} value="deep">Deep evidence review{canUseDeep ? ' · recommended' : ' · Pro+'}</option>
                   </select>
                 </label>
                 <label>
-                  Fast style
+                  First-pass style
                   <select disabled={mode !== 'fast'} value={fastOutputStyle} onChange={(event) => setFastOutputStyle(event.target.value as 'standard' | 'absurdity_humour')}>
                     <option value="standard">Standard</option>
                     <option value="absurdity_humour">Absurdity check · experimental</option>
                   </select>
                 </label>
               </div>
+              <p className="modeHint">
+                {mode === 'deep'
+                  ? 'Recommended for normal verification: fuller retrieval, source scoring, contradiction checks, and inspectable reasoning.'
+                  : 'Lighter triage: quicker and cheaper, but it may miss context or counter-evidence. Use Deep for serious checks.'}
+              </p>
               {!signedIn && (claim.trim() || sourceUrl.trim()) && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="check this claim" />}
               <button className="primaryAction" disabled={!ready || loading}>{loading && loadingKind === 'claim' ? 'Checking evidence…' : 'Check claim'}</button>
               <VerifyGuide mode="claim" canUseDeep={canUseDeep} canUseSpeech={canUseSpeech} />
@@ -2350,11 +2361,16 @@ export default function Home() {
                 <label>
                   Verification mode
                   <select value={speechMode} onChange={(event) => setSpeechMode(event.target.value as 'fast' | 'deep')}>
-                    <option value="fast">Fast assessment</option>
-                    <option disabled={!canUseDeep} value="deep">Deep evidence review{canUseDeep ? '' : ' · Pro+'}</option>
+                    <option value="fast">First-pass check</option>
+                    <option disabled={!canUseDeep} value="deep">Deep evidence review{canUseDeep ? ' · recommended' : ' · Pro+'}</option>
                   </select>
                 </label>
               </div>
+              <p className="modeHint">
+                {speechMode === 'deep'
+                  ? 'Recommended for selected claims: fuller retrieval, source scoring, and a stronger evidence trail for each claim.'
+                  : 'Lighter triage for selected claims. It is useful for a quick pass, but Deep is the safer default when accuracy matters.'}
+              </p>
               <div className="youtubeFallbackBox">
                 <label className="checkPill"><input checked={tryYouTubeCaptions} onChange={(event) => setTryYouTubeCaptions(event.target.checked)} type="checkbox" /> Try automatic YouTube captions when transcript is empty</label>
                 <p className="muted">URL-only audits are best-effort. If YouTube blocks caption access, paste the transcript above and run again.</p>

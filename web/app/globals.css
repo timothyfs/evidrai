@@ -1315,6 +1315,17 @@ html[data-theme="light"] .verdictPanel {
   line-height: 1.45;
   margin: 10px 0 0;
 }
+.modeHint {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(157,183,213,0.055);
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 750;
+  line-height: 1.45;
+  margin: -4px 0 0;
+  padding: 11px 13px;
+}
 .secondaryInputs {
   display: grid;
   gap: 12px;
