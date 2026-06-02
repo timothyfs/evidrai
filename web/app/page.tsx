@@ -271,6 +271,17 @@ function evidenceStrengthLabel(score?: number | null, verdict?: string) {
   return 'Weak evidence base';
 }
 
+function claimSupportPercent(verdict: string, score?: number | null) {
+  if (typeof score === 'number' && Number.isFinite(score)) return Math.max(0, Math.min(100, Math.round(score * 10)));
+  const label = (verdict || '').toLowerCase();
+  if (label.includes('supported') && !label.includes('weakly') && !label.includes('partly')) return 84;
+  if (label.includes('likely')) return 72;
+  if (label.includes('partly') || label.includes('misleading')) return 52;
+  if (label.includes('weakly')) return 30;
+  if (label.includes('not supported') || label.includes('false') || label.includes('contradicted')) return 12;
+  return 42;
+}
+
 function reasoningEntries(reasoning: Record<string, unknown>) {
   return Object.entries(reasoning).filter(([, value]) => value !== null && value !== undefined && value !== '');
 }
@@ -1554,8 +1565,9 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
 
 function AssessmentResult({ assessment, canShare = false }: { assessment: AssessmentResponse; canShare?: boolean }) {
   const tone = verdictTone(assessment.verdict.label);
-  const confidence = confidencePercent(assessment.verdict.confidence, assessment.verdict.evidence_strength_score);
   const evidenceStrength = evidenceStrengthLabel(assessment.verdict.evidence_strength_score, assessment.verdict.label);
+  const claimSupport = claimSupportPercent(assessment.verdict.label, assessment.verdict.evidence_strength_score);
+  const claimSupportAngle = -90 + (claimSupport * 1.8);
   const stats = sourceStats(assessment.sources || []);
   const reasoning = assessment.reasoning ? reasoningEntries(assessment.reasoning) : [];
   const isFastMode = assessment.mode.toLowerCase() === 'fast';
@@ -1568,15 +1580,26 @@ function AssessmentResult({ assessment, canShare = false }: { assessment: Assess
           <p className="resultSubcopy">Transparent, source-grounded analysis. Confidence reflects available evidence, not certainty.</p>
         </div>
         <div className={`verdict verdictPanel ${tone}`}>
-          <span>Verdict</span>
+          <span>Claim support</span>
+          <div
+            className="claimSupportDial"
+            role="meter"
+            aria-label={`Claim support: ${assessment.verdict.label}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={claimSupport}
+            style={{ '--claim-support-angle': `${claimSupportAngle}deg` } as CSSProperties}
+          >
+            <div className="claimSupportNeedle" />
+          </div>
           <strong>{assessment.verdict.label}</strong>
-          <div className="confidenceMeter" aria-label={`${assessment.verdict.confidence} confidence`}><span style={{ width: `${confidence}%` }} /></div>
+          <div className="claimSupportScale" aria-hidden="true"><span>Low</span><span>Mixed</span><span>High</span></div>
           <small>{assessment.verdict.confidence} confidence{evidenceStrength ? ` · ${evidenceStrength}` : ''}</small>
         </div>
       </div>
 
       <div className={`mobileVerdictBar ${tone}`} aria-label="Sticky verdict summary">
-        <strong>{assessment.verdict.label}</strong>
+        <strong>Claim support: {assessment.verdict.label}</strong>
         <span>{assessment.verdict.confidence || 'Unstated'} confidence · {assessment.sources?.length || 0} sources</span>
       </div>
 
