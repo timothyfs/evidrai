@@ -531,10 +531,29 @@ export type AdminInviteEmail = {
   app_url: string;
 };
 
-export function inviteAdminUser(input: { email: string; tier: TierName; send_invite: boolean; redirect_to?: string; personal_message?: string }): Promise<{ ok: boolean; sent_invite: boolean; owner_id: string; email: string; user: UserProfile | null; invite_email: AdminInviteEmail; message: string }> {
-  return request<{ ok: boolean; sent_invite: boolean; owner_id: string; email: string; user: UserProfile | null; invite_email: AdminInviteEmail; message: string }>('/admin/users/invite', {
+export type AdminInviteResponse = {
+  ok: boolean;
+  sent_invite: boolean;
+  branded_email_sent?: boolean;
+  branded_email_error?: string;
+  owner_id: string;
+  email: string;
+  user: UserProfile | null;
+  invite_email: AdminInviteEmail;
+  message: string;
+};
+
+export function inviteAdminUser(input: { email: string; tier: TierName; send_invite: boolean; send_branded_email?: boolean; redirect_to?: string; personal_message?: string }): Promise<AdminInviteResponse> {
+  return request<AdminInviteResponse>('/admin/users/invite', {
     method: 'POST',
-    body: JSON.stringify({ email: input.email, tier: input.tier, send_invite: input.send_invite, redirect_to: input.redirect_to || '', personal_message: input.personal_message || '' }),
+    body: JSON.stringify({ email: input.email, tier: input.tier, send_invite: input.send_invite, send_branded_email: Boolean(input.send_branded_email), redirect_to: input.redirect_to || '', personal_message: input.personal_message || '' }),
+  });
+}
+
+export function sendAdminInviteEmail(input: { email: string; tier: TierName; redirect_to?: string; personal_message?: string }): Promise<{ ok: boolean; email: string; branded_email_sent: boolean; invite_email: AdminInviteEmail; message: string }> {
+  return request<{ ok: boolean; email: string; branded_email_sent: boolean; invite_email: AdminInviteEmail; message: string }>('/admin/users/send-invite-email', {
+    method: 'POST',
+    body: JSON.stringify({ email: input.email, tier: input.tier, redirect_to: input.redirect_to || '', personal_message: input.personal_message || '' }),
   });
 }
 

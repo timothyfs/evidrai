@@ -89,6 +89,22 @@ MASTER_ADMIN_EMAILS_SECRET_PATHS = (("admin", "master_emails"), ("EVIDRAI_MASTER
 MASTER_ADMIN_EMAILS_ENV_NAMES = ("EVIDRAI_MASTER_ADMIN_EMAILS",)
 TURNSTILE_SECRET_KEY_SECRET_PATHS = (("turnstile", "secret_key"), ("TURNSTILE_SECRET_KEY",), ("CLOUDFLARE_TURNSTILE_SECRET_KEY",))
 TURNSTILE_SECRET_KEY_ENV_NAMES = ("TURNSTILE_SECRET_KEY", "CLOUDFLARE_TURNSTILE_SECRET_KEY")
+SMTP_HOST_SECRET_PATHS = (("smtp", "host"), ("SMTP_HOST",), ("EVIDRAI_SMTP_HOST",))
+SMTP_HOST_ENV_NAMES = ("SMTP_HOST", "EVIDRAI_SMTP_HOST")
+SMTP_PORT_SECRET_PATHS = (("smtp", "port"), ("SMTP_PORT",), ("EVIDRAI_SMTP_PORT",))
+SMTP_PORT_ENV_NAMES = ("SMTP_PORT", "EVIDRAI_SMTP_PORT")
+SMTP_USERNAME_SECRET_PATHS = (("smtp", "username"), ("SMTP_USERNAME",), ("EVIDRAI_SMTP_USERNAME",))
+SMTP_USERNAME_ENV_NAMES = ("SMTP_USERNAME", "EVIDRAI_SMTP_USERNAME")
+SMTP_PASSWORD_SECRET_PATHS = (("smtp", "password"), ("SMTP_PASSWORD",), ("EVIDRAI_SMTP_PASSWORD",))
+SMTP_PASSWORD_ENV_NAMES = ("SMTP_PASSWORD", "EVIDRAI_SMTP_PASSWORD")
+SMTP_FROM_EMAIL_SECRET_PATHS = (("smtp", "from_email"), ("SMTP_FROM_EMAIL",), ("EVIDRAI_SMTP_FROM_EMAIL",))
+SMTP_FROM_EMAIL_ENV_NAMES = ("SMTP_FROM_EMAIL", "EVIDRAI_SMTP_FROM_EMAIL")
+SMTP_FROM_NAME_SECRET_PATHS = (("smtp", "from_name"), ("SMTP_FROM_NAME",), ("EVIDRAI_SMTP_FROM_NAME",))
+SMTP_FROM_NAME_ENV_NAMES = ("SMTP_FROM_NAME", "EVIDRAI_SMTP_FROM_NAME")
+SMTP_USE_SSL_SECRET_PATHS = (("smtp", "use_ssl"), ("SMTP_USE_SSL",), ("EVIDRAI_SMTP_USE_SSL",))
+SMTP_USE_SSL_ENV_NAMES = ("SMTP_USE_SSL", "EVIDRAI_SMTP_USE_SSL")
+SMTP_STARTTLS_SECRET_PATHS = (("smtp", "starttls"), ("SMTP_STARTTLS",), ("EVIDRAI_SMTP_STARTTLS",))
+SMTP_STARTTLS_ENV_NAMES = ("SMTP_STARTTLS", "EVIDRAI_SMTP_STARTTLS")
 
 
 def api_allowed_origins() -> list[str]:
@@ -173,6 +189,53 @@ def turnstile_secret_key() -> Optional[str]:
 
 def turnstile_configured() -> bool:
     return bool(turnstile_secret_key())
+
+
+def smtp_host() -> Optional[str]:
+    return read_config_value(SMTP_HOST_SECRET_PATHS, SMTP_HOST_ENV_NAMES)
+
+
+def smtp_port() -> int:
+    raw = read_config_value(SMTP_PORT_SECRET_PATHS, SMTP_PORT_ENV_NAMES, default="587")
+    try:
+        return int(raw or "587")
+    except ValueError:
+        return 587
+
+
+def smtp_username() -> Optional[str]:
+    return read_config_value(SMTP_USERNAME_SECRET_PATHS, SMTP_USERNAME_ENV_NAMES)
+
+
+def smtp_password() -> Optional[str]:
+    return read_config_value(SMTP_PASSWORD_SECRET_PATHS, SMTP_PASSWORD_ENV_NAMES)
+
+
+def smtp_from_email() -> Optional[str]:
+    return read_config_value(SMTP_FROM_EMAIL_SECRET_PATHS, SMTP_FROM_EMAIL_ENV_NAMES) or smtp_username()
+
+
+def smtp_from_name() -> str:
+    return read_config_value(SMTP_FROM_NAME_SECRET_PATHS, SMTP_FROM_NAME_ENV_NAMES, default="Evidrai") or "Evidrai"
+
+
+def _config_bool(secret_paths: Sequence[Sequence[str]], env_names: Sequence[str], default: bool) -> bool:
+    raw = read_config_value(secret_paths, env_names)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def smtp_use_ssl() -> bool:
+    return _config_bool(SMTP_USE_SSL_SECRET_PATHS, SMTP_USE_SSL_ENV_NAMES, False)
+
+
+def smtp_starttls() -> bool:
+    return _config_bool(SMTP_STARTTLS_SECRET_PATHS, SMTP_STARTTLS_ENV_NAMES, True)
+
+
+def smtp_configured() -> bool:
+    return bool(smtp_host() and smtp_from_email())
 
 
 def config_presence_diagnostics() -> dict[str, Any]:

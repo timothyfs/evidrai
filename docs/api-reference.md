@@ -381,6 +381,17 @@ Authorization: Bearer <admin-token>
 
 Requires backend `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_URL`.
 
+To send the branded Evidrai email directly, configure SMTP on the backend:
+
+- `SMTP_HOST`
+- `SMTP_PORT`, default `587`
+- `SMTP_USERNAME`, optional if provider does not require auth
+- `SMTP_PASSWORD`, optional if provider does not require auth
+- `SMTP_FROM_EMAIL`
+- `SMTP_FROM_NAME`, default `Evidrai`
+- `SMTP_STARTTLS`, default `true`
+- `SMTP_USE_SSL`, default `false`
+
 Request:
 
 ```json
@@ -388,6 +399,7 @@ Request:
   "email": "new-user@example.com",
   "tier": "pro",
   "send_invite": true,
+  "send_branded_email": true,
   "redirect_to": "https://evidrai.vercel.app",
   "personal_message": "You are invited to controlled early access for Evidrai."
 }
@@ -399,6 +411,8 @@ Response:
 {
   "ok": true,
   "sent_invite": true,
+  "branded_email_sent": true,
+  "branded_email_error": "",
   "owner_id": "supabase-user-id",
   "email": "new-user@example.com",
   "user": {},
@@ -415,7 +429,41 @@ Response:
 
 If `send_invite` is false, the backend creates a Supabase auth user without sending the invite email. The response still includes `invite_email` so an admin can copy a polished branded message. Supabase controls the actual auth-link delivery unless a separate mail provider is added later.
 
-### 7.4 Delete user profile
+If `send_branded_email` is true but SMTP is missing or the provider rejects the message, user creation still succeeds and `branded_email_sent` is false with `branded_email_error` explaining the mail failure.
+
+### 7.4 Send branded invite email
+
+```http
+POST /admin/users/send-invite-email
+Authorization: Bearer <admin-token>
+```
+
+Sends the branded Evidrai early-access email without creating or changing the user. Requires SMTP configuration.
+
+Request:
+
+```json
+{
+  "email": "new-user@example.com",
+  "tier": "pro",
+  "redirect_to": "https://evidrai.vercel.app",
+  "personal_message": "You are invited to controlled early access for Evidrai."
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "email": "new-user@example.com",
+  "branded_email_sent": true,
+  "invite_email": {},
+  "message": "Branded invite email sent."
+}
+```
+
+### 7.5 Delete user profile
 
 ```http
 DELETE /admin/users/{owner_id}

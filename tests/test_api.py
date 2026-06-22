@@ -1014,6 +1014,52 @@ def test_admin_invite_user_creates_profile(monkeypatch):
     assert payload["invite_email"]["logo_url"].endswith("/brand/evidrai-logo-full.jpg")
 
 
+def test_admin_invite_user_can_send_branded_email(monkeypatch):
+    sent = {}
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "_create_or_invite_supabase_user", lambda request: {"id": "new-user", "email": request.email})
+    monkeypatch.setattr(api_main, "set_user_tier", lambda owner_id, tier, email="": UserProfile(owner_id=owner_id, email=email, tier=tier))
+
+    def fake_send(email, tier, redirect_to="", personal_message=""):
+        sent["email"] = email
+        sent["tier"] = tier
+        sent["personal_message"] = personal_message
+        return api_main._build_invite_email(email, tier, redirect_to, personal_message)
+
+    monkeypatch.setattr(api_main, "_send_branded_invite_email", fake_send)
+
+    response = client.post(
+        "/admin/users/invite",
+        json={"email": "New.User@example.com", "tier": "researcher", "send_invite": True, "send_branded_email": True, "personal_message": "Welcome."},
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["branded_email_sent"] is True
+    assert payload["branded_email_error"] == ""
+    assert sent == {"email": "new.user@example.com", "tier": "researcher", "personal_message": "Welcome."}
+
+
+def test_admin_send_invite_email_endpoint(monkeypatch):
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "_send_branded_invite_email", lambda email, tier, redirect_to="", personal_message="": api_main._build_invite_email(email, tier, redirect_to, personal_message))
+
+    response = client.post(
+        "/admin/users/send-invite-email",
+        json={"email": "user@example.com", "tier": "pro", "personal_message": "Try this."},
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["branded_email_sent"] is True
+    assert payload["email"] == "user@example.com"
+    assert payload["invite_email"]["subject"] == "Your Evidrai early access invite"
+
+
 def test_create_or_invite_supabase_user_includes_invite_message_metadata(monkeypatch):
     monkeypatch.setattr(api_main, "_supabase_auth_user_by_email", lambda email: None)
     captured = {}

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import smtplib
+from email.message import EmailMessage
+from email.utils import formataddr
 from html import escape
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -16,7 +19,7 @@ from evidrai.assessment_jobs import AssessmentJob, get_assessment_job_store
 from evidrai.auth import AuthContext, context_from_headers, decode_supabase_access_token, unverified_token_diagnostics
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
-from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, master_admin_emails, supabase_auth_configured, supabase_service_role_key, supabase_url, turnstile_configured, turnstile_secret_key
+from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, master_admin_emails, smtp_configured, smtp_from_email, smtp_from_name, smtp_host, smtp_password, smtp_port, smtp_starttls, smtp_use_ssl, smtp_username, supabase_auth_configured, supabase_service_role_key, supabase_url, turnstile_configured, turnstile_secret_key
 from evidrai.entitlements import (
     delete_user_profile,
     enforce_speech_claim_limit,
@@ -191,6 +194,14 @@ class AdminInviteUserRequest(BaseModel):
     email: str
     tier: str = Field(default="free", pattern="^(free|pro|researcher)$")
     send_invite: bool = True
+    send_branded_email: bool = False
+    redirect_to: str = ""
+    personal_message: str = Field(default="", max_length=1200)
+
+
+class AdminSendInviteEmailRequest(BaseModel):
+    email: str
+    tier: str = Field(default="free", pattern="^(free|pro|researcher)$")
     redirect_to: str = ""
     personal_message: str = Field(default="", max_length=1200)
 
@@ -460,6 +471,58 @@ def _build_invite_email(email: str, tier: str, redirect_to: str = "", personal_m
   </body>
 </html>"""
     return {"subject": subject, "text": text, "html": html, "logo_url": logo_url, "app_url": app_url}
+
+
+def _send_branded_invite_email(email: str, tier: str, redirect_to: str = "", personal_message: str = "") -> dict[str, str]:
+    clean_email = email.strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail={"code": "invalid_email", "message": "A valid recipient email address is required."})
+    if not smtp_configured():
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "smtp_not_configured",
+                "message": "SMTP is not configured. Set SMTP_HOST and SMTP_FROM_EMAIL, plus SMTP_USERNAME/SMTP_PASSWORD if your provider requires auth.",
+            },
+        )
+
+    invite_email = _build_invite_email(clean_email, tier, redirect_to, personal_message)
+    from_email = smtp_from_email() or ""
+    message = EmailMessage()
+    message["Subject"] = invite_email["subject"]
+    message["From"] = formataddr((smtp_from_name(), from_email))
+    message["To"] = clean_email
+    message.set_content(invite_email["text"])
+    message.add_alternative(invite_email["html"], subtype="html")
+
+    try:
+        if smtp_use_ssl():
+            with smtplib.SMTP_SSL(smtp_host(), smtp_port(), timeout=20) as server:
+                _smtp_login_if_configured(server)
+                server.send_message(message)
+        else:
+            with smtplib.SMTP(smtp_host(), smtp_port(), timeout=20) as server:
+                if smtp_starttls():
+                    server.starttls()
+                _smtp_login_if_configured(server)
+                server.send_message(message)
+    except (smtplib.SMTPException, OSError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "smtp_send_failed",
+                "message": "The branded invite email could not be sent by the configured SMTP provider.",
+                "developer_detail": str(exc),
+            },
+        )
+    return invite_email
+
+
+def _smtp_login_if_configured(server: smtplib.SMTP) -> None:
+    username = smtp_username()
+    password = smtp_password()
+    if username and password:
+        server.login(username, password)
 
 def _clients() -> tuple[OpenAICompatibleClient, TavilySearchClient]:
     return OpenAICompatibleClient(), TavilySearchClient()
@@ -1051,14 +1114,41 @@ def admin_invite_user(request: AdminInviteUserRequest, http_request: Request) ->
     email = str(created.get("email") or created.get("user", {}).get("email") or request.email).strip().lower()
     profile = set_user_tier(owner_id, request.tier, email=email) if owner_id else None
     invite_email = _build_invite_email(email, request.tier, request.redirect_to, request.personal_message)
+    branded_email_sent = False
+    branded_email_error = ""
+    if request.send_branded_email:
+        try:
+            invite_email = _send_branded_invite_email(email, request.tier, request.redirect_to, request.personal_message)
+            branded_email_sent = True
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+            branded_email_error = str(detail.get("message") or detail.get("code") or "Branded email could not be sent.")
+    return_message = "Invitation sent and profile created." if request.send_invite else "User created without sending a Supabase invite email."
+    if request.send_branded_email:
+        return_message += " Branded email sent." if branded_email_sent else f" Branded email not sent: {branded_email_error}"
     return {
         "ok": True,
         "sent_invite": request.send_invite,
+        "branded_email_sent": branded_email_sent,
+        "branded_email_error": branded_email_error,
         "owner_id": owner_id,
         "email": email,
         "user": _profile_admin_view(profile) if profile else None,
         "invite_email": invite_email,
-        "message": "Invitation sent and profile created." if request.send_invite else "User created without sending an invite email.",
+        "message": return_message,
+    }
+
+
+@app.post("/admin/users/send-invite-email", response_model=Dict[str, Any])
+def admin_send_invite_email(request: AdminSendInviteEmailRequest, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    invite_email = _send_branded_invite_email(request.email, request.tier, request.redirect_to, request.personal_message)
+    return {
+        "ok": True,
+        "email": request.email.strip().lower(),
+        "branded_email_sent": True,
+        "invite_email": invite_email,
+        "message": "Branded invite email sent.",
     }
 
 

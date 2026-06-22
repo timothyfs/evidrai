@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { AccountProfile, AdminInviteEmail, MeResponse, ReportSummary, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, getAdminUserActivity, listAdminUsers, listSupportIssues, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
+import { AccountProfile, AdminInviteEmail, MeResponse, ReportSummary, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, getAdminUserActivity, listAdminUsers, listSupportIssues, sendAdminInviteEmail, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut } from '../../lib/auth';
 
 const TIER_OPTIONS = [
@@ -85,7 +85,11 @@ export default function AdminPage() {
   const [inviteTier, setInviteTier] = useState<TierName>('free');
   const [inviteMessage, setInviteMessage] = useState(DEFAULT_INVITE_MESSAGE);
   const [latestInviteEmail, setLatestInviteEmail] = useState<AdminInviteEmail | null>(null);
+  const [latestInviteRecipient, setLatestInviteRecipient] = useState('');
+  const [latestInviteTier, setLatestInviteTier] = useState<TierName>('free');
+  const [latestInviteMessage, setLatestInviteMessage] = useState('');
   const [sendInvite, setSendInvite] = useState(true);
+  const [sendBrandedEmail, setSendBrandedEmail] = useState(true);
   const [globalSearch, setGlobalSearch] = useState('');
   const [filters, setFilters] = useState<Filters>({});
   const [sort, setSort] = useState<SortState>({ key: 'email', direction: 'asc' });
@@ -393,16 +397,41 @@ export default function AdminPage() {
     setMessage('');
     setLatestInviteEmail(null);
     try {
-      const payload = await inviteAdminUser({ email: inviteEmail.trim(), tier: inviteTier, send_invite: sendInvite, redirect_to: authRedirectTo(), personal_message: inviteMessage.trim() });
+      const recipient = inviteEmail.trim();
+      const tier = inviteTier;
+      const personalMessage = inviteMessage.trim();
+      const payload = await inviteAdminUser({ email: recipient, tier, send_invite: sendInvite, send_branded_email: sendBrandedEmail, redirect_to: authRedirectTo(), personal_message: personalMessage });
       setMessage(payload.message || `Created ${payload.email}.`);
       setLatestInviteEmail(payload.invite_email || null);
+      setLatestInviteRecipient(payload.email || recipient);
+      setLatestInviteTier(tier);
+      setLatestInviteMessage(personalMessage);
       setInviteEmail('');
       setInviteTier('free');
       setInviteMessage(DEFAULT_INVITE_MESSAGE);
       setSendInvite(true);
+      setSendBrandedEmail(true);
       await loadUsers();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not create or invite user.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendLatestBrandedInvite() {
+    if (!latestInviteRecipient) {
+      setMessage('No invite recipient selected.');
+      return;
+    }
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await sendAdminInviteEmail({ email: latestInviteRecipient, tier: latestInviteTier, redirect_to: authRedirectTo(), personal_message: latestInviteMessage });
+      setLatestInviteEmail(payload.invite_email || latestInviteEmail);
+      setMessage(payload.message || `Branded invite email sent to ${latestInviteRecipient}.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not send branded invite email.');
     } finally {
       setBusy(false);
     }
@@ -531,6 +560,7 @@ export default function AdminPage() {
               <label>Initial product tier<select value={inviteTier} onChange={(event) => setInviteTier(event.target.value as TierName)}>{TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
               <label className="notesField">Invite message<textarea value={inviteMessage} maxLength={1200} onChange={(event) => setInviteMessage(event.target.value)} placeholder={DEFAULT_INVITE_MESSAGE} /></label>
               <label className="checkPill"><input checked={sendInvite} onChange={(event) => setSendInvite(event.target.checked)} type="checkbox" /> Send invite email</label>
+              <label className="checkPill"><input checked={sendBrandedEmail} onChange={(event) => setSendBrandedEmail(event.target.checked)} type="checkbox" /> Send branded Evidrai email</label>
               <button disabled={busy || !inviteEmail.trim()} type="submit">{sendInvite ? 'Create user and send invite' : 'Create user without email'}</button>
             </form>
             {latestInviteEmail && (
@@ -538,9 +568,10 @@ export default function AdminPage() {
                 <div className="sectionHeader">
                   <div>
                     <h3>Generated invite email</h3>
-                    <p className="muted">Supabase sends the auth link. Use this branded copy as the polished note around it.</p>
+                    <p className="muted">Send the branded note directly from Evidrai, or keep the copy buttons as a fallback.</p>
                   </div>
                   <div className="formRow compactActions">
+                    <button className="secondary" disabled={busy || !latestInviteRecipient} type="button" onClick={sendLatestBrandedInvite}>Send email</button>
                     <button className="secondary" type="button" onClick={() => navigator.clipboard?.writeText(latestInviteEmail.text)}>Copy text</button>
                     <button className="secondary" type="button" onClick={() => navigator.clipboard?.writeText(latestInviteEmail.html)}>Copy HTML</button>
                   </div>
