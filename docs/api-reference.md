@@ -388,7 +388,8 @@ Request:
   "email": "new-user@example.com",
   "tier": "pro",
   "send_invite": true,
-  "redirect_to": "https://evidrai.vercel.app"
+  "redirect_to": "https://evidrai.vercel.app",
+  "personal_message": "You are invited to controlled early access for Evidrai."
 }
 ```
 
@@ -401,11 +402,18 @@ Response:
   "owner_id": "supabase-user-id",
   "email": "new-user@example.com",
   "user": {},
+  "invite_email": {
+    "subject": "Your Evidrai early access invite",
+    "text": "Your Evidrai early access invite...",
+    "html": "<!doctype html>...",
+    "logo_url": "https://evidrai.vercel.app/brand/evidrai-logo-full.jpg",
+    "app_url": "https://evidrai.vercel.app"
+  },
   "message": "Invitation sent and profile created."
 }
 ```
 
-If `send_invite` is false, the backend creates a Supabase auth user without sending the invite email.
+If `send_invite` is false, the backend creates a Supabase auth user without sending the invite email. The response still includes `invite_email` so an admin can copy a polished branded message. Supabase controls the actual auth-link delivery unless a separate mail provider is added later.
 
 ### 7.4 Delete user profile
 

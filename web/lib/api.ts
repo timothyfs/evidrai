@@ -523,10 +523,18 @@ export function setAdminUserTier(input: { owner_id: string; tier: TierName; emai
   });
 }
 
-export function inviteAdminUser(input: { email: string; tier: TierName; send_invite: boolean; redirect_to?: string }): Promise<{ ok: boolean; sent_invite: boolean; owner_id: string; email: string; user: UserProfile | null; message: string }> {
-  return request<{ ok: boolean; sent_invite: boolean; owner_id: string; email: string; user: UserProfile | null; message: string }>('/admin/users/invite', {
+export type AdminInviteEmail = {
+  subject: string;
+  text: string;
+  html: string;
+  logo_url: string;
+  app_url: string;
+};
+
+export function inviteAdminUser(input: { email: string; tier: TierName; send_invite: boolean; redirect_to?: string; personal_message?: string }): Promise<{ ok: boolean; sent_invite: boolean; owner_id: string; email: string; user: UserProfile | null; invite_email: AdminInviteEmail; message: string }> {
+  return request<{ ok: boolean; sent_invite: boolean; owner_id: string; email: string; user: UserProfile | null; invite_email: AdminInviteEmail; message: string }>('/admin/users/invite', {
     method: 'POST',
-    body: JSON.stringify({ email: input.email, tier: input.tier, send_invite: input.send_invite, redirect_to: input.redirect_to || '' }),
+    body: JSON.stringify({ email: input.email, tier: input.tier, send_invite: input.send_invite, redirect_to: input.redirect_to || '', personal_message: input.personal_message || '' }),
   });
 }
 

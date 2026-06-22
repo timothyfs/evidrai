@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from html import escape
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -191,6 +192,7 @@ class AdminInviteUserRequest(BaseModel):
     tier: str = Field(default="free", pattern="^(free|pro|researcher)$")
     send_invite: bool = True
     redirect_to: str = ""
+    personal_message: str = Field(default="", max_length=1200)
 
 
 class ConsentUpdateRequest(BaseModel):
@@ -376,7 +378,10 @@ def _create_or_invite_supabase_user(request: AdminInviteUserRequest) -> dict[str
     email = request.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail={"code": "invalid_email", "message": "A valid email address is required."})
-    body: dict[str, Any] = {"email": email, "data": {"evidrai_tier": request.tier}}
+    invite_metadata = {"evidrai_tier": request.tier}
+    if request.personal_message.strip():
+        invite_metadata["evidrai_invite_message"] = request.personal_message.strip()
+    body: dict[str, Any] = {"email": email, "data": invite_metadata}
     if request.redirect_to.strip():
         body["redirect_to"] = request.redirect_to.strip()
     if request.send_invite:
@@ -384,6 +389,77 @@ def _create_or_invite_supabase_user(request: AdminInviteUserRequest) -> dict[str
     body["email_confirm"] = True
     body["user_metadata"] = body.pop("data")
     return _supabase_request("POST", "admin/users", body=body)
+
+
+def _public_app_url(redirect_to: str = "") -> str:
+    clean = redirect_to.strip().rstrip("/")
+    if clean.startswith("http://") or clean.startswith("https://"):
+        return clean
+    return "https://evidrai.com"
+
+
+def _tier_label(tier: str) -> str:
+    labels = {"free": "Free", "pro": "Pro", "researcher": "Researcher / Journalist"}
+    return labels.get(tier, tier.title())
+
+
+def _build_invite_email(email: str, tier: str, redirect_to: str = "", personal_message: str = "") -> dict[str, str]:
+    app_url = _public_app_url(redirect_to)
+    logo_url = f"{app_url}/brand/evidrai-logo-full.jpg"
+    tier_label = _tier_label(tier)
+    clean_message = personal_message.strip()
+    default_message = (
+        "You are invited to controlled early access for Evidrai, a trust intelligence workspace "
+        "for checking claims against evidence, sources, and confidence signals."
+    )
+    message = clean_message or default_message
+    subject = "Your Evidrai early access invite"
+    text = (
+        "Your Evidrai early access invite\n\n"
+        f"{message}\n\n"
+        f"Access level: {tier_label}\n"
+        f"Sign in or set your password: {app_url}\n\n"
+        "Evidrai checks claims against evidence, not repetition. Some early-access capabilities "
+        "are still being built, and pasted transcripts remain the most reliable route for video/audio claims."
+    )
+    html_message = escape(message)
+    html_email = escape(email)
+    html = f"""<!doctype html>
+<html lang="en">
+  <body style="margin:0;background:#f5f1ea;color:#15130f;font-family:Inter,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f1ea;padding:32px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#fffaf1;border:1px solid #ded5c6;border-radius:18px;overflow:hidden;">
+            <tr>
+              <td style="padding:28px 30px 10px;">
+                <img src="{logo_url}" alt="Evidrai" width="154" style="display:block;height:auto;border:0;margin:0 0 26px;">
+                <p style="margin:0 0 10px;color:#6f675c;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Controlled early access</p>
+                <h1 style="margin:0 0 16px;font-size:30px;line-height:1.12;color:#15130f;">You’re invited to Evidrai</h1>
+                <p style="margin:0 0 20px;font-size:16px;line-height:1.55;color:#2f2a22;">{html_message}</p>
+                <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#6f675c;">Your initial access level is <strong style="color:#15130f;">{tier_label}</strong>.</p>
+                <a href="{app_url}" style="display:inline-block;background:#22201b;color:#fffaf1;text-decoration:none;border-radius:999px;padding:13px 18px;font-size:15px;font-weight:800;">Open Evidrai</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 30px 30px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #ded5c6;padding-top:18px;">
+                  <tr>
+                    <td style="font-size:13px;line-height:1.5;color:#6f675c;">
+                      Evidrai checks claims against evidence, not repetition. Early-access features are improving quickly; pasted transcripts remain the most reliable route for video/audio claims.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+          <p style="max-width:620px;margin:14px auto 0;font-size:12px;line-height:1.45;color:#6f675c;">Sent to {html_email}. If the button does not work, open {app_url}</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+    return {"subject": subject, "text": text, "html": html, "logo_url": logo_url, "app_url": app_url}
 
 def _clients() -> tuple[OpenAICompatibleClient, TavilySearchClient]:
     return OpenAICompatibleClient(), TavilySearchClient()
@@ -974,12 +1050,14 @@ def admin_invite_user(request: AdminInviteUserRequest, http_request: Request) ->
     owner_id = str(created.get("id") or created.get("user", {}).get("id") or "").strip()
     email = str(created.get("email") or created.get("user", {}).get("email") or request.email).strip().lower()
     profile = set_user_tier(owner_id, request.tier, email=email) if owner_id else None
+    invite_email = _build_invite_email(email, request.tier, request.redirect_to, request.personal_message)
     return {
         "ok": True,
         "sent_invite": request.send_invite,
         "owner_id": owner_id,
         "email": email,
         "user": _profile_admin_view(profile) if profile else None,
+        "invite_email": invite_email,
         "message": "Invitation sent and profile created." if request.send_invite else "User created without sending an invite email.",
     }
 

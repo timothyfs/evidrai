@@ -1009,6 +1009,37 @@ def test_admin_invite_user_creates_profile(monkeypatch):
     assert payload["sent_invite"] is True
     assert payload["owner_id"] == "new-user"
     assert payload["user"]["tier_label"] == "Pro"
+    assert payload["invite_email"]["subject"] == "Your Evidrai early access invite"
+    assert "controlled early access" in payload["invite_email"]["text"].lower()
+    assert payload["invite_email"]["logo_url"].endswith("/brand/evidrai-logo-full.jpg")
+
+
+def test_create_or_invite_supabase_user_includes_invite_message_metadata(monkeypatch):
+    monkeypatch.setattr(api_main, "_supabase_auth_user_by_email", lambda email: None)
+    captured = {}
+
+    def fake_supabase_request(method, path, *, body=None, params=None):
+        captured["method"] = method
+        captured["path"] = path
+        captured["body"] = body
+        return {"id": "new-user", "email": body["email"]}
+
+    monkeypatch.setattr(api_main, "_supabase_request", fake_supabase_request)
+
+    api_main._create_or_invite_supabase_user(
+        api_main.AdminInviteUserRequest(
+            email="User@example.com",
+            tier="researcher",
+            send_invite=True,
+            personal_message="Welcome to the private trial.",
+        )
+    )
+
+    assert captured["method"] == "POST"
+    assert captured["path"] == "invite"
+    assert captured["body"]["email"] == "user@example.com"
+    assert captured["body"]["data"]["evidrai_tier"] == "researcher"
+    assert captured["body"]["data"]["evidrai_invite_message"] == "Welcome to the private trial."
 
 
 def test_create_or_invite_supabase_user_blocks_existing_auth_email(monkeypatch):

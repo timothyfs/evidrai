@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { AccountProfile, MeResponse, ReportSummary, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, getAdminUserActivity, listAdminUsers, listSupportIssues, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
+import { AccountProfile, AdminInviteEmail, MeResponse, ReportSummary, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, getAdminUserActivity, listAdminUsers, listSupportIssues, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut } from '../../lib/auth';
 
 const TIER_OPTIONS = [
@@ -27,6 +27,8 @@ type SortState = { key: SortKey; direction: 'asc' | 'desc' };
 type Filters = Partial<Record<SortKey, string>>;
 
 const sortableColumns = new Set<AdminColumnKey>(['email', 'company_name', 'billing_account_name', 'tier_label', 'admin_access', 'subscription_status']);
+const DEFAULT_INVITE_MESSAGE = 'You are invited to controlled early access for Evidrai. Use it to check claims against evidence, source quality, and confidence signals, then send feedback on anything unclear.';
+
 function valueFor(user: UserProfile, key: SortKey) {
   if (key === 'admin_access') return user.admin_access ? 'enabled' : 'none';
   if (key === 'company_name') return user.company_name || user.organisation_name || '';
@@ -81,6 +83,8 @@ export default function AdminPage() {
   const [manualTier, setManualTier] = useState<TierName>('free');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteTier, setInviteTier] = useState<TierName>('free');
+  const [inviteMessage, setInviteMessage] = useState(DEFAULT_INVITE_MESSAGE);
+  const [latestInviteEmail, setLatestInviteEmail] = useState<AdminInviteEmail | null>(null);
   const [sendInvite, setSendInvite] = useState(true);
   const [globalSearch, setGlobalSearch] = useState('');
   const [filters, setFilters] = useState<Filters>({});
@@ -387,11 +391,14 @@ export default function AdminPage() {
     event.preventDefault();
     setBusy(true);
     setMessage('');
+    setLatestInviteEmail(null);
     try {
-      const payload = await inviteAdminUser({ email: inviteEmail.trim(), tier: inviteTier, send_invite: sendInvite, redirect_to: authRedirectTo() });
+      const payload = await inviteAdminUser({ email: inviteEmail.trim(), tier: inviteTier, send_invite: sendInvite, redirect_to: authRedirectTo(), personal_message: inviteMessage.trim() });
       setMessage(payload.message || `Created ${payload.email}.`);
+      setLatestInviteEmail(payload.invite_email || null);
       setInviteEmail('');
       setInviteTier('free');
+      setInviteMessage(DEFAULT_INVITE_MESSAGE);
       setSendInvite(true);
       await loadUsers();
     } catch (err) {
@@ -518,13 +525,37 @@ export default function AdminPage() {
           </details>
 
           <details open className="adminInviteBox">
-            <summary><span>Invite or create user</span><small>Create auth access and assign an initial product tier</small></summary>
+            <summary><span>Invite or create user</span><small>Create auth access, assign an initial tier, and generate a branded invite email</small></summary>
             <form onSubmit={inviteUser}>
               <label>User email<input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="new.user@example.com" /></label>
               <label>Initial product tier<select value={inviteTier} onChange={(event) => setInviteTier(event.target.value as TierName)}>{TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <label className="notesField">Invite message<textarea value={inviteMessage} maxLength={1200} onChange={(event) => setInviteMessage(event.target.value)} placeholder={DEFAULT_INVITE_MESSAGE} /></label>
               <label className="checkPill"><input checked={sendInvite} onChange={(event) => setSendInvite(event.target.checked)} type="checkbox" /> Send invite email</label>
               <button disabled={busy || !inviteEmail.trim()} type="submit">{sendInvite ? 'Create user and send invite' : 'Create user without email'}</button>
             </form>
+            {latestInviteEmail && (
+              <section className="inviteEmailPreview" aria-label="Generated invite email">
+                <div className="sectionHeader">
+                  <div>
+                    <h3>Generated invite email</h3>
+                    <p className="muted">Supabase sends the auth link. Use this branded copy as the polished note around it.</p>
+                  </div>
+                  <div className="formRow compactActions">
+                    <button className="secondary" type="button" onClick={() => navigator.clipboard?.writeText(latestInviteEmail.text)}>Copy text</button>
+                    <button className="secondary" type="button" onClick={() => navigator.clipboard?.writeText(latestInviteEmail.html)}>Copy HTML</button>
+                  </div>
+                </div>
+                <div className="inviteEmailCard">
+                  <img src={latestInviteEmail.logo_url} alt="Evidrai" />
+                  <small>Controlled early access</small>
+                  <h4>You’re invited to Evidrai</h4>
+                  <p>{latestInviteEmail.text.split('\n\n')[1]}</p>
+                  <a className="button" href={latestInviteEmail.app_url}>Open Evidrai</a>
+                </div>
+                <label>Subject<input readOnly value={latestInviteEmail.subject} /></label>
+                <label className="notesField">Plain-text version<textarea readOnly value={latestInviteEmail.text} /></label>
+              </section>
+            )}
           </details>
 
           <section className="adminToolbar">
