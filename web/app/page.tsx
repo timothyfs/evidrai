@@ -1895,7 +1895,7 @@ export default function Home() {
       setReports([]);
       setAuthMessage('Signed in.');
       await refreshMe();
-      await refreshReports(profile.owner_id);
+      refreshReports(profile.owner_id);
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-in failed');
     } finally {
@@ -1931,7 +1931,7 @@ export default function Home() {
         });
       }
       await refreshMe();
-      await refreshReports(profile.owner_id);
+      refreshReports(profile.owner_id);
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-up failed');
     } finally {

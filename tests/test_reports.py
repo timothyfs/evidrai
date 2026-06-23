@@ -114,6 +114,12 @@ def test_get_report_store_uses_postgres_when_database_url_is_configured(monkeypa
     assert isinstance(store, PostgresReportStore)
 
 
+def test_get_report_store_reuses_postgres_store(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@example.com/db")
+
+    assert get_report_store() is get_report_store()
+
+
 def test_local_report_store_can_be_injected(tmp_path):
     store = LocalReportStore(tmp_path)
     assessment = AssessmentResponse(

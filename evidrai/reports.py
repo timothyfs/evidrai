@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Protocol
 
@@ -655,10 +656,15 @@ def report_path(report_id: str) -> Path:
     return LocalReportStore().path_for(report_id)
 
 
+@lru_cache(maxsize=4)
+def _cached_report_store(url: str) -> PostgresReportStore:
+    return PostgresReportStore(url)
+
+
 def get_report_store() -> ReportStore:
     url = database_url()
     if url:
-        return PostgresReportStore(url)
+        return _cached_report_store(url)
     return LocalReportStore()
 
 
