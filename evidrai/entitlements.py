@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict, dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Protocol
 
@@ -449,10 +450,15 @@ def _profile_from_row(row: Dict[str, Any]) -> UserProfile:
     return _profile_from_mapping(row)
 
 
+@lru_cache(maxsize=4)
+def _cached_user_profile_store(url: str) -> PostgresUserProfileStore:
+    return PostgresUserProfileStore(url)
+
+
 def get_user_profile_store() -> UserProfileStore:
     url = database_url()
     if url:
-        return PostgresUserProfileStore(url)
+        return _cached_user_profile_store(url)
     return LocalUserProfileStore()
 
 
