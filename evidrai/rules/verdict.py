@@ -64,6 +64,66 @@ def map_confidence_label(value: Any) -> str:
     text = str(value).strip().title()
     return text if text in {"High", "Medium", "Low"} else "Medium"
 
+
+CONFIDENCE_LABEL_BOUNDS = {
+    "Low": (20, 44),
+    "Medium": (45, 69),
+    "High": (70, 96),
+}
+
+
+def clamp_confidence_to_label(score: Any, label: str) -> int:
+    try:
+        numeric = int(round(float(score)))
+    except (TypeError, ValueError):
+        numeric = {"Low": 35, "Medium": 58, "High": 82}.get(map_confidence_label(label), 50)
+    lower, upper = CONFIDENCE_LABEL_BOUNDS[map_confidence_label(label)]
+    return max(lower, min(upper, numeric))
+
+
+def compute_calibrated_confidence_score(
+    computed_confidence: Any,
+    reasoning: Dict[str, Any],
+    rule_view: Dict[str, Any],
+) -> int:
+    """Produce a benchmarkable confidence score aligned with the final evidence view."""
+    label = map_confidence_label(reasoning.get("verified_confidence") or rule_view.get("confidence") or "Low")
+    score = clamp_confidence_to_label(computed_confidence, label)
+    stats = rule_view.get("stats") or {}
+    verdict = map_pipeline_verdict(reasoning.get("verified_verdict") or rule_view.get("verdict") or "Unverified")
+
+    supportive = int(stats.get("supportive_evidence") or 0)
+    contradictory = int(stats.get("contradictory_evidence") or 0)
+    mixed_sources = int(stats.get("mixed_sources") or 0)
+    primary_supportive = int(stats.get("primary_supportive") or 0)
+    primary_contradictory = int(stats.get("primary_contradictory") or 0)
+    high_quality_supportive = int(stats.get("high_quality_supportive") or 0)
+    high_quality_contradictory = int(stats.get("high_quality_contradictory") or 0)
+    contextual_support = int(stats.get("allegation_or_context_support") or 0)
+
+    if supportive == 0 and contradictory == 0:
+        score = min(score, 40)
+    if contextual_support > 0 and supportive == 0:
+        score = min(score, 55)
+    if mixed_sources > 0 or (supportive > 0 and contradictory > 0):
+        score = min(score, 65)
+    if rule_view.get("soft_claim"):
+        score = min(score, 60 if verdict != "Unverified" else 44)
+    if rule_view.get("serious_allegation") and supportive == 0 and verdict in {"Not supported by credible evidence", "Reported but unconfirmed"}:
+        score = min(max(score, 50), 62)
+
+    clean_support = supportive >= 2 and contradictory == 0 and (primary_supportive or high_quality_supportive)
+    clean_contradiction = contradictory >= 2 and supportive == 0 and (primary_contradictory or high_quality_contradictory)
+    if clean_support or clean_contradiction:
+        score = max(score, 74)
+    if (primary_supportive >= 1 and supportive >= 3 and contradictory == 0) or (
+        primary_contradictory >= 1 and contradictory >= 3 and supportive == 0
+    ):
+        score = max(score, 80)
+
+    return clamp_confidence_to_label(score, label)
+
+
 SERIOUS_ALLEGATION_TYPES = {"criminal", "corruption", "espionage", "foreign_agent", "misconduct_named_person"}
 
 VERDICT_ORDER = {

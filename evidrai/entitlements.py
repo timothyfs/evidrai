@@ -54,13 +54,18 @@ class UserProfile:
     consent_ip_hash: str = ""
     features: Dict[str, bool] = field(default_factory=dict)
     limits: Dict[str, int] = field(default_factory=dict)
+    custom_limits: Dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)
         definition = tier_definition(self.tier)
+        effective_limits = dict(definition.limits)
+        for key, value in self.custom_limits.items():
+            if key in effective_limits:
+                effective_limits[key] = max(0, int(value or 0))
         payload["tier_label"] = definition.label
         payload["features"] = dict(definition.features)
-        payload["limits"] = dict(definition.limits)
+        payload["limits"] = effective_limits
         return payload
 
 
@@ -173,6 +178,9 @@ class UserProfileStore(Protocol):
     def update_consent(self, owner_id: str, **details: Any) -> UserProfile:
         ...
 
+    def update_limits(self, owner_id: str, **limits: int) -> UserProfile:
+        ...
+
     def list(self, limit: int = 100) -> List[UserProfile]:
         ...
 
@@ -258,6 +266,21 @@ class LocalUserProfileStore:
         self._write(data)
         return self.get_or_create(owner_id, email=record.get("email") or "")
 
+    def update_limits(self, owner_id: str, **limits: int) -> UserProfile:
+        if not owner_id:
+            raise EntitlementError("owner_id is required", code="owner_required", status_code=400)
+        allowed = {"max_speech_claims"}
+        data = self._read()
+        record = data.get(owner_id) or {"owner_id": owner_id, "tier": "free"}
+        custom_limits = dict(record.get("custom_limits") or {})
+        for key, value in limits.items():
+            if key in allowed:
+                custom_limits[key] = max(0, min(20, int(value or 0)))
+        record["custom_limits"] = custom_limits
+        data[owner_id] = record
+        self._write(data)
+        return self.get_or_create(owner_id, email=record.get("email") or "")
+
     def list(self, limit: int = 100) -> List[UserProfile]:
         return [_profile_from_mapping(record, owner_id=owner_id) for owner_id, record in list(self._read().items())[:limit]]
 
@@ -300,7 +323,7 @@ class PostgresUserProfileStore:
                     ON CONFLICT (owner_id) DO UPDATE SET
                         email = COALESCE(NULLIF(EXCLUDED.email, ''), user_profiles.email),
                         updated_at = now()
-                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash, custom_limits
                     """,
                     (owner_id, email),
                 )
@@ -323,7 +346,7 @@ class PostgresUserProfileStore:
                         email = COALESCE(NULLIF(EXCLUDED.email, ''), user_profiles.email),
                         tier = EXCLUDED.tier,
                         updated_at = now()
-                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash, custom_limits
                     """,
                     (owner_id, email, normalized),
                 )
@@ -348,7 +371,7 @@ class PostgresUserProfileStore:
                     UPDATE user_profiles
                     SET {columns}, updated_at = now()
                     WHERE owner_id = %s
-                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash, custom_limits
                     """,
                     tuple(params),
                 )
@@ -385,7 +408,7 @@ class PostgresUserProfileStore:
                     UPDATE user_profiles
                     SET {columns}, updated_at = now()
                     WHERE owner_id = %s
-                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash, custom_limits
                     """,
                     tuple(params),
                 )
@@ -400,9 +423,35 @@ class PostgresUserProfileStore:
         self._ensure_schema()
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash FROM user_profiles ORDER BY updated_at DESC LIMIT %s", (limit,))
+                cur.execute("SELECT owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash, custom_limits FROM user_profiles ORDER BY updated_at DESC LIMIT %s", (limit,))
                 rows = cur.fetchall()
         return [_profile_from_row(row) for row in rows]
+
+    def update_limits(self, owner_id: str, **limits: int) -> UserProfile:
+        if not owner_id:
+            raise EntitlementError("owner_id is required", code="owner_required", status_code=400)
+        allowed = {"max_speech_claims"}
+        updates = {key: max(0, min(20, int(value or 0))) for key, value in limits.items() if key in allowed}
+        if not updates:
+            return self.get_or_create(owner_id)
+        self._ensure_schema()
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE user_profiles
+                    SET custom_limits = custom_limits || %s::jsonb, updated_at = now()
+                    WHERE owner_id = %s
+                    RETURNING owner_id, email, tier, subscription_status, trial_started_at, trial_ends_at, payment_provider_customer_id, company_name, organisation_name, billing_account_name, billing_account_id, admin_notes, terms_version, privacy_version, terms_accepted_at, privacy_acknowledged_at, marketing_opt_in, marketing_opt_in_at, consent_source, consent_user_agent, consent_ip_hash, custom_limits
+                    """,
+                    (json.dumps(updates), owner_id),
+                )
+                row = cur.fetchone()
+            conn.commit()
+        if not row:
+            self.get_or_create(owner_id)
+            return self.update_limits(owner_id, **limits)
+        return _profile_from_row(row)
 
     def delete(self, owner_id: str) -> bool:
         if not owner_id:
@@ -418,6 +467,23 @@ class PostgresUserProfileStore:
 
 def _dt_value(value: Any) -> str:
     return value.isoformat() if hasattr(value, "isoformat") else str(value or "")
+
+
+def _limit_mapping(value: Any) -> Dict[str, int]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except Exception:
+            value = {}
+    if not isinstance(value, dict):
+        return {}
+    limits: Dict[str, int] = {}
+    for key, raw in value.items():
+        try:
+            limits[str(key)] = int(raw)
+        except Exception:
+            continue
+    return limits
 
 
 def _profile_from_mapping(row: Dict[str, Any], *, owner_id: str = "") -> UserProfile:
@@ -443,6 +509,7 @@ def _profile_from_mapping(row: Dict[str, Any], *, owner_id: str = "") -> UserPro
         consent_source=row.get("consent_source") or "",
         consent_user_agent=row.get("consent_user_agent") or "",
         consent_ip_hash=row.get("consent_ip_hash") or "",
+        custom_limits=_limit_mapping(row.get("custom_limits")),
     )
 
 
@@ -478,6 +545,10 @@ def update_user_consent(owner_id: str, store: UserProfileStore | None = None, **
     return (store or get_user_profile_store()).update_consent(owner_id, **details)
 
 
+def update_user_profile_limits(owner_id: str, store: UserProfileStore | None = None, **limits: int) -> UserProfile:
+    return (store or get_user_profile_store()).update_limits(owner_id, **limits)
+
+
 def list_user_profiles(limit: int = 100, store: UserProfileStore | None = None) -> List[UserProfile]:
     return (store or get_user_profile_store()).list(limit=limit)
 
@@ -501,7 +572,8 @@ def require_feature(profile: UserProfile, feature: str, *, authenticated: bool =
 
 def enforce_speech_claim_limit(profile: UserProfile, requested_claims: int) -> None:
     definition = tier_definition(profile.tier)
-    max_claims = int(definition.limits.get("max_speech_claims") or 0)
+    payload = profile.to_dict()
+    max_claims = int((payload.get("limits") or {}).get("max_speech_claims") or 0)
     if requested_claims > max_claims:
         raise EntitlementError(
             f"Your {definition.label} plan allows up to {max_claims} speech claims per audit.",

@@ -82,7 +82,7 @@ export type TierName = 'free' | 'pro' | 'researcher';
 export type AccountProfile = {
   owner_id: string;
   label: string;
-  plan: 'Free' | 'Pro' | 'Researcher / Journalist' | 'Loading plan…';
+  plan: 'Free' | 'Pro' | 'Researcher / Journalist' | 'Checking…';
 };
 
 export type TierDefinition = {
@@ -118,6 +118,7 @@ export type UserProfile = {
   admin_access_source?: 'master_admin_email' | 'none' | string;
   features: Record<string, boolean>;
   limits: Record<string, number>;
+  custom_limits?: Record<string, number>;
 };
 
 export type ConsentStatus = {
@@ -140,6 +141,15 @@ export type MeResponse = {
   user: UserProfile;
   consent?: ConsentStatus;
   feature_matrix: { schema_version: string; tiers: TierDefinition[] };
+};
+
+export type AdminSessionResponse = {
+  ok: boolean;
+  authenticated: boolean;
+  is_admin: boolean;
+  email?: string;
+  owner_id?: string;
+  admin_access_source?: 'master_admin_email' | 'none' | string;
 };
 
 export type AuthDiagnosticsResponse = {
@@ -401,6 +411,10 @@ export function getMe(): Promise<MeResponse> {
   return request<MeResponse>('/me');
 }
 
+export function getAdminSession(): Promise<AdminSessionResponse> {
+  return request<AdminSessionResponse>('/admin/session');
+}
+
 export function updateMyConsent(input: { terms_accepted: boolean; marketing_opt_in: boolean; terms_version?: string; privacy_version?: string; consent_source?: string }): Promise<MeResponse> {
   return request<MeResponse>('/me/consent', {
     method: 'POST',
@@ -516,6 +530,72 @@ export function updateAdminScoringPolicy(input: Partial<ScoringPolicy> & { chang
   });
 }
 
+export type BenchmarkClaim = {
+  id: string;
+  claim: string;
+  label?: string | null;
+  domain: string;
+  difficulty: string;
+  verdict_type: string;
+  split: 'visible' | 'held_out';
+  rationale: string;
+  excluded_reason?: string | null;
+  ground_truth_sources: Array<{ title: string; url: string; source_type: string; note?: string }>;
+};
+
+export type BenchmarkRunResponse = {
+  ok: boolean;
+  run_id: string;
+  methodology_version: string;
+  model_version: string;
+  include_held_out: boolean;
+  dataset_size: number;
+  selected_size: number;
+  scored_size: number;
+  failure_count: number;
+  failures: Array<{ claim_id: string; error: string }>;
+  metrics: {
+    claim_count: number;
+    accuracy: number;
+    ece: number;
+    brier_score: number;
+    reliability_bins: Array<{ bucket: string; count: number; avg_confidence: number | null; accuracy: number | null; gap: number | null }>;
+    accuracy_by_verdict_type: Record<string, { count: number; accuracy: number; avg_confidence: number }>;
+    accuracy_by_domain: Record<string, { count: number; accuracy: number; avg_confidence: number }>;
+    accuracy_by_difficulty: Record<string, { count: number; accuracy: number; avg_confidence: number }>;
+    overconfident_wrong_claim_ids: string[];
+    underconfident_correct_claim_ids: string[];
+  };
+  results: Array<{
+    claim: BenchmarkClaim & { label: string };
+    assessment: AssessmentResponse;
+    score: {
+      claim_id: string;
+      label: string;
+      predicted_label: string;
+      predicted_verdict: string;
+      confidence: number;
+      correct: boolean;
+      domain: string;
+      verdict_type: string;
+      difficulty: string;
+      split: string;
+      assessment_id: string;
+    };
+  }>;
+};
+
+export function getBenchmarkDataset(): Promise<{ ok: boolean; claims: BenchmarkClaim[] }> {
+  return request<{ ok: boolean; claims: BenchmarkClaim[] }>('/admin/benchmark/dataset');
+}
+
+export function runBenchmark(input: { include_held_out?: boolean; limit?: number; fail_loud?: boolean; methodology_version?: string; model_version?: string }): Promise<BenchmarkRunResponse> {
+  return request<BenchmarkRunResponse>('/admin/benchmark/run', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 export function setAdminUserTier(input: { owner_id: string; tier: TierName; email?: string }): Promise<{ ok: boolean; user: UserProfile }> {
   return request<{ ok: boolean; user: UserProfile }>('/admin/users/tier', {
     method: 'PATCH',
@@ -563,7 +643,7 @@ export function deleteAdminUser(owner_id: string): Promise<{ ok: boolean; owner_
   });
 }
 
-export function updateAdminUserProfile(input: { owner_id: string; email?: string; company_name?: string; organisation_name?: string; billing_account_name?: string; billing_account_id?: string; admin_notes?: string }): Promise<{ ok: boolean; user: UserProfile }> {
+export function updateAdminUserProfile(input: { owner_id: string; email?: string; company_name?: string; organisation_name?: string; billing_account_name?: string; billing_account_id?: string; admin_notes?: string; max_speech_claims?: number }): Promise<{ ok: boolean; user: UserProfile }> {
   return request<{ ok: boolean; user: UserProfile }>('/admin/users/profile', {
     method: 'PATCH',
     body: JSON.stringify(input),

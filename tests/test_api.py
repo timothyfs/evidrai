@@ -349,6 +349,82 @@ def test_master_admin_can_view_and_update_scoring_policy(monkeypatch):
     assert saved[0][2] == "Tune source independence."
 
 
+def test_admin_benchmark_dataset_hides_held_out_labels(monkeypatch):
+    visible = api_main.BenchmarkClaim(
+        id="visible-1",
+        claim="Visible claim",
+        label="true",
+        domain="health_science",
+        difficulty="easy",
+        verdict_type="clearly_true",
+        split="visible",
+        rationale="Visible rationale",
+        ground_truth_sources=[],
+    )
+    held_out = api_main.BenchmarkClaim(
+        id="held-1",
+        claim="Held-out claim",
+        label="false",
+        domain="finance",
+        difficulty="hard",
+        verdict_type="clearly_false",
+        split="held_out",
+        rationale="Hidden rationale",
+        ground_truth_sources=[],
+    )
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "load_claims", lambda: [visible, held_out])
+
+    response = client.get("/admin/benchmark/dataset", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    claims = response.json()["claims"]
+    assert claims[0]["label"] == "true"
+    assert claims[1]["label"] is None
+    assert claims[1]["rationale"] == ""
+
+
+def test_admin_benchmark_run_uses_assessment_creator(monkeypatch):
+    calls = []
+
+    def fake_run_admin_benchmark(**kwargs):
+        assessment = kwargs["create_assessment"](
+            api_main.BenchmarkClaim(
+                id="claim-1",
+                claim="Benchmark claim",
+                label="true",
+                domain="historical_fact",
+                difficulty="easy",
+                verdict_type="clearly_true",
+                split="visible",
+                rationale="",
+                ground_truth_sources=[],
+            )
+        )
+        return {"ok": True, "assessment_id": assessment.assessment_id, "calls": calls}
+
+    def fake_assessment_response_from_request(request, mode, owner_id="", profile=None):
+        calls.append({"claim": request.claim, "mode": mode, "owner_id": owner_id})
+        return AssessmentResponse(
+            build="test",
+            mode=mode,
+            owner_id=owner_id,
+            request=AssessmentRequestRecord(claim=request.claim, category=request.category),
+            verdict=AssessmentVerdict(label="Supported", confidence="High", confidence_score=82),
+        )
+
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "run_admin_benchmark", fake_run_admin_benchmark)
+    monkeypatch.setattr(api_main, "_assessment_response_from_request", fake_assessment_response_from_request)
+
+    response = client.post("/admin/benchmark/run", json={"limit": 1}, headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    assert response.json()["calls"] == [{"claim": "Benchmark claim", "mode": "deep", "owner_id": "benchmark-admin"}]
+
+
 def test_admin_update_user_profile_details(monkeypatch):
     monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
     monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
@@ -363,6 +439,25 @@ def test_admin_update_user_profile_details(monkeypatch):
     assert response.status_code == 200
     assert response.json()["user"]["company_name"] == "Acme"
     assert response.json()["user"]["billing_account_name"] == "Acme Global"
+
+
+def test_admin_update_user_profile_can_override_speech_claim_limit(monkeypatch):
+    calls = []
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"master@example.com"})
+    monkeypatch.setattr(api_main, "context_from_headers", lambda authorization="", owner_header="": api_main.AuthContext(owner_id="master", auth_method="supabase_jwt", email="master@example.com"))
+    monkeypatch.setattr(api_main, "update_user_profile_details", lambda owner_id, **details: UserProfile(owner_id=owner_id, email=details.get("email", ""), tier="pro"))
+    monkeypatch.setattr(api_main, "update_user_profile_limits", lambda owner_id, **limits: calls.append((owner_id, limits)) or UserProfile(owner_id=owner_id, tier="pro", custom_limits=limits))
+
+    response = client.patch(
+        "/admin/users/profile",
+        json={"owner_id": "user-1", "email": "user@example.com", "max_speech_claims": 10},
+        headers={"Authorization": "Bearer token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["user"]["limits"]["max_speech_claims"] == 10
+    assert response.json()["user"]["custom_limits"]["max_speech_claims"] == 10
+    assert calls == [("user-1", {"max_speech_claims": 10})]
 
 
 def test_admin_bulk_set_tier(monkeypatch):
@@ -1257,6 +1352,24 @@ def test_master_admin_me_gets_researcher_tier(monkeypatch):
     assert payload["user"]["tier"] == "researcher"
     assert payload["user"]["tier_label"] == "Researcher / Journalist"
     assert calls == [("admin-user", "researcher", "timfsmithson@gmail.com")]
+
+
+def test_admin_session_does_not_hydrate_profile(monkeypatch):
+    calls = []
+    context = api_main.AuthContext(owner_id="admin-user", auth_method="supabase_jwt", email="timfsmithson@gmail.com")
+    monkeypatch.setattr(api_main, "_auth_context_from_request", lambda request: context)
+    monkeypatch.setattr(api_main, "master_admin_emails", lambda: {"timfsmithson@gmail.com"})
+    monkeypatch.setattr(api_main, "get_or_create_profile", lambda owner_id, email="": calls.append((owner_id, email)) or UserProfile(owner_id=owner_id, email=email, tier="free"))
+    monkeypatch.setattr(api_main, "set_user_tier", lambda owner_id, tier, email="": calls.append((owner_id, tier, email)) or UserProfile(owner_id=owner_id, email=email, tier=tier))
+
+    response = client.get("/admin/session")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["authenticated"] is True
+    assert payload["is_admin"] is True
+    assert payload["admin_access_source"] == "master_admin_email"
+    assert calls == []
 
 
 def test_assessment_job_completes_and_returns_assessment(monkeypatch, tmp_path):

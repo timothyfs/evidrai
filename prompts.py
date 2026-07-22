@@ -218,6 +218,7 @@ REASONING_SYSTEM_PROMPT = dedent(
     {
       "verified_verdict": "Supported|Likely supported|Unverified|Misleading framing|Weakly supported / likely incorrect|Not supported by credible evidence",
       "verified_confidence": "High|Medium|Low",
+      "confidence_score": 0,
       "consensus_strength": "Strong agreement|Moderate agreement|Mixed evidence|Weak agreement|No clear consensus",
       "consensus_summary": "string",
       "pendulum_band": "Strongly evidenced|Mostly supported|Mixed / uncertain|Weakly supported|Unsubstantiated rumor|Contradicted by evidence",
@@ -460,8 +461,10 @@ def build_reasoning_messages(
                 Important instructions:
                 - Convert the provisional verdict and evidence into Evidrai user-facing labels.
                 - Use the same verdict family as the fast first-pass assessment.
-                - Use qualitative confidence only: High, Medium, or Low.
-                - Do not output percentages.
+                - Return verified_confidence as High, Medium, or Low.
+                - Return confidence_score as an integer from 0 to 100 for benchmark calibration.
+                - confidence_score should represent confidence in the final assessment being correct, not source popularity or emotional certainty.
+                - Keep confidence_score consistent with the label: Low=20-44, Medium=45-69, High=70-96.
                 - Distinguish actual evidence from rumor drivers.
                 - Do not treat repeated allegations as corroboration.
                 - Treat statements by powerful public figures as claims, not proof, unless independently corroborated.

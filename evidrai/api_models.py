@@ -25,6 +25,7 @@ class AssessmentRequestRecord(BaseModel):
 class AssessmentVerdict(BaseModel):
     label: str = "Unverified"
     confidence: str = "Low"
+    confidence_score: int = 35
     
     @field_validator("label", mode="before")
     @classmethod
@@ -257,6 +258,11 @@ def serialize_assessment_response(
 
     verdict_label = normalize_verdict_label(result.get("verified_verdict") or result.get("verdict") or "Unverified")
     confidence = normalize_confidence_label(result.get("verified_confidence") or result.get("confidence") or "Low")
+    raw_confidence_score = result.get("confidence_score")
+    try:
+        confidence_score = max(0, min(100, int(round(float(raw_confidence_score)))))
+    except (TypeError, ValueError):
+        confidence_score = {"Low": 35, "Medium": 58, "High": 82}.get(confidence, 50)
     verdict_label, confidence, verdict_alignment_note = _verdict_aligned_with_evidence(verdict_label, confidence, sources)
     pendulum = result.get("pendulum") or {}
     evidence_score = pendulum.get("score") if isinstance(pendulum, dict) else None
@@ -318,6 +324,7 @@ def serialize_assessment_response(
         verdict=AssessmentVerdict(
             label=verdict_label,
             confidence=confidence,
+            confidence_score=confidence_score,
             summary=consensus_summary or result.get("tldr") or result.get("summary") or "",
             key_caveat=verdict_alignment_note or result.get("one_line_correction") or result.get("evidence_access_note") or "",
             evidence_strength_score=evidence_score,
@@ -331,6 +338,7 @@ def serialize_assessment_response(
             "reasoning_summary": result.get("reasoning_summary"),
             "evidence_assessment": evidence_assessment,
             "rule_engine": result.get("rule_engine"),
+            "confidence_score": confidence_score,
             "amplification_warning": result.get("amplification_warning"),
             "claim_semantics": result.get("claim_semantics"),
             "humour_summary": result.get("humour_summary"),

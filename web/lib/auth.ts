@@ -19,10 +19,12 @@ export function getSupabaseClient() {
 export function profileFromSession(session: Session | null, fallback: AccountProfile): AccountProfile {
   const user = session?.user;
   if (!user) return fallback;
+  const fallbackPlan = String(fallback.plan);
+  const cachedPlan = fallback.owner_id === user.id && fallbackPlan !== 'Checking…' && fallbackPlan !== 'Loading plan…' ? fallback.plan : 'Checking…';
   return {
     owner_id: user.id,
     label: user.email || user.user_metadata?.full_name || 'Signed-in user',
-    plan: 'Loading plan…',
+    plan: cachedPlan,
   };
 }
 

@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 from evidrai.api_models import AssessmentResponse, EvidenceMap, serialize_assessment_response
 from evidrai.assessment_jobs import AssessmentJob, get_assessment_job_store
 from evidrai.auth import AuthContext, context_from_headers, decode_supabase_access_token, unverified_token_diagnostics
+from evidrai.benchmark.admin import run_admin_benchmark
+from evidrai.benchmark.dataset import BenchmarkClaim, load_claims
 from evidrai.clients.llm import OpenAICompatibleClient
 from evidrai.clients.search import TavilySearchClient
 from evidrai.config import admin_token, api_allowed_origins, database_url, get_app_build, master_admin_emails, smtp_configured, smtp_from_email, smtp_from_name, smtp_host, smtp_password, smtp_port, smtp_starttls, smtp_use_ssl, smtp_username, supabase_auth_configured, supabase_service_role_key, supabase_url, turnstile_configured, turnstile_secret_key
@@ -30,6 +32,7 @@ from evidrai.entitlements import (
     set_user_tier,
     UserProfile,
     update_user_consent,
+    update_user_profile_limits,
     update_user_profile_details,
 )
 from evidrai.errors import EvidraiError, safe_error_payload
@@ -175,6 +178,7 @@ class AdminUpdateProfileRequest(BaseModel):
     billing_account_name: str = ""
     billing_account_id: str = ""
     admin_notes: str = ""
+    max_speech_claims: Optional[int] = Field(default=None, ge=0, le=20)
 
 
 class AdminBulkUserActionRequest(BaseModel):
@@ -221,6 +225,14 @@ class AdminScoringPolicyUpdateRequest(BaseModel):
     source_type_bias_risk: Dict[str, float] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
     change_note: str = ""
+
+
+class AdminBenchmarkRunRequest(BaseModel):
+    include_held_out: bool = False
+    limit: Optional[int] = Field(default=None, ge=1, le=100)
+    fail_loud: bool = True
+    methodology_version: str = "benchmark-methodology-v1"
+    model_version: str = "live-api-config"
 
 
 class ApiEnvelope(BaseModel):
@@ -990,6 +1002,20 @@ def me(http_request: Request) -> Dict[str, Any]:
     return {"ok": True, "authenticated": context.authenticated, "is_admin": _is_master_admin(context), "user": user, "consent": _consent_status(profile), "feature_matrix": feature_matrix()}
 
 
+@app.get("/admin/session", response_model=Dict[str, Any])
+def admin_session(http_request: Request) -> Dict[str, Any]:
+    context = _auth_context_from_request(http_request)
+    is_admin = _is_master_admin(context)
+    return {
+        "ok": True,
+        "authenticated": context.authenticated,
+        "is_admin": is_admin,
+        "email": context.email,
+        "owner_id": context.owner_id,
+        "admin_access_source": "master_admin_email" if is_admin else "none",
+    }
+
+
 @app.post("/me/consent", response_model=Dict[str, Any])
 def update_my_consent(request: ConsentUpdateRequest, http_request: Request) -> Dict[str, Any]:
     context = _require_authenticated(http_request)
@@ -1062,6 +1088,8 @@ def admin_update_user_profile(request: AdminUpdateProfileRequest, http_request: 
         billing_account_id=request.billing_account_id,
         admin_notes=request.admin_notes,
     )
+    if request.max_speech_claims is not None:
+        profile = update_user_profile_limits(request.owner_id, max_speech_claims=request.max_speech_claims)
     return {"ok": True, "user": _profile_admin_view(profile)}
 
 
@@ -1371,6 +1399,53 @@ def admin_trust_backfill(http_request: Request, limit: int = 1000) -> Dict[str, 
     result = backfill_trust_from_reports(limit=limit)
     result["analytics"] = trust_analytics_summary(limit=20)
     return result
+
+
+@app.get("/admin/benchmark/dataset", response_model=Dict[str, Any])
+def admin_benchmark_dataset(http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    claims = load_claims()
+    return {
+        "ok": True,
+        "claims": [
+            {
+                "id": claim.id,
+                "claim": claim.claim,
+                "label": claim.label if claim.split == "visible" else None,
+                "domain": claim.domain,
+                "difficulty": claim.difficulty,
+                "verdict_type": claim.verdict_type,
+                "split": claim.split,
+                "rationale": claim.rationale if claim.split == "visible" else "",
+                "excluded_reason": claim.excluded_reason,
+                "ground_truth_sources": [source.__dict__ for source in claim.ground_truth_sources] if claim.split == "visible" else [],
+            }
+            for claim in claims
+        ],
+    }
+
+
+@app.post("/admin/benchmark/run", response_model=Dict[str, Any])
+def admin_benchmark_run(request: AdminBenchmarkRunRequest, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+
+    def create_assessment(claim: BenchmarkClaim) -> AssessmentResponse:
+        assessment_request = AssessmentCreateRequest(
+            claim=claim.claim,
+            category=claim.domain,
+            output_style="standard",
+            include_debug=False,
+        )
+        return _assessment_response_from_request(assessment_request, "deep", owner_id="benchmark-admin")
+
+    return run_admin_benchmark(
+        create_assessment=create_assessment,
+        include_held_out=request.include_held_out,
+        limit=request.limit,
+        fail_loud=request.fail_loud,
+        methodology_version=request.methodology_version,
+        model_version=request.model_version,
+    )
 
 
 def runtime_status() -> Dict[str, Any]:

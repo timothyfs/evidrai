@@ -1,7 +1,7 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { AccountProfile, AdminInviteEmail, MeResponse, ReportSummary, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAnonymousAccountProfile, inviteAdminUser, getMe, getAdminUserActivity, listAdminUsers, listSupportIssues, sendAdminInviteEmail, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { AccountProfile, AdminInviteEmail, AdminSessionResponse, MeResponse, ReportSummary, SupportIssue, TierName, UserProfile, bulkAdminUsers, deleteAdminUser, getAdminSession, getAnonymousAccountProfile, inviteAdminUser, getMe, getAdminUserActivity, listAdminUsers, listSupportIssues, sendAdminInviteEmail, sendAdminPasswordReset, setAccessToken, setAccountProfile, setAdminUserTier, updateAdminUserPassword, updateAdminUserProfile, resendAdminInvite } from '../../lib/api';
 import { authConfigured, getCurrentSession, onAuthStateChange, profileFromSession, signInWithEmailPassword, signInWithGoogle, signOut } from '../../lib/auth';
 
 const TIER_OPTIONS = [
@@ -16,13 +16,14 @@ const ADMIN_COLUMNS = [
   { key: 'company_name', label: 'Company / organisation' },
   { key: 'billing_account_name', label: 'Billing group' },
   { key: 'tier_label', label: 'Product tier' },
+  { key: 'claim_limit', label: 'Claim limit' },
   { key: 'admin_access', label: 'Admin access' },
   { key: 'subscription_status', label: 'Subscription' },
   { key: 'actions', label: 'Actions' },
 ] as const;
 
 type AdminColumnKey = typeof ADMIN_COLUMNS[number]['key'];
-type SortKey = Exclude<AdminColumnKey, 'selected' | 'actions'>;
+type SortKey = Exclude<AdminColumnKey, 'selected' | 'actions' | 'claim_limit'>;
 type SortState = { key: SortKey; direction: 'asc' | 'desc' };
 type Filters = Partial<Record<SortKey, string>>;
 
@@ -55,6 +56,7 @@ function blankDetails(user?: UserProfile) {
     billing_account_name: user?.billing_account_name || '',
     billing_account_id: user?.billing_account_id || '',
     admin_notes: user?.admin_notes || '',
+    max_speech_claims: String(user?.custom_limits?.max_speech_claims ?? user?.limits?.max_speech_claims ?? 0),
   };
 }
 
@@ -76,6 +78,7 @@ function consentBadgeClass(ok: boolean) {
 export default function AdminPage() {
   const [account, setAccount] = useState<AccountProfile | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
+  const [adminSession, setAdminSession] = useState<AdminSessionResponse | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [manualOwnerId, setManualOwnerId] = useState('');
@@ -96,6 +99,7 @@ export default function AdminPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [bulkTier, setBulkTier] = useState<TierName>('pro');
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [usersLoaded, setUsersLoaded] = useState(false);
   const [supportIssues, setSupportIssues] = useState<SupportIssue[]>([]);
   const [userActivity, setUserActivity] = useState<{ user: UserProfile; reports: ReportSummary[]; count: number } | null>(null);
   const [editing, setEditing] = useState<string>('');
@@ -103,8 +107,12 @@ export default function AdminPage() {
   const [tempPasswords, setTempPasswords] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const profileLoadRef = useRef<{ token: string; promise: Promise<void> } | null>(null);
+  const loadedProfileTokenRef = useRef('');
+  const adminSessionLoadRef = useRef<{ token: string; promise: Promise<void> } | null>(null);
+  const loadedAdminSessionTokenRef = useRef('');
 
-  const isAdmin = Boolean(me?.is_admin);
+  const isAdmin = Boolean(adminSession?.is_admin || me?.is_admin);
 
   const filteredUsers = useMemo(() => {
     const query = globalSearch.trim().toLowerCase();
@@ -129,10 +137,31 @@ export default function AdminPage() {
   const allVisibleSelected = filteredUsers.length > 0 && filteredUsers.every((user) => selected.includes(user.owner_id));
   const editingUser = users.find((user) => user.owner_id === editing) || null;
 
-  async function refreshMe() {
-    const payload = await getMe();
-    setMe(payload);
-    setAccount((current) => current ? { ...current, plan: payload.user.tier_label } : current);
+  async function refreshMe(sessionToken = '', force = false) {
+    if (!force && loadedProfileTokenRef.current === sessionToken) return;
+    if (profileLoadRef.current?.token === sessionToken) return profileLoadRef.current.promise;
+    const promise = getMe().then((payload) => {
+      setMe(payload);
+      setAccount((current) => current ? { ...current, plan: payload.user.tier_label } : current);
+      loadedProfileTokenRef.current = sessionToken;
+    }).finally(() => {
+      if (profileLoadRef.current?.token === sessionToken) profileLoadRef.current = null;
+    });
+    profileLoadRef.current = { token: sessionToken, promise };
+    return promise;
+  }
+
+  async function refreshAdminSession(sessionToken = '', force = false) {
+    if (!force && loadedAdminSessionTokenRef.current === sessionToken) return;
+    if (adminSessionLoadRef.current?.token === sessionToken) return adminSessionLoadRef.current.promise;
+    const promise = getAdminSession().then((payload) => {
+      setAdminSession(payload);
+      loadedAdminSessionTokenRef.current = sessionToken;
+    }).finally(() => {
+      if (adminSessionLoadRef.current?.token === sessionToken) adminSessionLoadRef.current = null;
+    });
+    adminSessionLoadRef.current = { token: sessionToken, promise };
+    return promise;
   }
 
   async function loadSupportIssues() {
@@ -169,6 +198,7 @@ export default function AdminPage() {
     try {
       const payload = await listAdminUsers();
       setUsers(payload.users || []);
+      setUsersLoaded(true);
       setSelected((current) => current.filter((ownerId) => payload.users?.some((user) => user.owner_id === ownerId)));
       setMessage(`Loaded ${payload.users?.length || 0} users.`);
     } catch (err) {
@@ -187,7 +217,11 @@ export default function AdminPage() {
         const profile = profileFromSession(session, fallback);
         setAccount(profile);
         setAccountProfile(profile);
-        if (session) await refreshMe();
+        if (session) {
+          const token = session.access_token || '';
+          await refreshAdminSession(token);
+          void refreshMe(token).catch((err) => setMessage(err.message));
+        }
       })
       .catch((err) => setMessage(err.message));
     const unsubscribe = onAuthStateChange(async (session) => {
@@ -195,15 +229,20 @@ export default function AdminPage() {
       const profile = profileFromSession(session, fallback);
       setAccount(profile);
       setAccountProfile(profile);
-      if (session) await refreshMe();
-      else setMe(null);
+      if (session) {
+        const token = session.access_token || '';
+        await refreshAdminSession(token);
+        void refreshMe(token).catch((err) => setMessage(err.message));
+      }
+      else {
+        loadedProfileTokenRef.current = '';
+        loadedAdminSessionTokenRef.current = '';
+        setAdminSession(null);
+        setMe(null);
+      }
     });
     return unsubscribe;
   }, []);
-
-  useEffect(() => {
-    if (isAdmin) loadUsers();
-  }, [isAdmin]);
 
   function toggleSort(key: AdminColumnKey) {
     if (!sortableColumns.has(key)) return;
@@ -231,7 +270,9 @@ export default function AdminPage() {
     try {
       const session = await signInWithEmailPassword(email.trim(), password);
       setAccessToken(session?.access_token || '');
-      await refreshMe();
+      const token = session?.access_token || '';
+      await refreshAdminSession(token, true);
+      void refreshMe(token, true).catch((err) => setMessage(err.message));
       setMessage('Signed in.');
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Sign-in failed.');
@@ -259,7 +300,7 @@ export default function AdminPage() {
       const payload = await setAdminUserTier({ owner_id: user.owner_id, email: user.email, tier: nextTier });
       updateLocalUser(payload.user);
       setMessage(`Updated ${payload.user.email || payload.user.owner_id} to ${payload.user.tier_label}.`);
-      await refreshMe();
+      await refreshMe('', true);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not update tier.');
     } finally {
@@ -271,7 +312,9 @@ export default function AdminPage() {
     setBusy(true);
     setMessage('');
     try {
-      const payload = await updateAdminUserProfile({ owner_id: user.owner_id, ...(details[user.owner_id] || blankDetails(user)) });
+      const edit = details[user.owner_id] || blankDetails(user);
+      const maxSpeechClaims = Math.max(0, Math.min(20, Number(edit.max_speech_claims || 0)));
+      const payload = await updateAdminUserProfile({ owner_id: user.owner_id, ...edit, max_speech_claims: maxSpeechClaims });
       updateLocalUser(payload.user);
       setEditing('');
       setMessage(`Updated profile details for ${payload.user.email || payload.user.owner_id}.`);
@@ -445,7 +488,7 @@ export default function AdminPage() {
       const payload = await setAdminUserTier({ owner_id: manualOwnerId, email: manualEmail, tier: manualTier });
       setMessage(`Updated ${payload.user.email || payload.user.owner_id} to ${payload.user.tier_label}.`);
       await loadUsers();
-      await refreshMe();
+      await refreshMe('', true);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not update tier.');
     } finally {
@@ -505,10 +548,10 @@ export default function AdminPage() {
           <div className="sectionHeader">
             <div>
               <h2>User access</h2>
-              <p className="muted">{filteredUsers.length} shown · {users.length} total · {selected.length} selected</p>
+              <p className="muted">{usersLoaded ? `${filteredUsers.length} shown · ${users.length} total · ${selected.length} selected` : 'User table not loaded yet. Admin tools are available immediately.'}</p>
             </div>
             <div className="formRow compactActions">
-              <button className="secondary" disabled={busy} onClick={loadUsers} type="button">Reload</button>
+              <button className="secondary" disabled={busy} onClick={loadUsers} type="button">{usersLoaded ? 'Reload users' : 'Load users'}</button>
               <button className="secondary" disabled={busy} onClick={handleSignOut} type="button">Sign out</button>
             </div>
           </div>
@@ -531,6 +574,7 @@ export default function AdminPage() {
           <section className="adminGuardRails adminToolLinks" aria-label="Admin tools">
             <a href="/admin/scoring-policy"><strong>Scoring policy</strong><span>Tune source weights, source-type priors, and audit scoring changes.</span></a>
             <a href="/admin/trust/analytics"><strong>Trust analytics</strong><span>Review evidence, feedback, and reliability signal trends.</span></a>
+            <a href="/admin/benchmark"><strong>Calibration benchmark</strong><span>Run known claims through the live deep assessment path and review calibration metrics.</span></a>
             <a href="/"><strong>Product</strong><span>Return to claim assessment and report workflows.</span></a>
           </section>
 
@@ -617,7 +661,7 @@ export default function AdminPage() {
               ))}
             </div>
 
-            {filteredUsers.length === 0 ? <p className="muted">No users found. Users appear here after sign-in, invite creation, or profile creation by the API.</p> : filteredUsers.map((user) => {
+            {!usersLoaded ? <p className="muted">User records are loaded on demand so admin login stays fast. Use Load users above when you need the account table.</p> : filteredUsers.length === 0 ? <p className="muted">No users found. Users appear here after invite creation or profile creation by the API.</p> : filteredUsers.map((user) => {
               return (
                 <article className="adminUserRow scalable" key={user.owner_id}>
                   <input checked={selected.includes(user.owner_id)} onChange={() => toggleSelected(user.owner_id)} type="checkbox" aria-label={`Select ${user.email || user.owner_id}`} />
@@ -630,6 +674,10 @@ export default function AdminPage() {
                   <select disabled={busy} value={user.tier} onChange={(event) => updateUserTier(user, event.target.value as TierName)}>
                     {TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
+                  <div>
+                    <strong>{user.limits?.max_speech_claims ?? 0}</strong>
+                    <small>{user.custom_limits?.max_speech_claims !== undefined ? 'Custom speech claims' : 'Tier default'}</small>
+                  </div>
                   <div className={user.admin_access ? 'adminAccessBadge enabled' : 'adminAccessBadge'}><strong>{user.admin_access ? 'Enabled' : 'None'}</strong><small>{user.admin_access ? 'Allowlist' : 'Not admin'}</small></div>
                   <small>{user.subscription_status || 'none'}{user.trial_ends_at ? ` · trial ends ${user.trial_ends_at}` : ''}</small>
                   <select className="rowActionSelect" disabled={busy} value="" aria-label={`Actions for ${user.email || user.owner_id}`} onChange={(event) => {
@@ -675,6 +723,7 @@ export default function AdminPage() {
                 <label>Organisation name<input value={edit.organisation_name} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, organisation_name: event.target.value } }))} /></label>
                 <label>Billing account name<input value={edit.billing_account_name} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, billing_account_name: event.target.value } }))} /></label>
                 <label>Billing account ID<input value={edit.billing_account_id} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, billing_account_id: event.target.value } }))} /></label>
+                <label>Speech/video claim limit<input min={0} max={20} value={edit.max_speech_claims} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, max_speech_claims: event.target.value } }))} type="number" /></label>
                 <label>Temporary password<input value={tempPasswords[editingUser.owner_id] || ''} onChange={(event) => setTempPasswords((current) => ({ ...current, [editingUser.owner_id]: event.target.value }))} type="password" placeholder="Set temporary password" /></label>
                 <label className="notesField">Admin notes<textarea value={edit.admin_notes} onChange={(event) => setDetails((current) => ({ ...current, [editingUser.owner_id]: { ...edit, admin_notes: event.target.value } }))} /></label>
                 <div className="adminConsentAudit wide" aria-label="Consent audit status">

@@ -36,6 +36,7 @@ from evidrai.rules.verdict import (
     assess_amplification_risk,
     align_reasoning_with_rules,
     collect_risk_flags,
+    compute_calibrated_confidence_score,
     evidence_pendulum,
     map_confidence_label,
     map_pipeline_verdict,
@@ -741,7 +742,9 @@ def run_claim_pipeline_typed(user_input: str, llm: OpenAICompatibleClient, searc
         )
     )
     reasoning = align_reasoning_with_rules(reasoning, rule_engine.to_dict())
+    reasoning["confidence_score"] = compute_calibrated_confidence_score(confidence, reasoning, rule_engine.to_dict())
     reasoning["rule_engine"] = rule_engine.to_public_dict()
+    reasoning["rule_engine"]["confidence_score"] = reasoning["confidence_score"]
     amplification_warning = assess_amplification_risk(evidence_packet.sources)
     reasoning["amplification_warning"] = amplification_warning
 

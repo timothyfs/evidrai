@@ -8,6 +8,7 @@ import {
   AssessmentSource,
   FeedbackRating,
   MeResponse,
+  AdminSessionResponse,
   ReportSummary,
   SpeechCheckedClaim,
   SpeechClaim,
@@ -17,6 +18,7 @@ import {
   createReportShare,
   deleteReport,
   extractSpeechClaims,
+  getAdminSession,
   getMe,
   getAuthDiagnostics,
   getAccountProfile,
@@ -1387,10 +1389,11 @@ function ConsentUpdateGate({
   );
 }
 
-function AccountMenu({ account, me, theme, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; theme: ThemeMode; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
+function AccountMenu({ account, me, adminSession, theme, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; adminSession: AdminSessionResponse | null; theme: ThemeMode; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
   const label = account.label || 'Signed in';
   const displayName = label.includes('@') ? label.split('@')[0] : label;
-  const planLabel = me?.user?.tier_label || (account.owner_id.startsWith('anon_') ? account.plan : 'Loading plan…');
+  const planLabel = me?.user?.tier_label || (account.owner_id.startsWith('anon_') ? account.plan : 'Checking…');
+  const isAdmin = Boolean(me?.is_admin || adminSession?.is_admin);
   return (
     <details className="accountMenu">
       <summary>
@@ -1401,8 +1404,8 @@ function AccountMenu({ account, me, theme, onToggleTheme, onSignOut, authBusy }:
         <p className="accountProfileLine"><span>Signed in as</span><strong>{label}</strong></p>
         <p><span>Plan</span><strong>{planLabel}</strong></p>
         <p><span>User ID</span><code>{account.owner_id}</code></p>
-        {me?.is_admin && <p><span>Admin</span><strong>Enabled</strong></p>}
-        {me?.is_admin && <a className="button secondary" href="/admin">Admin UI</a>}
+        {isAdmin && <p><span>Admin</span><strong>Enabled</strong></p>}
+        {isAdmin && <a className="button secondary" href="/admin">Admin UI</a>}
         <button className="secondary" onClick={onToggleTheme} type="button">{theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}</button>
         <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
       </div>
@@ -1410,7 +1413,8 @@ function AccountMenu({ account, me, theme, onToggleTheme, onSignOut, authBusy }:
   );
 }
 
-function SiteHeader({ account, me, signedIn, theme, quickClaim, onQuickClaimChange, onQuickSubmit, quickDisabled, quickLoading, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile | null; me: MeResponse | null; signedIn: boolean; theme: ThemeMode; quickClaim: string; onQuickClaimChange: (value: string) => void; onQuickSubmit: (event: FormEvent<HTMLFormElement>) => void; quickDisabled: boolean; quickLoading: boolean; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
+function SiteHeader({ account, me, adminSession, signedIn, theme, quickClaim, onQuickClaimChange, onQuickSubmit, quickDisabled, quickLoading, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile | null; me: MeResponse | null; adminSession: AdminSessionResponse | null; signedIn: boolean; theme: ThemeMode; quickClaim: string; onQuickClaimChange: (value: string) => void; onQuickSubmit: (event: FormEvent<HTMLFormElement>) => void; quickDisabled: boolean; quickLoading: boolean; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
+  const isAdmin = Boolean(me?.is_admin || adminSession?.is_admin);
   return (
     <header className="siteHeader">
       <div className="headerBrandCluster">
@@ -1425,7 +1429,7 @@ function SiteHeader({ account, me, signedIn, theme, quickClaim, onQuickClaimChan
           <a href="/about">About</a>
           <a href="/team">Team</a>
           <a href="/contact">Contact</a>
-          {me?.is_admin && <a href="/admin">Admin</a>}
+          {isAdmin && <a href="/admin">Admin</a>}
         </nav>
       </details>
       {signedIn ? (
@@ -1442,11 +1446,11 @@ function SiteHeader({ account, me, signedIn, theme, quickClaim, onQuickClaimChan
           <a href="/about">About</a>
           <a href="/team">Team</a>
           <a href="/contact">Contact</a>
-          {me?.is_admin && <a href="/admin">Admin</a>}
+          {isAdmin && <a href="/admin">Admin</a>}
         </nav>
       )}
       <div className="headerSpacer" />
-      {signedIn && account ? <AccountMenu account={account} me={me} theme={theme} onToggleTheme={onToggleTheme} onSignOut={onSignOut} authBusy={authBusy} /> : <a className="button secondary" href="#sign-in">Sign in</a>}
+      {signedIn && account ? <AccountMenu account={account} me={me} adminSession={adminSession} theme={theme} onToggleTheme={onToggleTheme} onSignOut={onSignOut} authBusy={authBusy} /> : <a className="button secondary" href="#sign-in">Sign in</a>}
     </header>
   );
 }
@@ -1703,6 +1707,7 @@ export default function Home() {
   const [speechVerification, setSpeechVerification] = useState<SpeechVerificationResult | null>(null);
   const [account, setAccount] = useState<AccountProfile | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
+  const [adminSession, setAdminSession] = useState<AdminSessionResponse | null>(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -1739,6 +1744,11 @@ export default function Home() {
   const ready = useMemo(() => signedIn && botReady && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, botReady, claim, sourceUrl]);
   const speechReady = useMemo(() => signedIn && botReady && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, botReady, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
   const consentRequired = signedIn && Boolean(me?.consent?.required);
+
+  useEffect(() => {
+    const limit = Math.max(1, Math.min(20, Number(userLimits.max_speech_claims || 1)));
+    setMaxClaims((current) => Math.max(1, Math.min(limit, current)));
+  }, [userLimits.max_speech_claims]);
 
   function rememberReport(result: AssessmentResponse) {
     const summary: ReportSummary = {
@@ -1826,6 +1836,16 @@ export default function Home() {
     }
   }
 
+  async function refreshAdminSession() {
+    try {
+      const payload = await getAdminSession();
+      setAdminSession(payload);
+    } catch (err) {
+      setAdminSession(null);
+      console.warn('Could not load admin session', err);
+    }
+  }
+
   useEffect(() => {
     const fallback = getAnonymousAccountProfile();
     setAccount(fallback);
@@ -1836,6 +1856,7 @@ export default function Home() {
         setAccount(profile);
         setAccountProfile(profile);
         if (session) {
+          refreshAdminSession();
           refreshMe();
           setReports(readCachedReports(profile.owner_id));
           refreshReports(profile.owner_id);
@@ -1853,6 +1874,7 @@ export default function Home() {
       setAccountProfile(profile);
       setAuthMessage(session ? 'Signed in.' : 'Signed out. Sign in again to use Evidrai.');
       if (session) {
+        refreshAdminSession();
         refreshMe();
         setReports(readCachedReports(profile.owner_id));
         refreshReports(profile.owner_id);
@@ -1860,6 +1882,7 @@ export default function Home() {
         const pendingJobId = pendingKey ? window.localStorage.getItem(pendingKey) : '';
         if (pendingJobId) pollAssessmentJob(pendingJobId);
       } else {
+        setAdminSession(null);
         setMe(null);
         setReports([]);
       }
@@ -1894,8 +1917,9 @@ export default function Home() {
       setAccountProfile(profile);
       setReports([]);
       setAuthMessage('Signed in.');
-      await refreshMe();
-      await refreshReports(profile.owner_id);
+      void refreshAdminSession();
+      void refreshMe();
+      void refreshReports(profile.owner_id);
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-in failed');
     } finally {
@@ -1922,6 +1946,7 @@ export default function Home() {
       setReports([]);
       setAuthMessage(session ? 'Free account created.' : 'Account created. Check your email to confirm before signing in.');
       if (session) {
+        void refreshAdminSession();
         await updateMyConsent({
           terms_accepted: true,
           marketing_opt_in: marketingOptIn,
@@ -1930,8 +1955,8 @@ export default function Home() {
           consent_source: 'web_signup',
         });
       }
-      await refreshMe();
-      await refreshReports(profile.owner_id);
+      void refreshMe();
+      void refreshReports(profile.owner_id);
     } catch (err) {
       setAuthMessage(err instanceof Error ? err.message : 'Email sign-up failed');
     } finally {
@@ -2205,7 +2230,7 @@ export default function Home() {
 
   return (
     <main>
-      <SiteHeader account={account} me={me} signedIn={signedIn} theme={theme} quickClaim={claim} onQuickClaimChange={(value) => { setToolMode('claim'); setClaim(value); }} onQuickSubmit={submit} quickDisabled={!ready || loading} quickLoading={loading && loadingKind === 'claim'} onToggleTheme={toggleTheme} onSignOut={handleSignOut} authBusy={authBusy} />
+      <SiteHeader account={account} me={me} adminSession={adminSession} signedIn={signedIn} theme={theme} quickClaim={claim} onQuickClaimChange={(value) => { setToolMode('claim'); setClaim(value); }} onQuickSubmit={submit} quickDisabled={!ready || loading} quickLoading={loading && loadingKind === 'claim'} onToggleTheme={toggleTheme} onSignOut={handleSignOut} authBusy={authBusy} />
       <section className={`hero appHero ${signedIn ? 'compactHero' : 'landingHero'}`}>
         <div>
           <p className="eyebrow">Because trust needs evidence</p>

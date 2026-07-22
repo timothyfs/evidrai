@@ -476,6 +476,7 @@ class EvidenceAssessmentModel(BaseModel):
 class VerifiedAssessmentModel(BaseModel):
     verified_verdict: str = "Unverified"
     verified_confidence: str = "Low"
+    confidence_score: int = 35
     consensus_strength: str = "No clear consensus"
     consensus_summary: str = ""
     pendulum_band: str = ""

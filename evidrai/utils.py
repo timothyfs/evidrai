@@ -149,6 +149,16 @@ def ensure_list(value: Any) -> List[str]:
 def normalize_verified_assessment_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(payload or {})
 
+    raw_confidence_score = payload.get("confidence_score")
+    if isinstance(raw_confidence_score, str):
+        match = re.search(r"\d+(?:\.\d+)?", raw_confidence_score)
+        if match:
+            payload["confidence_score"] = max(0, min(100, int(round(float(match.group(0))))))
+        else:
+            payload.pop("confidence_score", None)
+    elif isinstance(raw_confidence_score, (int, float)):
+        payload["confidence_score"] = max(0, min(100, int(round(float(raw_confidence_score)))))
+
     reasoning_summary = payload.get("reasoning_summary")
     if not isinstance(reasoning_summary, dict):
         reasoning_summary = {}

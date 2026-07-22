@@ -2842,8 +2842,8 @@ html[data-theme="light"] .methodologyGuardrails {
 .adminUserTable.scalable { overflow-x: auto; }
 .adminUserHeader.scalable, .adminUserRow.scalable {
   display: grid;
-  grid-template-columns: 36px minmax(220px, 1.2fr) minmax(180px, 1fr) minmax(170px, 0.9fr) minmax(170px, 0.8fr) minmax(130px, 0.7fr) minmax(150px, 0.7fr) minmax(260px, 1fr);
-  min-width: 1400px;
+  grid-template-columns: 36px minmax(220px, 1.2fr) minmax(180px, 1fr) minmax(170px, 0.9fr) minmax(170px, 0.8fr) minmax(110px, 0.5fr) minmax(130px, 0.7fr) minmax(150px, 0.7fr) minmax(260px, 1fr);
+  min-width: 1510px;
 }
 .adminUserHeader.scalable {
   align-items: start;
@@ -2904,8 +2904,8 @@ html[data-theme="light"] .methodologyGuardrails {
   border-radius: 0;
   display: grid;
   gap: 0;
-  grid-template-columns: 38px minmax(260px, 1.35fr) minmax(190px, 1fr) minmax(170px, 0.85fr) 150px 120px 150px 110px;
-  min-width: 1290px;
+  grid-template-columns: 38px minmax(250px, 1.35fr) minmax(180px, 1fr) minmax(160px, 0.85fr) 145px 110px 120px 140px 110px;
+  min-width: 1380px;
   padding: 0;
 }
 .adminUserHeader.scalable {
