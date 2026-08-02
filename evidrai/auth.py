@@ -24,7 +24,7 @@ class AuthContext:
 
     @property
     def authenticated(self) -> bool:
-        return self.auth_method == "supabase_jwt" and bool(self.owner_id)
+        return self.auth_method in {"supabase_jwt", "api_key"} and bool(self.owner_id)
 
 
 @lru_cache(maxsize=1)

@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 import api.main as api_main
 from api.main import app
+from evidrai.api_keys import ApiKeyRecord, CreatedApiKey
 from evidrai.api_models import AssessmentRequestRecord, AssessmentResponse, AssessmentVerdict
 from evidrai.entitlements import UserProfile
 
@@ -276,6 +277,67 @@ def test_master_admin_email_can_update_user_tier(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["user"]["tier_label"] == "Researcher / Journalist"
+
+
+def test_admin_can_create_api_key_for_researcher_user(monkeypatch):
+    monkeypatch.setattr(api_main, "_require_admin", lambda request: None)
+    monkeypatch.setattr(
+        api_main,
+        "get_or_create_profile",
+        lambda owner_id, email="": UserProfile(owner_id=owner_id, email="api@example.com", tier="researcher"),
+    )
+
+    def fake_create_api_key(owner_id, name="", scopes=None):
+        return CreatedApiKey(
+            record=ApiKeyRecord(key_id="key_1", owner_id=owner_id, name=name, key_prefix="evd_live_test", scopes=scopes or ["assessments:write"]),
+            plaintext_key="evd_live_test_secret",
+        )
+
+    monkeypatch.setattr(api_main, "create_api_key", fake_create_api_key)
+
+    response = client.post("/admin/api-keys", json={"owner_id": "user-1", "name": "CRM integration", "scopes": ["assessments:write"]})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["key"]["key_id"] == "key_1"
+    assert payload["api_key"] == "evd_live_test_secret"
+
+
+def test_admin_api_key_creation_requires_api_access_tier(monkeypatch):
+    monkeypatch.setattr(api_main, "_require_admin", lambda request: None)
+    monkeypatch.setattr(api_main, "get_or_create_profile", lambda owner_id, email="": UserProfile(owner_id=owner_id, tier="pro"))
+
+    response = client.post("/admin/api-keys", json={"owner_id": "user-1", "name": "CRM integration"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "feature_not_available"
+
+
+def test_api_key_can_call_assessment_endpoint(monkeypatch):
+    monkeypatch.setattr(api_main, "authenticate_api_key", lambda key: ApiKeyRecord(key_id="key_1", owner_id="api-user", scopes=["assessments:write"]))
+    monkeypatch.setattr(
+        api_main,
+        "get_or_create_profile",
+        lambda owner_id, email="": UserProfile(
+            owner_id=owner_id,
+            tier="researcher",
+            terms_version=api_main.CURRENT_TERMS_VERSION,
+            privacy_version=api_main.CURRENT_PRIVACY_VERSION,
+            terms_accepted_at="2026-06-01T00:00:00+00:00",
+            privacy_acknowledged_at="2026-06-01T00:00:00+00:00",
+        ),
+    )
+
+    def fake_run_claim_assessment(*, claim, source_url, category, mode, output_style="standard"):
+        return {"verdict": "Supported", "confidence": "High", "summary": "Evidence supports the claim."}
+
+    monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
+    monkeypatch.setattr(api_main, "save_report", lambda assessment: assessment)
+
+    response = client.post("/assessments/fast", json={"claim": "API claim"}, headers={"X-Evidrai-Api-Key": "evd_live_test_secret"})
+
+    assert response.status_code == 200
+    assert response.json()["owner_id"] == "api-user"
 
 
 

@@ -82,6 +82,26 @@ Admin routes require one of:
 
 Backend-only secrets must not be exposed through frontend `NEXT_PUBLIC_*` variables.
 
+### 3.5 API key authentication
+
+External integrations can authenticate with an admin-created API key:
+
+```http
+X-Evidrai-Api-Key: evd_live_...
+```
+
+API keys are stored hashed at rest and are returned in plaintext only once on creation. API-key access is currently gated by the tier feature flag `api_access`, which is enabled for Researcher / Journalist profiles.
+
+Admin management endpoints:
+
+```http
+GET /admin/api-keys?owner_id=<user-id>
+POST /admin/api-keys
+DELETE /admin/api-keys/{key_id}
+```
+
+See [API Integration v1](api-integration-v1.md) for the developer-facing integration track.
+
 ## 4. Error format
 
 Most application errors return HTTP status plus a `detail` field. Some errors are strings; structured Evidrai errors return an object similar to:

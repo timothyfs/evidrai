@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from evidrai.api_models import AssessmentResponse, EvidenceMap, serialize_assessment_response
+from evidrai.api_keys import authenticate_api_key, create_api_key, list_api_keys, revoke_api_key
 from evidrai.assessment_jobs import AssessmentJob, get_assessment_job_store
 from evidrai.auth import AuthContext, context_from_headers, decode_supabase_access_token, unverified_token_diagnostics
 from evidrai.benchmark.admin import run_admin_benchmark
@@ -208,6 +209,12 @@ class AdminSendInviteEmailRequest(BaseModel):
     tier: str = Field(default="free", pattern="^(free|pro|researcher)$")
     redirect_to: str = ""
     personal_message: str = Field(default="", max_length=1200)
+
+
+class AdminCreateApiKeyRequest(BaseModel):
+    owner_id: str
+    name: str = Field(default="", max_length=120)
+    scopes: list[str] = Field(default_factory=list)
 
 
 class ConsentUpdateRequest(BaseModel):
@@ -624,6 +631,14 @@ def _owner_id_from_request(request: Request) -> str:
 
 
 def _profile_from_request(request: Request):
+    api_key = (request.headers.get("x-evidrai-api-key") or "").strip()
+    if api_key and not (request.headers.get("authorization") or "").lower().startswith("bearer "):
+        key_record = authenticate_api_key(api_key)
+        context = AuthContext(owner_id=key_record.owner_id, auth_method="api_key", email="")
+        profile = get_or_create_profile(context.owner_id)
+        require_feature(profile, "api_access", authenticated=True)
+        return context, profile
+
     context = _auth_context_from_request(request)
     if not context.authenticated:
         return context, UserProfile(owner_id=context.owner_id, tier="free")
@@ -1048,6 +1063,34 @@ def admin_user_activity(http_request: Request, email: str = "", owner_id: str = 
     safe_limit = max(1, min(limit, 100))
     reports = list_reports(limit=safe_limit, owner_id=profile.owner_id)
     return {"ok": True, "user": _profile_admin_view(profile), "reports": reports, "count": len(reports)}
+
+
+@app.get("/admin/api-keys", response_model=Dict[str, Any])
+def admin_list_api_keys(http_request: Request, owner_id: str, include_revoked: bool = False) -> Dict[str, Any]:
+    _require_admin(http_request)
+    profile = get_or_create_profile(owner_id)
+    return {
+        "ok": True,
+        "owner_id": profile.owner_id,
+        "api_access": bool(profile.to_dict().get("features", {}).get("api_access")),
+        "keys": [record.to_dict() for record in list_api_keys(profile.owner_id, include_revoked=include_revoked)],
+    }
+
+
+@app.post("/admin/api-keys", response_model=Dict[str, Any])
+def admin_create_api_key(request: AdminCreateApiKeyRequest, http_request: Request) -> Dict[str, Any]:
+    _require_admin(http_request)
+    profile = get_or_create_profile(request.owner_id)
+    require_feature(profile, "api_access", authenticated=True)
+    created = create_api_key(profile.owner_id, name=request.name, scopes=request.scopes or None)
+    return {"ok": True, "key": created.record.to_dict(), "api_key": created.plaintext_key}
+
+
+@app.delete("/admin/api-keys/{key_id}", response_model=Dict[str, Any])
+def admin_revoke_api_key(key_id: str, http_request: Request, owner_id: str = "") -> Dict[str, Any]:
+    _require_admin(http_request)
+    revoked = revoke_api_key(key_id, owner_id=owner_id)
+    return {"ok": True, "revoked": revoked, "key_id": key_id}
 
 
 @app.patch("/admin/users/tier", response_model=Dict[str, Any])
