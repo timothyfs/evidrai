@@ -1824,8 +1824,21 @@ html[data-theme="light"] .earlyAccessNotice { background: rgba(255,255,255,0.72)
   padding: 12px 14px;
   z-index: 8;
 }
+.mobileVerdictBar > div:last-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
 .mobileVerdictBar strong { letter-spacing: -0.02em; }
 .mobileVerdictBar span { color: var(--muted); font-size: 0.84rem; font-weight: 800; }
+.mobileClaimSupportDial {
+  flex: 0 0 104px;
+  margin: 0;
+  max-width: 104px;
+}
+.mobileClaimSupportDial .claimSupportNeedle {
+  height: 4px;
+}
 .mobileVerdictBar.good { box-shadow: inset 4px 0 0 var(--good); }
 .mobileVerdictBar.mixed { box-shadow: inset 4px 0 0 var(--mixed); }
 .mobileVerdictBar.weak { box-shadow: inset 4px 0 0 var(--weak); }
@@ -2020,7 +2033,11 @@ html[data-theme="light"] .guideSteps span {
   .accountMenu > summary { width: 100%; }
   .modeSwitch, .segmented { border-radius: 18px; }
   .modeSwitch button { flex: 1; }
-  .mobileVerdictBar { align-items: flex-start; flex-direction: column; top: 88px; }
+  .mobileVerdictBar { top: 88px; }
+  .mobileClaimSupportDial {
+    flex-basis: 92px;
+    max-width: 92px;
+  }
   .primaryInput, .verifyGuide, .speechExplainer, .selectionGuide, .youtubeFallbackBox { border-radius: 18px; }
   .checkedClaim { padding: 13px; }
   .verdict.mini { padding: 13px; }

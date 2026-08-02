@@ -1822,8 +1822,21 @@ function AssessmentResult({ assessment, canShare = false }: { assessment: Assess
       </div>
 
       <div className={`mobileVerdictBar ${tone}`} aria-label="Sticky verdict summary">
-        <strong>Claim support: {assessment.verdict.label}</strong>
-        <span>{assessment.verdict.confidence || 'Unstated'} confidence · {assessment.sources?.length || 0} sources</span>
+        <div
+          className="claimSupportDial mobileClaimSupportDial"
+          role="meter"
+          aria-label={`Claim support: ${assessment.verdict.label}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={claimSupport}
+          style={{ '--claim-support-angle': `${claimSupportAngle}deg` } as CSSProperties}
+        >
+          <div className="claimSupportNeedle" />
+        </div>
+        <div>
+          <strong>Claim support: {assessment.verdict.label}</strong>
+          <span>{assessment.verdict.confidence || 'Unstated'} confidence · {assessment.sources?.length || 0} sources</span>
+        </div>
       </div>
 
       <div className="assessmentSnapshot" aria-label="Assessment summary">
