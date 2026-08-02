@@ -2037,6 +2037,251 @@ html[data-theme="light"] .guideSteps span {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin: -4px 0 18px;
 }
+
+/* Simple mobile-first workspace */
+.interfaceSwitcher {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255,255,255,0.035);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin: -6px 0 18px;
+  padding: 12px 14px;
+}
+.interfaceSwitcher div:first-child {
+  display: grid;
+  gap: 2px;
+}
+.interfaceSwitcher strong {
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+.interfaceSwitcher span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.simpleWorkspace {
+  display: grid;
+  gap: 16px;
+  margin-top: 4px;
+}
+.simpleHero {
+  display: grid;
+  gap: 8px;
+}
+.simpleHero h1 {
+  font-size: clamp(2rem, 8vw, 3.2rem);
+  line-height: 1;
+  max-width: 680px;
+}
+.simpleSourceGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.simpleSourceGrid button {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.035);
+  color: var(--ink);
+  display: grid;
+  gap: 5px;
+  min-height: 104px;
+  padding: 14px;
+  text-align: left;
+}
+.simpleSourceGrid button.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.simpleSourceGrid strong {
+  font-size: 1rem;
+}
+.simpleSourceGrid span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.simpleInputPanel,
+.simpleResult,
+.simpleHistory {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(24, 33, 44, 0.96), rgba(18, 25, 34, 0.94));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.20);
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+.simpleInputPanel textarea {
+  min-height: 150px;
+  font-size: 1.02rem;
+  line-height: 1.52;
+}
+.simpleInputPanel .primaryAction {
+  justify-self: stretch;
+}
+.simpleVerdict {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+}
+.simpleVerdict.good { box-shadow: inset 5px 0 0 var(--good); }
+.simpleVerdict.mixed { box-shadow: inset 5px 0 0 var(--mixed); }
+.simpleVerdict.weak { box-shadow: inset 5px 0 0 var(--weak); }
+.simpleVerdict.bad { box-shadow: inset 5px 0 0 var(--bad); }
+.simpleVerdict span,
+.simpleVerdict small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+.simpleVerdict span {
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.simpleVerdict strong {
+  color: var(--ink);
+  font-size: clamp(1.55rem, 6vw, 2.4rem);
+  letter-spacing: -0.03em;
+}
+.simpleResultBody {
+  display: grid;
+  gap: 12px;
+}
+.simpleResultBody h2 {
+  font-size: clamp(1.25rem, 4vw, 1.8rem);
+  line-height: 1.15;
+}
+.simpleDisclosure {
+  border-top: 1px solid var(--line);
+  margin-top: 0;
+  padding-top: 12px;
+}
+.simpleDisclosure summary,
+.simpleHistory summary {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+}
+.simpleDisclosure summary::-webkit-details-marker,
+.simpleHistory summary::-webkit-details-marker {
+  display: none;
+}
+.simpleDisclosure summary::after {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  content: "Open";
+  font-size: 0.76rem;
+  padding: 5px 8px;
+}
+.simpleDisclosure[open] summary::after {
+  content: "Close";
+}
+.simpleReasonList {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.simpleReasonList article {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.035);
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+.simpleReasonList span,
+.simpleReasonList p {
+  color: var(--muted);
+  line-height: 1.42;
+  margin: 0;
+}
+.simpleHistory {
+  margin-top: 4px;
+}
+.simpleHistory summary span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 4px 8px;
+}
+.simpleReportList {
+  display: grid;
+  gap: 8px;
+}
+.simpleReportItem {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.035);
+  color: var(--ink);
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  text-align: left;
+}
+.simpleReportItem span {
+  color: var(--muted);
+  display: -webkit-box;
+  font-weight: 700;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.simpleReportItem small {
+  color: var(--muted);
+}
+html[data-theme="light"] .interfaceSwitcher,
+html[data-theme="light"] .simpleSourceGrid button,
+html[data-theme="light"] .simpleInputPanel,
+html[data-theme="light"] .simpleResult,
+html[data-theme="light"] .simpleHistory,
+html[data-theme="light"] .simpleReasonList article,
+html[data-theme="light"] .simpleReportItem {
+  background: rgba(255,255,255,0.72);
+}
+@media (max-width: 900px) {
+  .interfaceSwitcher {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .interfaceSwitcher .segmented {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .simpleSourceGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .simpleWorkspace {
+    gap: 12px;
+  }
+  .simpleSourceGrid {
+    grid-template-columns: 1fr;
+  }
+  .simpleSourceGrid button {
+    min-height: 78px;
+  }
+  .simpleInputPanel,
+  .simpleResult,
+  .simpleHistory {
+    border-radius: 20px;
+    padding: 15px;
+  }
+  .simpleResult .assessmentCard {
+    padding: 14px;
+  }
+}
 .trustLanguageStrip span {
   border: 1px solid var(--line);
   border-radius: 18px;

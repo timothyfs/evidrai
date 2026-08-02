@@ -52,9 +52,12 @@ function verdictTone(label: string) {
 }
 
 type ThemeMode = 'dark' | 'light';
+type InterfaceMode = 'simple' | 'classic';
+type SimpleSourceMode = 'claim' | 'article' | 'youtube' | 'transcript';
 
 const PENDING_ASSESSMENT_JOB_KEY = 'evidrai_pending_assessment_job';
 const RECENT_REPORTS_KEY = 'evidrai_recent_reports';
+const INTERFACE_MODE_KEY = 'evidrai_interface_mode';
 
 function isBotCheckError(err: unknown) {
   const message = err instanceof Error ? err.message : String(err || '');
@@ -115,6 +118,13 @@ function applyTheme(theme: ThemeMode) {
   if (typeof document === 'undefined') return;
   document.documentElement.dataset.theme = theme;
   window.localStorage.setItem('evidrai_theme', theme);
+}
+
+function readInterfaceMode(): InterfaceMode {
+  if (typeof window === 'undefined') return 'classic';
+  const saved = window.localStorage.getItem(INTERFACE_MODE_KEY);
+  if (saved === 'simple' || saved === 'classic') return saved;
+  return window.matchMedia('(max-width: 760px)').matches ? 'simple' : 'classic';
 }
 
 function isYouTubeUrl(value: string) {
@@ -1566,6 +1576,259 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
   );
 }
 
+function InterfaceSwitcher({ mode, onChange }: { mode: InterfaceMode; onChange: (mode: InterfaceMode) => void }) {
+  return (
+    <section className="interfaceSwitcher" aria-label="Interface preference">
+      <div>
+        <strong>Interface</strong>
+        <span>{mode === 'simple' ? 'Simple mobile-first workflow' : 'Classic full workspace'}</span>
+      </div>
+      <div className="segmented" role="radiogroup" aria-label="Choose interface">
+        <button className={mode === 'simple' ? 'active' : ''} onClick={() => onChange('simple')} type="button">Simple</button>
+        <button className={mode === 'classic' ? 'active' : ''} onClick={() => onChange('classic')} type="button">Classic</button>
+      </div>
+    </section>
+  );
+}
+
+function SimpleAssessmentResult({ assessment, canShare }: { assessment: AssessmentResponse; canShare: boolean }) {
+  const tone = verdictTone(assessment.verdict.label);
+  const sources = assessment.sources || [];
+  const topClaims = assessment.claim_breakdown?.slice(0, 3) || [];
+  return (
+    <section className="simpleResult">
+      <div className={`simpleVerdict ${tone}`}>
+        <span>Result</span>
+        <strong>{assessment.verdict.label}</strong>
+        <small>{assessment.verdict.confidence || 'Unstated'} confidence · {sources.length} source{sources.length === 1 ? '' : 's'}</small>
+      </div>
+      <div className="simpleResultBody">
+        <h2>{assessment.request.claim || 'Evidence assessment'}</h2>
+        {assessment.verdict.summary && <p className="summary">{assessment.verdict.summary}</p>}
+        {assessment.verdict.key_caveat && <p className="caveat"><strong>Key caveat</strong>{assessment.verdict.key_caveat}</p>}
+      </div>
+      {topClaims.length > 0 && (
+        <details className="simpleDisclosure">
+          <summary>Key reasons</summary>
+          <div className="simpleReasonList">
+            {topClaims.map((item) => (
+              <article key={item.id}>
+                <strong>{item.assessment}</strong>
+                <span>{item.text}</span>
+                {item.rationale && <p>{item.rationale}</p>}
+              </article>
+            ))}
+          </div>
+        </details>
+      )}
+      <details className="simpleDisclosure">
+        <summary>Sources</summary>
+        <SourceLinkPreview assessment={assessment} />
+      </details>
+      <details className="simpleDisclosure">
+        <summary>Full evidence view</summary>
+        <AssessmentResult assessment={assessment} canShare={canShare} />
+      </details>
+      <ShareReportControls assessment={assessment} canShare={canShare} />
+    </section>
+  );
+}
+
+function SimpleWorkspace({
+  simpleSourceMode,
+  setSimpleSourceMode,
+  claim,
+  setClaim,
+  sourceUrl,
+  setSourceUrl,
+  speechTranscript,
+  setSpeechTranscript,
+  speechSourceUrl,
+  setSpeechSourceUrl,
+  tryYouTubeCaptions,
+  setTryYouTubeCaptions,
+  maxClaims,
+  setMaxClaims,
+  canUseSpeech,
+  userLimits,
+  ready,
+  speechReady,
+  loading,
+  loadingKind,
+  verifyingSpeech,
+  error,
+  reports,
+  reportIdInput,
+  setReportIdInput,
+  assessment,
+  speechExtraction,
+  speechVerification,
+  selectedSpeechClaims,
+  setSelectedSpeechClaims,
+  canShareReports,
+  onSubmitClaim,
+  onExtractSpeech,
+  onVerifySpeech,
+  onLoadReport,
+  onOpenReport,
+}: {
+  simpleSourceMode: SimpleSourceMode;
+  setSimpleSourceMode: (mode: SimpleSourceMode) => void;
+  claim: string;
+  setClaim: (value: string) => void;
+  sourceUrl: string;
+  setSourceUrl: (value: string) => void;
+  speechTranscript: string;
+  setSpeechTranscript: (value: string) => void;
+  speechSourceUrl: string;
+  setSpeechSourceUrl: (value: string) => void;
+  tryYouTubeCaptions: boolean;
+  setTryYouTubeCaptions: (value: boolean) => void;
+  maxClaims: number;
+  setMaxClaims: (value: number) => void;
+  canUseSpeech: boolean;
+  userLimits: Record<string, number>;
+  ready: boolean;
+  speechReady: boolean;
+  loading: boolean;
+  loadingKind: 'claim' | 'speech' | 'report' | 'speech-verify';
+  verifyingSpeech: boolean;
+  error: string;
+  reports: ReportSummary[];
+  reportIdInput: string;
+  setReportIdInput: (value: string) => void;
+  assessment: AssessmentResponse | null;
+  speechExtraction: SpeechExtractionResult | null;
+  speechVerification: SpeechVerificationResult | null;
+  selectedSpeechClaims: string[];
+  setSelectedSpeechClaims: (claims: string[]) => void;
+  canShareReports: boolean;
+  onSubmitClaim: (event: FormEvent<HTMLFormElement>) => void;
+  onExtractSpeech: (event: FormEvent<HTMLFormElement>) => void;
+  onVerifySpeech: () => void;
+  onLoadReport: (id: string) => void;
+  onOpenReport: (id: string) => void;
+}) {
+  const sourceOptions: Array<{ id: SimpleSourceMode; title: string; helper: string }> = [
+    { id: 'claim', title: 'Paste text', helper: 'A claim, quote, headline, or rumour.' },
+    { id: 'article', title: 'Article URL', helper: 'Start from a web source.' },
+    { id: 'youtube', title: 'YouTube URL', helper: 'Try captions, then pick claims.' },
+    { id: 'transcript', title: 'Transcript', helper: 'Most reliable speech/video path.' },
+  ];
+  const speechDisabled = !canUseSpeech && (simpleSourceMode === 'youtube' || simpleSourceMode === 'transcript');
+
+  return (
+    <section className="simpleWorkspace" aria-label="Simple verification workspace">
+      <div className="simpleHero">
+        <p className="eyebrow">Simple check</p>
+        <h1>What do you want to verify?</h1>
+      </div>
+
+      <div className="simpleSourceGrid" role="tablist" aria-label="Choose source type">
+        {sourceOptions.map((option) => (
+          <button
+            className={simpleSourceMode === option.id ? 'active' : ''}
+            key={option.id}
+            onClick={() => setSimpleSourceMode(option.id)}
+            type="button"
+          >
+            <strong>{option.title}</strong>
+            <span>{option.helper}</span>
+          </button>
+        ))}
+      </div>
+
+      {simpleSourceMode === 'claim' || simpleSourceMode === 'article' ? (
+        <form className="simpleInputPanel" onSubmit={onSubmitClaim}>
+          {simpleSourceMode === 'article' && (
+            <label>
+              Article or source URL
+              <input value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://example.com/story" />
+            </label>
+          )}
+          <label>
+            {simpleSourceMode === 'article' ? 'Specific claim or question' : 'Claim to check'}
+            <textarea value={claim} onChange={(event) => setClaim(event.target.value)} placeholder={simpleSourceMode === 'article' ? 'Optional, but helps focus the assessment.' : 'Paste one clear factual claim.'} />
+          </label>
+          {simpleSourceMode === 'claim' && (
+            <label>
+              Source URL <span>optional</span>
+              <input value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://example.com/source" />
+            </label>
+          )}
+          <button className="primaryAction" disabled={!ready || loading} type="submit">{loading && loadingKind === 'claim' ? 'Checking…' : 'Check evidence'}</button>
+        </form>
+      ) : (
+        <form className="simpleInputPanel" onSubmit={onExtractSpeech}>
+          {speechDisabled && <p className="error">Speech and video audit is available on paid tiers.</p>}
+          {simpleSourceMode === 'youtube' && (
+            <>
+              <label>
+                YouTube URL
+                <input value={speechSourceUrl} onChange={(event) => setSpeechSourceUrl(event.target.value)} placeholder="https://youtube.com/watch?v=..." />
+              </label>
+              <label className="checkPill"><input checked={tryYouTubeCaptions} onChange={(event) => setTryYouTubeCaptions(event.target.checked)} type="checkbox" /> Try automatic captions</label>
+              <SpeechInputState transcript={speechTranscript} sourceUrl={speechSourceUrl} tryYouTubeCaptions={tryYouTubeCaptions} />
+              <label>
+                Transcript fallback <span>optional</span>
+                <textarea value={speechTranscript} onChange={(event) => setSpeechTranscript(event.target.value)} placeholder="Paste transcript here if captions fail or are unavailable." />
+              </label>
+            </>
+          )}
+          {simpleSourceMode === 'transcript' && (
+            <label>
+              Transcript
+              <textarea value={speechTranscript} onChange={(event) => setSpeechTranscript(event.target.value)} placeholder="Paste a speech, interview, podcast, debate, or video transcript." />
+            </label>
+          )}
+          <label>
+            Claims to extract
+            <select value={maxClaims} onChange={(event) => setMaxClaims(Number(event.target.value))}>
+              {Array.from({ length: Math.max(1, Math.min(20, Number(userLimits.max_speech_claims || 0))) }, (_, index) => index + 1).map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <button className="primaryAction" disabled={!speechReady || loading || speechDisabled} type="submit">{loading && loadingKind === 'speech' ? 'Extracting…' : 'Extract claims'}</button>
+        </form>
+      )}
+
+      {(loading || verifyingSpeech) && <LoadingState type={verifyingSpeech ? 'speech-verify' : loadingKind} />}
+      {error && <p className="error errorState">{error}</p>}
+
+      {assessment && <SimpleAssessmentResult assessment={assessment} canShare={canShareReports} />}
+      {speechExtraction && (
+        <SpeechResult
+          extraction={speechExtraction}
+          selectedClaims={selectedSpeechClaims}
+          setSelectedClaims={setSelectedSpeechClaims}
+          verification={speechVerification}
+          verifying={verifyingSpeech}
+          onVerify={onVerifySpeech}
+        />
+      )}
+
+      <details className="simpleHistory">
+        <summary>Recent reports <span>{reports.length}</span></summary>
+        <form className="loadForm" onSubmit={(event) => { event.preventDefault(); if (reportIdInput.trim()) onLoadReport(reportIdInput); }}>
+          <label>
+            Load by report ID
+            <input value={reportIdInput} onChange={(event) => setReportIdInput(event.target.value)} placeholder="assessment_id" />
+          </label>
+          <button className="secondary" type="submit" disabled={!reportIdInput.trim() || loading}>Load</button>
+        </form>
+        <div className="simpleReportList">
+          {reports.length === 0 ? <p className="muted">No saved reports yet.</p> : reports.slice(0, 10).map((report) => (
+            <button className="simpleReportItem" key={report.assessment_id} onClick={() => onOpenReport(report.assessment_id)} type="button">
+              <strong>{report.verdict || 'Unverified'}</strong>
+              <span>{report.claim || 'Untitled claim'}</span>
+              <small>{formatDate(report.created_at)}</small>
+            </button>
+          ))}
+        </div>
+      </details>
+    </section>
+  );
+}
+
 function AssessmentResult({ assessment, canShare = false }: { assessment: AssessmentResponse; canShare?: boolean }) {
   const tone = verdictTone(assessment.verdict.label);
   const evidenceStrength = evidenceStrengthLabel(assessment.verdict.evidence_strength_score, assessment.verdict.label);
@@ -1695,6 +1958,8 @@ function AssessmentResult({ assessment, canShare = false }: { assessment: Assess
 
 export default function Home() {
   const [toolMode, setToolMode] = useState<'claim' | 'speech'>('claim');
+  const [interfaceMode, setInterfaceModeState] = useState<InterfaceMode>('classic');
+  const [simpleSourceMode, setSimpleSourceMode] = useState<SimpleSourceMode>('claim');
   const [claim, setClaim] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [category, setCategory] = useState('auto-detect');
@@ -1744,6 +2009,11 @@ export default function Home() {
   const ready = useMemo(() => signedIn && botReady && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, botReady, claim, sourceUrl]);
   const speechReady = useMemo(() => signedIn && botReady && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, botReady, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
   const consentRequired = signedIn && Boolean(me?.consent?.required);
+
+  function setInterfaceMode(mode: InterfaceMode) {
+    setInterfaceModeState(mode);
+    if (typeof window !== 'undefined') window.localStorage.setItem(INTERFACE_MODE_KEY, mode);
+  }
 
   useEffect(() => {
     const limit = Math.max(1, Math.min(20, Number(userLimits.max_speech_claims || 1)));
@@ -1847,6 +2117,7 @@ export default function Home() {
   }
 
   useEffect(() => {
+    setInterfaceModeState(readInterfaceMode());
     const fallback = getAnonymousAccountProfile();
     setAccount(fallback);
     getCurrentSession()
@@ -2285,11 +2556,57 @@ export default function Home() {
 
       {consentRequired && <ConsentUpdateGate me={me} termsAccepted={termsAccepted} setTermsAccepted={setTermsAccepted} marketingOptIn={marketingOptIn} setMarketingOptIn={setMarketingOptIn} busy={authBusy} message={authMessage} onAccept={handleConsentUpdate} />}
 
-      {signedIn && !consentRequired && <section className="workspaceIntro"><p>Evidence-based assessment · Sources grouped by role · Confidence is not certainty · Reasoning is inspectable</p></section>}
-      {signedIn && !consentRequired && <TrustLanguageStrip />}
-      {signedIn && !consentRequired && !assessment && !speechExtraction && <ProgressiveTrustJourney />}
+      {signedIn && !consentRequired && <InterfaceSwitcher mode={interfaceMode} onChange={setInterfaceMode} />}
 
-      {signedIn && !consentRequired && <div className="layout">
+      {signedIn && !consentRequired && interfaceMode === 'simple' && (
+        <SimpleWorkspace
+          simpleSourceMode={simpleSourceMode}
+          setSimpleSourceMode={(mode) => {
+            setSimpleSourceMode(mode);
+            setToolMode(mode === 'youtube' || mode === 'transcript' ? 'speech' : 'claim');
+          }}
+          claim={claim}
+          setClaim={setClaim}
+          sourceUrl={sourceUrl}
+          setSourceUrl={setSourceUrl}
+          speechTranscript={speechTranscript}
+          setSpeechTranscript={setSpeechTranscript}
+          speechSourceUrl={speechSourceUrl}
+          setSpeechSourceUrl={setSpeechSourceUrl}
+          tryYouTubeCaptions={tryYouTubeCaptions}
+          setTryYouTubeCaptions={setTryYouTubeCaptions}
+          maxClaims={maxClaims}
+          setMaxClaims={setMaxClaims}
+          canUseSpeech={canUseSpeech}
+          userLimits={userLimits}
+          ready={ready}
+          speechReady={speechReady}
+          loading={loading}
+          loadingKind={loadingKind}
+          verifyingSpeech={verifyingSpeech}
+          error={error}
+          reports={reports}
+          reportIdInput={reportIdInput}
+          setReportIdInput={setReportIdInput}
+          assessment={assessment}
+          speechExtraction={speechExtraction}
+          speechVerification={speechVerification}
+          selectedSpeechClaims={selectedSpeechClaims}
+          setSelectedSpeechClaims={setSelectedSpeechClaims}
+          canShareReports={canShareReports}
+          onSubmitClaim={submit}
+          onExtractSpeech={extractSpeech}
+          onVerifySpeech={verifySelectedSpeechClaims}
+          onLoadReport={loadReport}
+          onOpenReport={openReportInNewTab}
+        />
+      )}
+
+      {signedIn && !consentRequired && interfaceMode === 'classic' && <section className="workspaceIntro"><p>Evidence-based assessment · Sources grouped by role · Confidence is not certainty · Reasoning is inspectable</p></section>}
+      {signedIn && !consentRequired && interfaceMode === 'classic' && <TrustLanguageStrip />}
+      {signedIn && !consentRequired && interfaceMode === 'classic' && !assessment && !speechExtraction && <ProgressiveTrustJourney />}
+
+      {signedIn && !consentRequired && interfaceMode === 'classic' && <div className="layout">
         <section className="card verifyCard">
           <div className="verifyHeader">
             <div>
@@ -2418,8 +2735,8 @@ export default function Home() {
         </details>
       </div>}
 
-      {signedIn && assessment && <AssessmentResult assessment={assessment} canShare={canShareReports} />}
-      {signedIn && speechExtraction && (
+      {signedIn && interfaceMode === 'classic' && assessment && <AssessmentResult assessment={assessment} canShare={canShareReports} />}
+      {signedIn && interfaceMode === 'classic' && speechExtraction && (
         <SpeechResult
           extraction={speechExtraction}
           selectedClaims={selectedSpeechClaims}
