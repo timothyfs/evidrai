@@ -9,6 +9,8 @@ Package the existing Evidrai API surface as a developer-facing integration layer
 
 The product already has FastAPI endpoints for assessments, reports, speech/video audits, feedback, diagnostics, and admin operations. This track adds the missing integration wrapper: API keys, scopes, versioned documentation, usage controls, and eventually webhooks.
 
+Durability is governed by [API Stability Policy](api-stability-policy.md). External integrations must be insulated from backend architecture changes.
+
 ## Initial Use Cases
 
 1. Run claim checks from another app, workflow, or browser extension.
@@ -91,8 +93,9 @@ The first slice stores scopes but does not yet enforce per-route scope checks. T
 
 1. Enforce scopes per route.
 2. Add `/v1/...` aliases for customer-facing endpoints.
-3. Add usage metering by API key and owner profile.
-4. Add monthly quota enforcement using tier limits.
-5. Add developer documentation with curl examples.
-6. Add webhook callbacks for async jobs.
-7. Expose API key creation/revocation in the Admin UI.
+3. Add public contract tests for request/response examples and stable error codes.
+4. Add usage metering by API key and owner profile.
+5. Add monthly quota enforcement using tier limits.
+6. Add developer documentation with curl examples.
+7. Add webhook callbacks for async jobs.
+8. Expose API key creation/revocation in the Admin UI.

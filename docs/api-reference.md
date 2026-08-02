@@ -36,6 +36,8 @@ GET /openapi.json
 
 This file is the hand-written product/API reference. If the OpenAPI output and this file disagree, inspect `api/main.py` and update this file.
 
+External API compatibility is governed by [API Stability Policy](api-stability-policy.md). Backend architecture can change, but documented public contracts should not break inside the same major API version.
+
 ## 3. Authentication and ownership
 
 ### 3.1 Headers
