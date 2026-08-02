@@ -355,6 +355,27 @@ def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
     return queries[:16]
 
 
+ACQUISITION_QUERY_TERMS = {"acquire", "acquires", "acquired", "acquiring", "acquisition", "buy", "buys", "buying", "bought", "takeover", "merge", "merger"}
+RUMOR_DISCOVERY_DOMAINS = ("thelayoff.com", "glassdoor.com", "reddit.com", "teamblind.com")
+
+
+def is_acquisition_claim(text: str) -> bool:
+    tokens = set(re.findall(r"[a-z]+", (text or "").lower()))
+    return bool(tokens & ACQUISITION_QUERY_TERMS)
+
+
+def build_rumor_discovery_queries(claim_text: str) -> List[str]:
+    base = re.sub(r"\s+", " ", (claim_text or "").strip())
+    if not base or not is_acquisition_claim(base):
+        return []
+    plain_terms = re.sub(r"\b(is|are|was|were|will|would|could|might|may|be|being|to)\b", " ", base, flags=re.I)
+    plain_terms = re.sub(r"\s+", " ", plain_terms).strip() or base
+    return [
+        f"site:{domain} {plain_terms} rumor"
+        for domain in RUMOR_DISCOVERY_DOMAINS
+    ][:4]
+
+
 def _jurisdiction_text(text: str) -> str:
     return " " + re.sub(r"[^a-z0-9]+", " ", (text or "").lower()) + " "
 
@@ -601,6 +622,30 @@ def retrieve_sources(search: TavilySearchClient, queries: List[str], claim_text:
                 if not url or url in dedup:
                     continue
                 dedup[url] = score_source(item, claim_text)
+    if is_acquisition_claim(claim_text):
+        for query in build_rumor_discovery_queries(claim_text):
+            try:
+                rumor_items = search.search(query, max_results=2)
+            except Exception:
+                continue
+            for item in rumor_items:
+                url = item.get("url") or ""
+                if not url or url in dedup:
+                    continue
+                source = score_source(item, claim_text)
+                source.claim_support = "mixed"
+                source.evidence_category = "rumor_amplification"
+                source.source_role = "rumor_driver"
+                source.source_type = "forum" if source.domain in {"thelayoff.com", "reddit.com", "teamblind.com"} else "contextual"
+                source.authority_score = min(source.authority_score, 1.5)
+                source.directness_score = min(source.directness_score, 1.5)
+                source.independence_score = min(source.independence_score, 1.5)
+                source.bias_risk_score = max(source.bias_risk_score, 4.2)
+                source.weighted_score = min(source.weighted_score, 1.8)
+                source.narrative_cluster = source.narrative_cluster or "ma_rumor_spread"
+                source.snippet = f"Rumor/context signal only: {source.snippet}".strip()
+                dedup[url] = source
+
     return sorted(dedup.values(), key=lambda x: x.weighted_score, reverse=True)[:SCORING_CONFIG.max_source_summaries]
 
 

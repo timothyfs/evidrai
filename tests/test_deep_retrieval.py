@@ -96,3 +96,32 @@ def test_non_uk_country_queries_include_country_official_sources_early():
 
     assert "canada.ca" in queries[1]
     assert any("statcan.gc.ca" in query for query in queries[:4])
+
+
+def test_acquisition_claim_builds_bounded_rumor_discovery_queries():
+    queries = verification.build_rumor_discovery_queries("Cisco is buying Nutanix")
+
+    assert len(queries) == 4
+    assert any("thelayoff.com" in query for query in queries)
+    assert any("glassdoor.com" in query for query in queries)
+    assert all("rumor" in query for query in queries)
+
+
+def test_non_acquisition_claim_does_not_search_rumor_forums():
+    queries = verification.build_rumor_discovery_queries("Nutanix announced a new product")
+
+    assert queries == []
+
+
+def test_rumor_discovery_results_are_kept_as_context_not_evidence(monkeypatch):
+    monkeypatch.setattr(verification, "SCORING_CONFIG", replace(verification.SCORING_CONFIG, max_deep_search_queries=1, max_source_summaries=10))
+    fake = FakeSearch()
+
+    sources = verification.retrieve_sources(fake, ["Cisco is buying Nutanix"], "Cisco is buying Nutanix")
+
+    rumor_sources = [source for source in sources if source.source_role == "rumor_driver"]
+    assert rumor_sources
+    assert all(source.evidence_category == "rumor_amplification" for source in rumor_sources)
+    assert all(source.claim_support == "mixed" for source in rumor_sources)
+    assert all(source.weighted_score <= 1.8 for source in rumor_sources)
+    assert any("thelayoff.com" in query for query, _max_results in fake.queries)
