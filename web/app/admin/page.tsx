@@ -111,6 +111,7 @@ export default function AdminPage() {
   const loadedProfileTokenRef = useRef('');
   const adminSessionLoadRef = useRef<{ token: string; promise: Promise<void> } | null>(null);
   const loadedAdminSessionTokenRef = useRef('');
+  const autoLoadedUsersRef = useRef(false);
 
   const isAdmin = Boolean(adminSession?.is_admin || me?.is_admin);
 
@@ -192,19 +193,21 @@ export default function AdminPage() {
     }
   }
 
-  async function loadUsers() {
-    setBusy(true);
-    setMessage('');
+  async function loadUsers(background = false) {
+    if (!background) {
+      setBusy(true);
+      setMessage('');
+    }
     try {
       const payload = await listAdminUsers();
       setUsers(payload.users || []);
       setUsersLoaded(true);
       setSelected((current) => current.filter((ownerId) => payload.users?.some((user) => user.owner_id === ownerId)));
-      setMessage(`Loaded ${payload.users?.length || 0} users.`);
+      if (!background) setMessage(`Loaded ${payload.users?.length || 0} users.`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not load users.');
     } finally {
-      setBusy(false);
+      if (!background) setBusy(false);
     }
   }
 
@@ -243,6 +246,12 @@ export default function AdminPage() {
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin || usersLoaded || autoLoadedUsersRef.current) return;
+    autoLoadedUsersRef.current = true;
+    loadUsers(true);
+  }, [isAdmin, usersLoaded]);
 
   function toggleSort(key: AdminColumnKey) {
     if (!sortableColumns.has(key)) return;
@@ -551,7 +560,7 @@ export default function AdminPage() {
               <p className="muted">{usersLoaded ? `${filteredUsers.length} shown · ${users.length} total · ${selected.length} selected` : 'User table not loaded yet. Admin tools are available immediately.'}</p>
             </div>
             <div className="formRow compactActions">
-              <button className="secondary" disabled={busy} onClick={loadUsers} type="button">{usersLoaded ? 'Reload users' : 'Load users'}</button>
+              <button className="secondary" disabled={busy} onClick={() => loadUsers()} type="button">{usersLoaded ? 'Reload users' : 'Load users'}</button>
               <button className="secondary" disabled={busy} onClick={handleSignOut} type="button">Sign out</button>
             </div>
           </div>
@@ -597,7 +606,7 @@ export default function AdminPage() {
             </div>
           </details>
 
-          <details open className="adminInviteBox">
+          <details className="adminInviteBox">
             <summary><span>Invite or create user</span><small>Create auth access, assign an initial tier, and generate a branded invite email</small></summary>
             <form onSubmit={inviteUser}>
               <label>User email<input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} type="email" placeholder="new.user@example.com" /></label>
