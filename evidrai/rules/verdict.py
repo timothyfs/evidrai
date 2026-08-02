@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import re
 from typing import Any, Dict, List
 
 from evidrai.models import SubClaim
@@ -240,6 +241,49 @@ def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
     return stats
 
 
+ACQUISITION_CLAIM_TERMS = {"acquire", "acquires", "acquired", "acquiring", "acquisition", "buy", "buys", "buying", "bought", "takeover", "merge", "merger"}
+PARTNERSHIP_REBUTTAL_TERMS = {"partner", "partners", "partnered", "partnership", "alliance", "collaboration", "collaborated", "joint solution", "joint offering"}
+
+
+def _tokens(text: str) -> set[str]:
+    return set(re.findall(r"[a-z]+", (text or "").lower()))
+
+
+def _source_text(source: Dict[str, Any]) -> str:
+    return " ".join(str(source.get(key) or "") for key in ("title", "summary", "snippet", "content", "classification_reason", "domain", "url")).lower()
+
+
+def acquisition_partnership_rebuttal_stats(claim_text: str, sources: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Detect acquisition claims where evidence only substantiates partnership.
+
+    "Company A is buying Company B" is not merely unverified when the reviewed
+    packet repeatedly finds partnership/joint-solution evidence and no
+    substantive acquisition evidence. This narrow guard keeps partnership context
+    from being treated as neutral when it directly explains the confusion.
+    """
+    claim_tokens = _tokens(claim_text)
+    if not claim_tokens & ACQUISITION_CLAIM_TERMS:
+        return {"triggered": False, "partnership_sources": 0, "acquisition_support_sources": 0}
+
+    partnership_sources = 0
+    acquisition_support_sources = 0
+    for source in sources or []:
+        text = _source_text(source)
+        source_tokens = _tokens(text)
+        support = (source.get("claim_support") or "").strip().lower()
+        category = normalize_evidence_category(source.get("evidence_category", "irrelevant"))
+        if any(term in text for term in PARTNERSHIP_REBUTTAL_TERMS):
+            partnership_sources += 1
+        if support == "supports" and category in {"direct_evidence", "credible_reporting", "expert_analysis"} and source_tokens & ACQUISITION_CLAIM_TERMS:
+            acquisition_support_sources += 1
+
+    return {
+        "triggered": partnership_sources >= 2 and acquisition_support_sources == 0,
+        "partnership_sources": partnership_sources,
+        "acquisition_support_sources": acquisition_support_sources,
+    }
+
+
 def assess_amplification_risk(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Identify when repeated coverage looks like amplification, not corroboration.
 
@@ -337,6 +381,7 @@ def rule_based_verdict_from_evidence(
     rumorish = stats["rumor_or_context"]
     contextual_support = stats["allegation_or_context_support"]
     mixed_sources = stats["mixed_sources"]
+    acquisition_rebuttal = acquisition_partnership_rebuttal_stats(claim_text, sources)
 
     has_no_real_support = supportive == 0 and primary_supportive == 0 and high_quality_supportive == 0
     mostly_contextual_packet = rumorish >= max(2, supportive + contradictory)
@@ -345,7 +390,11 @@ def rule_based_verdict_from_evidence(
     confidence = "Low"
     rationale = "Evidence is limited or mixed."
 
-    if has_no_real_support and contextual_support > 0:
+    if acquisition_rebuttal["triggered"] and has_no_real_support:
+        verdict = "Not supported by credible evidence"
+        confidence = "Medium"
+        rationale = "The reviewed evidence substantiates a partnership or joint offering, not an acquisition. No substantive evidence in the reviewed set supports the buying/acquisition claim as stated."
+    elif has_no_real_support and contextual_support > 0:
         verdict = "Reported but unconfirmed" if serious_allegation and not soft_claim else "Unverified"
         confidence = "Medium" if serious_allegation else "Low"
         rationale = "The reviewed material contains reporting, allegation, context, or association, but no direct confirmation in the reviewed set substantiates the claim as stated."
@@ -436,6 +485,7 @@ def rule_based_verdict_from_evidence(
         "soft_claim": soft_claim,
         "serious_allegation": serious_allegation,
         "absolute_claim": absolute_claim,
+        "acquisition_partnership_rebuttal": acquisition_rebuttal,
         "risk_flags": sorted(flags),
     }
 
@@ -502,6 +552,9 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
         evidence_assessment["evidence_gaps"].append("Part of the claim is interpretive, rhetorical, predictive, or otherwise difficult to verify directly.")
     if rule_view.get("absolute_claim"):
         evidence_assessment["evidence_gaps"].append("Absolute claims require counterexample checking; one credible exception can materially change the verdict.")
+    rebuttal = rule_view.get("acquisition_partnership_rebuttal") or {}
+    if rebuttal.get("triggered"):
+        evidence_assessment["evidence_gaps"].append("Reviewed sources describe partnership or joint-solution activity, not acquisition evidence for the claim as stated.")
 
     explanation_note = rule_view["rationale"]
     final_explanation = (reasoning.get("final_explanation") or "").strip()

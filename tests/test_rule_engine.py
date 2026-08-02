@@ -30,9 +30,9 @@ def source(
     }
 
 
-def verdict_for(sources, subclaims=None, pendulum_band="Mixed / uncertain"):
+def verdict_for(sources, subclaims=None, pendulum_band="Mixed / uncertain", claim_text="Test claim"):
     return rule_based_verdict_from_evidence(
-        "Test claim",
+        claim_text,
         subclaims or [subclaim()],
         sources,
         pendulum_band,
@@ -262,3 +262,22 @@ def test_contradicted_claim_uses_clear_unsupported_framing():
     assert aligned["verified_verdict"] == "False / contradicted"
     assert aligned["consensus_strength"] == "Claim unsupported; credible contradiction found"
     assert aligned["consensus_summary"].startswith("Claim unsupported; credible contradiction found.")
+
+
+def test_acquisition_claim_with_only_partnership_evidence_is_not_plain_unverified():
+    result = verdict_for(
+        [
+            source(support="mixed", category="contextual_signal", source_type="official", score=4.5, cluster="cisco-partnership")
+            | {"title": "Cisco and Nutanix announce global strategic partnership"},
+            source(support="supports", category="contextual_signal", source_type="secondary", score=3.9, cluster="partner-coverage")
+            | {"summary": "The companies have partnered on a joint hybrid multicloud offering."},
+            source(support="mixed", category="denial_or_rebuttal", source_type="secondary", score=3.7, cluster="rumor-rebuttal")
+            | {"classification_reason": "Reports discuss partnership activity, not acquisition confirmation."},
+        ],
+        subclaims=[SubClaim(id="sc_1", text="Cisco is buying Nutanix", claim_type="factual", risk_flags=[])],
+        claim_text="Cisco is buying Nutanix",
+    )
+
+    assert result["acquisition_partnership_rebuttal"]["triggered"] is True
+    assert result["verdict"] == "Not supported by credible evidence"
+    assert result["confidence"] == "Medium"
