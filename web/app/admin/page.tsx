@@ -643,65 +643,79 @@ export default function AdminPage() {
           </section>
 
           <div className="adminUserTable scalable">
-            <div className="adminUserHeader scalable">
-              {ADMIN_COLUMNS.map((column) => (
-                <strong key={column.key}>
-                  {column.key === 'selected' ? <input checked={allVisibleSelected} onChange={toggleAllVisible} type="checkbox" aria-label="Select all visible users" /> : (
-                    <button className="columnHeaderButton" disabled={!sortableColumns.has(column.key)} onClick={() => toggleSort(column.key)} type="button">
-                      {column.label}{sort.key === column.key ? (sort.direction === 'asc' ? ' ↑' : ' ↓') : ''}
-                    </button>
-                  )}
-                </strong>
-              ))}
-              <span />
-              {ADMIN_COLUMNS.map((column) => (
-                <span key={`${column.key}-filter`}>
-                  {sortableColumns.has(column.key) && <input value={filters[column.key as SortKey] || ''} onChange={(event) => setFilters((current) => ({ ...current, [column.key]: event.target.value }))} placeholder={`Filter ${column.label.toLowerCase()}`} />}
-                </span>
-              ))}
-            </div>
-
-            {!usersLoaded ? <p className="muted">User records are loaded on demand so admin login stays fast. Use Load users above when you need the account table.</p> : filteredUsers.length === 0 ? <p className="muted">No users found. Users appear here after invite creation or profile creation by the API.</p> : filteredUsers.map((user) => {
-              return (
-                <article className="adminUserRow scalable" key={user.owner_id}>
-                  <input checked={selected.includes(user.owner_id)} onChange={() => toggleSelected(user.owner_id)} type="checkbox" aria-label={`Select ${user.email || user.owner_id}`} />
-                  <div>
-                    <strong>{user.email || 'No email captured'}</strong>
-                    <small>{user.owner_id}</small>
-                  </div>
-                  <div><strong>{user.company_name || user.organisation_name || '—'}</strong><small>{user.organisation_name || user.company_name || 'No organisation set'}</small></div>
-                  <div><strong>{user.billing_account_name || '—'}</strong><small>{user.billing_account_id || 'No billing account ID'}</small></div>
-                  <select disabled={busy} value={user.tier} onChange={(event) => updateUserTier(user, event.target.value as TierName)}>
-                    {TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                  </select>
-                  <div>
-                    <strong>{user.limits?.max_speech_claims ?? 0}</strong>
-                    <small>{user.custom_limits?.max_speech_claims !== undefined ? 'Custom speech claims' : 'Tier default'}</small>
-                  </div>
-                  <div className={user.admin_access ? 'adminAccessBadge enabled' : 'adminAccessBadge'}><strong>{user.admin_access ? 'Enabled' : 'None'}</strong><small>{user.admin_access ? 'Allowlist' : 'Not admin'}</small></div>
-                  <small>{user.subscription_status || 'none'}{user.trial_ends_at ? ` · trial ends ${user.trial_ends_at}` : ''}</small>
-                  <select className="rowActionSelect" disabled={busy} value="" aria-label={`Actions for ${user.email || user.owner_id}`} onChange={(event) => {
-                    const action = event.target.value;
-                    event.target.value = '';
-                    if (action === 'details') {
-                      setEditing(editing === user.owner_id ? '' : user.owner_id);
-                      setDetails((current) => ({ ...current, [user.owner_id]: current[user.owner_id] || blankDetails(user) }));
-                    }
-                    if (action === 'activity') loadUserActivity(user);
-                    if (action === 'reset') sendReset(user);
-                    if (action === 'invite') resendInvite(user);
-                    if (action === 'delete') deleteUser(user);
-                  }}>
-                    <option value="">Actions…</option>
-                    <option value="details">Edit details</option>
-                    <option value="activity">View tests</option>
-                    <option disabled={!user.email} value="reset">Send password reset</option>
-                    <option disabled={!user.email} value="invite">Resend invite</option>
-                    <option disabled={user.owner_id === account?.owner_id} value="delete">Delete user</option>
-                  </select>
-                </article>
-              );
-            })}
+            {!usersLoaded ? <p className="muted">User records are loaded on demand so admin login stays fast. Use Load users above when you need the account table.</p> : filteredUsers.length === 0 ? <p className="muted">No users found. Users appear here after invite creation or profile creation by the API.</p> : (
+              <table className="adminUsersGrid">
+                <thead>
+                  <tr>
+                    {ADMIN_COLUMNS.map((column) => (
+                      <th key={column.key}>
+                        {column.key === 'selected' ? <input checked={allVisibleSelected} onChange={toggleAllVisible} type="checkbox" aria-label="Select all visible users" /> : (
+                          <button className="columnHeaderButton" disabled={!sortableColumns.has(column.key)} onClick={() => toggleSort(column.key)} type="button">
+                            {column.label}{sort.key === column.key ? (sort.direction === 'asc' ? ' ↑' : ' ↓') : ''}
+                          </button>
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                  <tr className="adminUserFilterRow">
+                    {ADMIN_COLUMNS.map((column) => (
+                      <th key={`${column.key}-filter`}>
+                        {sortableColumns.has(column.key) && <input value={filters[column.key as SortKey] || ''} onChange={(event) => setFilters((current) => ({ ...current, [column.key]: event.target.value }))} placeholder={`Filter ${column.label.toLowerCase()}`} />}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.map((user) => (
+                    <tr className="adminUserRow scalable" key={user.owner_id}>
+                      <td><input checked={selected.includes(user.owner_id)} onChange={() => toggleSelected(user.owner_id)} type="checkbox" aria-label={`Select ${user.email || user.owner_id}`} /></td>
+                      <td>
+                        <div>
+                          <strong>{user.email || 'No email captured'}</strong>
+                          <small>{user.owner_id}</small>
+                        </div>
+                      </td>
+                      <td><div><strong>{user.company_name || user.organisation_name || '—'}</strong><small>{user.organisation_name || user.company_name || 'No organisation set'}</small></div></td>
+                      <td><div><strong>{user.billing_account_name || '—'}</strong><small>{user.billing_account_id || 'No billing account ID'}</small></div></td>
+                      <td>
+                        <select disabled={busy} value={user.tier} onChange={(event) => updateUserTier(user, event.target.value as TierName)}>
+                          {TIER_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <div>
+                          <strong>{user.limits?.max_speech_claims ?? 0}</strong>
+                          <small>{user.custom_limits?.max_speech_claims !== undefined ? 'Custom speech claims' : 'Tier default'}</small>
+                        </div>
+                      </td>
+                      <td><div className={user.admin_access ? 'adminAccessBadge enabled' : 'adminAccessBadge'}><strong>{user.admin_access ? 'Enabled' : 'None'}</strong><small>{user.admin_access ? 'Allowlist' : 'Not admin'}</small></div></td>
+                      <td><small>{user.subscription_status || 'none'}{user.trial_ends_at ? ` · trial ends ${user.trial_ends_at}` : ''}</small></td>
+                      <td>
+                        <select className="rowActionSelect" disabled={busy} value="" aria-label={`Actions for ${user.email || user.owner_id}`} onChange={(event) => {
+                          const action = event.target.value;
+                          event.target.value = '';
+                          if (action === 'details') {
+                            setEditing(editing === user.owner_id ? '' : user.owner_id);
+                            setDetails((current) => ({ ...current, [user.owner_id]: current[user.owner_id] || blankDetails(user) }));
+                          }
+                          if (action === 'activity') loadUserActivity(user);
+                          if (action === 'reset') sendReset(user);
+                          if (action === 'invite') resendInvite(user);
+                          if (action === 'delete') deleteUser(user);
+                        }}>
+                          <option value="">Actions…</option>
+                          <option value="details">Edit details</option>
+                          <option value="activity">View tests</option>
+                          <option disabled={!user.email} value="reset">Send password reset</option>
+                          <option disabled={!user.email} value="invite">Resend invite</option>
+                          <option disabled={user.owner_id === account?.owner_id} value="delete">Delete user</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
           {editingUser && (() => {

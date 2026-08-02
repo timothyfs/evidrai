@@ -3047,6 +3047,94 @@ html[data-theme="light"] .methodologyGuardrails {
   .adminActivityList article { grid-template-columns: 1fr; }
 }
 
+/* Admin users: real scrollable table for browsing all loaded accounts. */
+.adminUsersGrid {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 1240px;
+  table-layout: fixed;
+  width: 100%;
+}
+.adminUsersGrid th,
+.adminUsersGrid td {
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  min-width: 0;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: middle;
+}
+.adminUsersGrid th:last-child,
+.adminUsersGrid td:last-child { border-right: 0; }
+.adminUsersGrid th {
+  background: color-mix(in srgb, var(--surface) 94%, var(--line));
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+.adminUsersGrid thead tr:nth-child(2) th { top: 36px; }
+.adminUsersGrid th:nth-child(1),
+.adminUsersGrid td:nth-child(1) { width: 42px; }
+.adminUsersGrid th:nth-child(2),
+.adminUsersGrid td:nth-child(2) { width: 260px; }
+.adminUsersGrid th:nth-child(3),
+.adminUsersGrid td:nth-child(3) { width: 190px; }
+.adminUsersGrid th:nth-child(4),
+.adminUsersGrid td:nth-child(4) { width: 175px; }
+.adminUsersGrid th:nth-child(5),
+.adminUsersGrid td:nth-child(5) { width: 160px; }
+.adminUsersGrid th:nth-child(6),
+.adminUsersGrid td:nth-child(6) { width: 120px; }
+.adminUsersGrid th:nth-child(7),
+.adminUsersGrid td:nth-child(7) { width: 130px; }
+.adminUsersGrid th:nth-child(8),
+.adminUsersGrid td:nth-child(8) { width: 150px; }
+.adminUsersGrid th:nth-child(9),
+.adminUsersGrid td:nth-child(9) { width: 120px; }
+.adminUsersGrid .adminUserRow.scalable {
+  background: var(--surface);
+  display: table-row;
+  min-height: 0;
+  min-width: 0;
+}
+.adminUsersGrid .adminUserRow.scalable:hover { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.adminUsersGrid .adminUserRow.scalable > * {
+  border-right: 1px solid var(--line);
+  display: table-cell;
+  padding: 8px 10px;
+}
+.adminUsersGrid .adminUserRow.scalable > *:last-child { border-right: 0; }
+.adminUsersGrid td > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.adminUsersGrid strong,
+.adminUsersGrid small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adminUsersGrid strong { font-size: 0.82rem; }
+.adminUsersGrid small { color: var(--muted); font-size: 0.7rem; }
+.adminUsersGrid input[type="checkbox"] { width: auto; }
+.adminUsersGrid select,
+.adminUsersGrid .rowActionSelect {
+  font-size: 0.78rem;
+  height: 30px;
+  min-width: 0;
+  padding: 4px 7px;
+  width: 100%;
+}
+.adminUsersGrid .adminUserFilterRow input {
+  font-size: 0.75rem;
+  height: 30px;
+  padding: 5px 7px;
+  width: 100%;
+}
+
 /* Header cleanup: conventional desktop nav, compact mobile menu, slimmer account pill. */
 .siteHeader {
   grid-template-columns: auto minmax(0, 1fr) auto auto;
