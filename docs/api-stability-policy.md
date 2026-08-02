@@ -100,3 +100,19 @@ Every public endpoint should have tests that verify:
 - insufficient tier/scope failures return documented errors
 
 These tests should fail loudly before any backend refactor ships.
+
+## Push Gate
+
+Every push or pull request to `main` should run:
+
+```bash
+scripts/ci_check.sh
+```
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs the same categories of checks:
+
+- Python compile check for `api` and `evidrai`
+- full backend test suite, including API contract tests
+- frontend dependency install and production build
+
+Backend architecture changes should not be merged unless these checks pass.

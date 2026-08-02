@@ -79,7 +79,7 @@ The canonical response contract remains `AssessmentResponse`.
 
 ## Scope Model
 
-Initial scopes:
+Initial scopes are enforced per route:
 
 ```text
 assessments:write
@@ -87,15 +87,13 @@ speech:write
 reports:read
 ```
 
-The first slice stores scopes but does not yet enforce per-route scope checks. That should be the next backend hardening step before offering broad external access.
+Requests using an API key without the required scope return `403` with `detail.code = "insufficient_api_scope"`.
 
 ## Next Steps
 
-1. Enforce scopes per route.
-2. Add `/v1/...` aliases for customer-facing endpoints.
-3. Add public contract tests for request/response examples and stable error codes.
-4. Add usage metering by API key and owner profile.
-5. Add monthly quota enforcement using tier limits.
-6. Add developer documentation with curl examples.
-7. Add webhook callbacks for async jobs.
-8. Expose API key creation/revocation in the Admin UI.
+1. Add `/v1/...` aliases for customer-facing endpoints.
+2. Add usage metering by API key and owner profile.
+3. Add monthly quota enforcement using tier limits.
+4. Add developer documentation with curl examples.
+5. Add webhook callbacks for async jobs.
+6. Expose API key creation/revocation in the Admin UI.

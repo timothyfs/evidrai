@@ -634,7 +634,7 @@ def _profile_from_request(request: Request):
     api_key = (request.headers.get("x-evidrai-api-key") or "").strip()
     if api_key and not (request.headers.get("authorization") or "").lower().startswith("bearer "):
         key_record = authenticate_api_key(api_key)
-        context = AuthContext(owner_id=key_record.owner_id, auth_method="api_key", email="")
+        context = AuthContext(owner_id=key_record.owner_id, auth_method="api_key", email="", scopes=tuple(key_record.scopes))
         profile = get_or_create_profile(context.owner_id)
         require_feature(profile, "api_access", authenticated=True)
         return context, profile
@@ -650,6 +650,20 @@ def _profile_from_request(request: Request):
 
 def _is_master_admin(context: AuthContext) -> bool:
     return context.authenticated and context.email.strip().lower() in master_admin_emails()
+
+
+def _require_api_scope(context: AuthContext, scope: str) -> None:
+    if context.auth_method != "api_key":
+        return
+    if scope not in set(context.scopes):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "insufficient_api_scope",
+                "message": f"This API key does not include the required scope: {scope}.",
+                "required_scope": scope,
+            },
+        )
 
 
 def _utc_now_iso() -> str:
@@ -953,6 +967,7 @@ def diagnose_transcript_source(request: SourceExtractRequest) -> Dict[str, Any]:
 @app.get("/reports", response_model=Dict[str, Any])
 def reports_index(http_request: Request, limit: int = 50) -> Dict[str, Any]:
     context, profile = _profile_from_request(http_request)
+    _require_api_scope(context, "reports:read")
     if not context.authenticated:
         raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in with an email address before using Evidrai."})
     _require_current_consent(context, profile)
@@ -968,6 +983,7 @@ def create_report_share_endpoint(report_id: str, request: ReportShareCreateReque
     include_debug = (http_request.query_params.get("include_debug") or "").lower() == "true"
     try:
         context, profile = _profile_from_request(http_request)
+        _require_api_scope(context, "reports:read")
         if not context.authenticated:
             raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in is required to share reports."})
         _require_current_consent(context, profile)
@@ -1244,7 +1260,10 @@ def admin_delete_user(owner_id: str, http_request: Request) -> Dict[str, Any]:
 @app.get("/reports/{report_id}", response_model=AssessmentResponse)
 def get_report(report_id: str, http_request: Request) -> AssessmentResponse:
     assessment = load_report(report_id)
-    context = _require_authenticated(http_request)
+    context, _profile = _profile_from_request(http_request)
+    _require_api_scope(context, "reports:read")
+    if not context.authenticated:
+        raise HTTPException(status_code=401, detail={"code": "auth_required", "message": "Sign in with an email address before using Evidrai."})
     if (not assessment.owner_id or assessment.owner_id != context.owner_id) and not _is_master_admin(context):
         raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
     return assessment
@@ -1545,6 +1564,7 @@ def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelop
     _validate_claim_request(claim, source_url)
 
     context, profile = _profile_from_request(http_request)
+    _require_api_scope(context, "assessments:write")
     require_feature(profile, "deep_claims" if request.mode == "deep" else "fast_claims", authenticated=context.authenticated)
     _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
@@ -1572,6 +1592,7 @@ def check_claim(request: ClaimCheckRequest, http_request: Request) -> ApiEnvelop
 @app.post("/assessments/fast", response_model=AssessmentResponse)
 def create_fast_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
     context, profile = _profile_from_request(http_request)
+    _require_api_scope(context, "assessments:write")
     require_feature(profile, "fast_claims", authenticated=context.authenticated)
     _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
@@ -1581,6 +1602,7 @@ def create_fast_assessment(request: AssessmentCreateRequest, http_request: Reque
 @app.post("/assessments/deep", response_model=AssessmentResponse)
 def create_deep_assessment(request: AssessmentCreateRequest, http_request: Request) -> AssessmentResponse:
     context, profile = _profile_from_request(http_request)
+    _require_api_scope(context, "assessments:write")
     require_feature(profile, "deep_claims", authenticated=context.authenticated)
     _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
@@ -1592,6 +1614,7 @@ def create_assessment_job(mode: str, request: AssessmentCreateRequest, http_requ
     if mode not in {"fast", "deep"}:
         raise HTTPException(status_code=404, detail="Not Found")
     context, profile = _profile_from_request(http_request)
+    _require_api_scope(context, "assessments:write")
     require_feature(profile, "deep_claims" if mode == "deep" else "fast_claims", authenticated=context.authenticated)
     _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
@@ -1604,7 +1627,8 @@ def create_assessment_job(mode: str, request: AssessmentCreateRequest, http_requ
 
 @app.get("/assessment-jobs/{job_id}", response_model=AssessmentJobStatusResponse)
 def get_assessment_job(job_id: str, http_request: Request) -> AssessmentJobStatusResponse:
-    context = _auth_context_from_request(http_request)
+    context, _profile = _profile_from_request(http_request)
+    _require_api_scope(context, "assessments:write")
     job = get_assessment_job_store().load(job_id)
     return _job_status_response(job, context)
 
@@ -1612,6 +1636,7 @@ def get_assessment_job(job_id: str, http_request: Request) -> AssessmentJobStatu
 @app.post("/speech/extract", response_model=ApiEnvelope)
 def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiEnvelope:
     context, profile = _profile_from_request(http_request)
+    _require_api_scope(context, "speech:write")
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
     _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
@@ -1637,6 +1662,7 @@ def speech_extract(request: SpeechExtractRequest, http_request: Request) -> ApiE
 @app.post("/speech/verify", response_model=ApiEnvelope)
 def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnvelope:
     context, profile = _profile_from_request(http_request)
+    _require_api_scope(context, "speech:write")
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
     _require_current_consent(context, profile)
     # Bot protection is enforced on /speech/extract. Verification is the second
@@ -1681,6 +1707,7 @@ def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnv
 @app.post("/speech/audit", response_model=ApiEnvelope)
 def speech_audit(request: SpeechAuditRequest, http_request: Request) -> ApiEnvelope:
     context, profile = _profile_from_request(http_request)
+    _require_api_scope(context, "speech:write")
     require_feature(profile, "speech_audit", authenticated=context.authenticated)
     _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)

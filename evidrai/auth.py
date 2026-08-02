@@ -21,6 +21,7 @@ class AuthContext:
     owner_id: str = ""
     auth_method: str = "anonymous"
     email: str = ""
+    scopes: tuple[str, ...] = ()
 
     @property
     def authenticated(self) -> bool:
