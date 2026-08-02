@@ -2333,6 +2333,15 @@ export default function Home() {
             </form>
           ) : (
             <form className="verifyForm" onSubmit={extractSpeech}>
+              <div className="youtubeFallbackBox">
+                <label>
+                  YouTube URL <span>optional source</span>
+                  <input value={speechSourceUrl} onChange={(event) => setSpeechSourceUrl(event.target.value)} placeholder="https://youtube.com/watch?v=..." />
+                </label>
+                <label className="checkPill"><input checked={tryYouTubeCaptions} onChange={(event) => setTryYouTubeCaptions(event.target.checked)} type="checkbox" /> Try automatic YouTube captions when transcript is empty</label>
+                <p className="muted">URL-only audits are best-effort. If YouTube blocks caption access, paste the transcript below and run again.</p>
+                <SpeechInputState transcript={speechTranscript} sourceUrl={speechSourceUrl} tryYouTubeCaptions={tryYouTubeCaptions} />
+              </div>
               <div className="primaryInput">
                 <label>
                   Transcript
@@ -2343,10 +2352,6 @@ export default function Home() {
               <SpeechAuditExplainer />
               <div className="secondaryInputs">
                 <label>
-                  Video/source URL <span>optional context</span>
-                  <input value={speechSourceUrl} onChange={(event) => setSpeechSourceUrl(event.target.value)} placeholder="https://youtube.com/watch?v=..." />
-                </label>
-                <label>
                   Claims to extract
                   <select value={maxClaims} onChange={(event) => setMaxClaims(Number(event.target.value))}>
                     {Array.from({ length: Math.max(1, Math.min(20, Number(userLimits.max_speech_claims || 0))) }, (_, index) => index + 1).map((item) => <option key={item} value={item}>{item}</option>)}
@@ -2354,11 +2359,6 @@ export default function Home() {
                 </label>
               </div>
               <p className="modeHint">Selected claims use the standard evidence review path with retrieval, source scoring, and contradiction checks.</p>
-              <div className="youtubeFallbackBox">
-                <label className="checkPill"><input checked={tryYouTubeCaptions} onChange={(event) => setTryYouTubeCaptions(event.target.checked)} type="checkbox" /> Try automatic YouTube captions when transcript is empty</label>
-                <p className="muted">URL-only audits are best-effort. If YouTube blocks caption access, paste the transcript above and run again.</p>
-                <SpeechInputState transcript={speechTranscript} sourceUrl={speechSourceUrl} tryYouTubeCaptions={tryYouTubeCaptions} />
-              </div>
               <VerifyGuide mode="speech" canUseSpeech={canUseSpeech} />
               {!signedIn && (speechTranscript.trim() || speechSourceUrl.trim()) && !speechExtraction && !botToken && <TurnstileCheck token={botToken} setToken={setBotToken} actionLabel="extract claims" />}
               <button className="primaryAction" disabled={!speechReady || loading}>{loading && loadingKind === 'speech' ? 'Extracting claims…' : 'Extract claims'}</button>
