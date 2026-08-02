@@ -334,6 +334,13 @@ def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
         ]
         if has_absolute_claim_language(sub.text):
             candidates.extend(absolute_counterexample_queries(sub.text))
+        if is_acquisition_claim(sub.text):
+            candidates.extend([
+                f"{sub.text} Reuters",
+                f"{sub.text} Bloomberg",
+                f"{sub.text} SEC filing",
+                f"{sub.text} investor relations press release",
+            ])
         lower = sub.text.lower()
         if "nato" in lower and any(term in lower for term in ["america", "united states", " u.s", " us ", "usa"]):
             candidates.extend([
@@ -357,11 +364,130 @@ def build_search_queries(subclaims: List[SubClaim]) -> List[str]:
 
 ACQUISITION_QUERY_TERMS = {"acquire", "acquires", "acquired", "acquiring", "acquisition", "buy", "buys", "buying", "bought", "takeover", "merge", "merger"}
 RUMOR_DISCOVERY_DOMAINS = ("thelayoff.com", "glassdoor.com", "reddit.com", "teamblind.com")
+MARKET_MOVING_NEWS_DOMAINS = (
+    "reuters.com",
+    "bloomberg.com",
+    "wsj.com",
+    "ft.com",
+    "cnbc.com",
+    "apnews.com",
+)
+OFFICIAL_SOURCE_PATH_TERMS = (
+    "investor",
+    "investors",
+    "ir.",
+    "newsroom",
+    "press-release",
+    "press",
+    "media",
+)
+REGULATORY_DISCLOSURE_DOMAINS = (
+    "sec.gov",
+)
 
 
 def is_acquisition_claim(text: str) -> bool:
     tokens = set(re.findall(r"[a-z]+", (text or "").lower()))
     return bool(tokens & ACQUISITION_QUERY_TERMS)
+
+
+def _claim_entity_tokens(text: str) -> List[str]:
+    stopwords = {
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "will",
+        "would",
+        "could",
+        "might",
+        "may",
+        "buying",
+        "buy",
+        "buys",
+        "bought",
+        "acquire",
+        "acquires",
+        "acquired",
+        "acquiring",
+        "acquisition",
+        "merger",
+        "merge",
+        "takeover",
+    }
+    tokens = []
+    for match in re.finditer(r"\b[A-Z][A-Za-z0-9&.-]{2,}\b", text or ""):
+        token = re.sub(r"[^a-z0-9]+", "", match.group(0).lower())
+        if token and token not in stopwords:
+            tokens.append(token)
+    return list(dict.fromkeys(tokens))
+
+
+def _domain_matches_claim_entity(domain: str, claim_text: str) -> bool:
+    compact_domain = re.sub(r"[^a-z0-9]+", "", domain or "")
+    return any(token in compact_domain for token in _claim_entity_tokens(claim_text))
+
+
+def _has_any(haystack: str, terms: Any) -> bool:
+    lowered = (haystack or "").lower()
+    return any(term in lowered for term in terms)
+
+
+def _recalculate_weighted_source_score(source: EvidenceSource) -> None:
+    weights = get_scoring_policy().source_score_weights
+    source.weighted_score = round(
+        source.authority_score * weights.authority
+        + source.relevance_score * weights.relevance
+        + source.directness_score * weights.directness
+        + source.independence_score * weights.independence
+        + source.recency_score * weights.recency
+        + (5 - source.bias_risk_score) * weights.bias_risk,
+        2,
+    )
+
+
+def apply_dynamic_source_strength(source: EvidenceSource, claim_text: str) -> EvidenceSource:
+    """
+    Adjust source quality after crawling/search snippets are available.
+    Source type remains only a prior; claim fit, domain, URL path, and content can move it.
+    """
+    domain = source.domain.lower()
+    url = source.url.lower()
+    haystack = f"{source.title} {source.snippet} {source.content} {url}".lower()
+
+    if any(domain == d or domain.endswith(f".{d}") for d in RUMOR_DISCOVERY_DOMAINS):
+        source.source_type = "forum"
+        source.authority_score = min(source.authority_score, 1.4)
+        source.independence_score = min(source.independence_score, 1.6)
+        source.bias_risk_score = max(source.bias_risk_score, 4.3)
+        _recalculate_weighted_source_score(source)
+        return source
+
+    if is_acquisition_claim(claim_text):
+        if any(domain == d or domain.endswith(f".{d}") for d in REGULATORY_DISCLOSURE_DOMAINS):
+            source.source_type = "legal"
+            source.authority_score = max(source.authority_score, 5.0)
+            source.independence_score = max(source.independence_score, 4.7)
+            source.bias_risk_score = min(source.bias_risk_score, 1.2)
+            source.directness_score = max(source.directness_score, 4.6 if _has_any(haystack, ACQUISITION_QUERY_TERMS) else 3.2)
+        elif _domain_matches_claim_entity(domain, claim_text) and _has_any(url, OFFICIAL_SOURCE_PATH_TERMS):
+            source.source_type = "primary"
+            source.authority_score = max(source.authority_score, 4.7)
+            source.independence_score = max(source.independence_score, 3.4)
+            source.bias_risk_score = min(source.bias_risk_score, 2.2)
+            source.directness_score = max(source.directness_score, 4.4 if _has_any(haystack, ACQUISITION_QUERY_TERMS) else 3.1)
+        elif any(domain == d or domain.endswith(f".{d}") for d in MARKET_MOVING_NEWS_DOMAINS):
+            source.source_type = "news"
+            source.authority_score = max(source.authority_score, 4.0)
+            source.independence_score = max(source.independence_score, 3.7)
+            source.bias_risk_score = min(source.bias_risk_score, 2.4)
+            source.directness_score = max(source.directness_score, 4.0 if _has_any(haystack, ACQUISITION_QUERY_TERMS) else 2.8)
+
+    _recalculate_weighted_source_score(source)
+    return source
 
 
 def build_rumor_discovery_queries(claim_text: str) -> List[str]:
@@ -577,6 +703,7 @@ def score_source(item: Dict[str, Any], claim_text: str) -> EvidenceSource:
         bias_risk_score=bias_risk,
         weighted_score=round(weighted, 2),
     )
+    source = apply_dynamic_source_strength(source, claim_text)
     return _apply_jurisdiction_guard(source, claim_text)
 
 

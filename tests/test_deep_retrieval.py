@@ -107,6 +107,20 @@ def test_acquisition_claim_builds_bounded_rumor_discovery_queries():
     assert all("rumor" in query for query in queries)
 
 
+def test_acquisition_claim_queries_include_authoritative_discovery_targets():
+    queries = verification.build_search_queries([
+        SubClaim(
+            id="sc_1",
+            text="Cisco is buying Nutanix",
+            claim_type="business",
+        )
+    ])
+
+    assert any("Reuters" in query for query in queries)
+    assert any("SEC filing" in query for query in queries)
+    assert any("investor relations press release" in query for query in queries)
+
+
 def test_non_acquisition_claim_does_not_search_rumor_forums():
     queries = verification.build_rumor_discovery_queries("Nutanix announced a new product")
 
@@ -125,3 +139,55 @@ def test_rumor_discovery_results_are_kept_as_context_not_evidence(monkeypatch):
     assert all(source.claim_support == "mixed" for source in rumor_sources)
     assert all(source.weighted_score <= 1.8 for source in rumor_sources)
     assert any("thelayoff.com" in query for query, _max_results in fake.queries)
+
+
+def test_dynamic_source_strength_promotes_sec_filings_for_acquisition_claims():
+    source = verification.score_source(
+        {
+            "title": "Cisco Form 8-K",
+            "url": "https://www.sec.gov/Archives/edgar/data/858877/0001193125-26-000001.htm",
+            "snippet": "Cisco announced an acquisition agreement for Nutanix.",
+            "content": "Cisco announced an acquisition agreement to buy Nutanix and filed the transaction details.",
+        },
+        "Cisco is buying Nutanix",
+    )
+
+    assert source.source_type == "legal"
+    assert source.authority_score == 5.0
+    assert source.independence_score >= 4.7
+    assert source.bias_risk_score <= 1.2
+    assert source.weighted_score >= 4.0
+
+
+def test_dynamic_source_strength_promotes_claim_company_investor_pages():
+    source = verification.score_source(
+        {
+            "title": "Cisco newsroom update",
+            "url": "https://newsroom.cisco.com/c/r/newsroom/en/us/a/y2026/m08/cisco-investor-relations.html",
+            "snippet": "Cisco and Nutanix announced a partnership update.",
+            "content": "Cisco and Nutanix announced a partnership update, not an acquisition agreement.",
+        },
+        "Cisco is buying Nutanix",
+    )
+
+    assert source.source_type == "primary"
+    assert source.authority_score >= 4.7
+    assert source.directness_score >= 4.4
+    assert source.bias_risk_score <= 2.2
+
+
+def test_dynamic_source_strength_keeps_workplace_forums_weak():
+    source = verification.score_source(
+        {
+            "title": "Cisco buying Nutanix rumours",
+            "url": "https://www.thelayoff.com/t/rumor-cisco-nutanix",
+            "snippet": "Employees discuss a rumour that Cisco may buy Nutanix.",
+            "content": "Anonymous employee discussion about a possible acquisition rumour.",
+        },
+        "Cisco is buying Nutanix",
+    )
+
+    assert source.source_type == "forum"
+    assert source.authority_score <= 1.4
+    assert source.independence_score <= 1.6
+    assert source.bias_risk_score >= 4.3
