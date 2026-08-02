@@ -1,5 +1,6 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import type { AssessmentResponse, MeResponse } from '../../../lib/api';
 import { createReportShare, getMe, getReport, setAccessToken } from '../../../lib/api';
@@ -22,6 +23,31 @@ function scoreLabel(score?: number | null, max = 10) {
   if (typeof score !== 'number' || !Number.isFinite(score)) return '';
   const value = Math.abs(score);
   return `${value.toFixed(1)}/${max}`;
+}
+
+const verdictClass: Record<string, string> = {
+  Supported: 'good',
+  'Likely supported': 'good',
+  'Partly supported': 'mixed',
+  Unverified: 'weak',
+  'Not supported by credible evidence': 'bad',
+  'False / contradicted': 'bad',
+  'Misleading framing': 'mixed',
+};
+
+function verdictTone(label: string) {
+  return verdictClass[label] || 'weak';
+}
+
+function claimSupportPercent(verdict: string, score?: number | null) {
+  if (typeof score === 'number' && Number.isFinite(score)) return Math.max(0, Math.min(100, Math.round(score * 10)));
+  const label = (verdict || '').toLowerCase();
+  if (label.includes('supported') && !label.includes('weakly') && !label.includes('partly')) return 84;
+  if (label.includes('likely')) return 72;
+  if (label.includes('partly') || label.includes('misleading')) return 52;
+  if (label.includes('weakly')) return 30;
+  if (label.includes('not supported') || label.includes('false') || label.includes('contradicted')) return 12;
+  return 42;
 }
 
 export default function ReportViewer({ reportId }: { reportId: string }) {
@@ -108,6 +134,10 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
   if (busy) return <section className="card marketingPage"><p className="eyebrow">Report</p><h1>Loading report…</h1></section>;
   if (error || !report) return <section className="card marketingPage"><p className="eyebrow">Report</p><h1>Report not available.</h1><p className="lead">{error || 'This report could not be loaded.'}</p><a className="button secondary" href="/">Back to Evidrai</a></section>;
 
+  const tone = verdictTone(report.verdict.label);
+  const claimSupport = claimSupportPercent(report.verdict.label, report.verdict.evidence_strength_score);
+  const claimSupportAngle = claimSupport * 1.8;
+
   return (
     <section className="card resultCard assessmentCard publicReport">
       <div className="printMasthead"><strong>Evidrai report</strong><span>{formatDate(report.created_at)}</span></div>
@@ -117,9 +147,21 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
           <h1>{report.request.claim || 'Untitled claim'}</h1>
           <p className="resultSubcopy">Dedicated read-only report view. Share it, print it, or return to the workspace without cluttering the active assessment screen.</p>
         </div>
-        <div className="verdict verdictPanel">
-          <span>Verdict</span>
+        <div className={`verdict verdictPanel ${tone}`}>
+          <span>Claim support</span>
+          <div
+            className="claimSupportDial"
+            role="meter"
+            aria-label={`Claim support: ${report.verdict.label}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={claimSupport}
+            style={{ '--claim-support-angle': `${claimSupportAngle}deg` } as CSSProperties}
+          >
+            <div className="claimSupportNeedle" />
+          </div>
           <strong>{report.verdict.label}</strong>
+          <div className="claimSupportScale" aria-hidden="true"><span>Low</span><span>Mixed</span><span>High</span></div>
           <small>{report.verdict.confidence} confidence</small>
         </div>
       </div>

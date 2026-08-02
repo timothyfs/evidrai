@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { CSSProperties } from 'react';
 import { headers } from 'next/headers';
 import { API_BASE_URL } from '../../../lib/api';
 import type { AssessmentResponse, PublicReportResponse } from '../../../lib/api';
@@ -56,6 +57,31 @@ function shareLinks(url: string, title: string, abstract: string) {
   ];
 }
 
+const verdictClass: Record<string, string> = {
+  Supported: 'good',
+  'Likely supported': 'good',
+  'Partly supported': 'mixed',
+  Unverified: 'weak',
+  'Not supported by credible evidence': 'bad',
+  'False / contradicted': 'bad',
+  'Misleading framing': 'mixed',
+};
+
+function verdictTone(label: string) {
+  return verdictClass[label] || 'weak';
+}
+
+function claimSupportPercent(verdict: string, score?: number | null) {
+  if (typeof score === 'number' && Number.isFinite(score)) return Math.max(0, Math.min(100, Math.round(score * 10)));
+  const label = (verdict || '').toLowerCase();
+  if (label.includes('supported') && !label.includes('weakly') && !label.includes('partly')) return 84;
+  if (label.includes('likely')) return 72;
+  if (label.includes('partly') || label.includes('misleading')) return 52;
+  if (label.includes('weakly')) return 30;
+  if (label.includes('not supported') || label.includes('false') || label.includes('contradicted')) return 12;
+  return 42;
+}
+
 function publicShareUrl(token: string, headerList: Headers) {
   const host = headerList.get('x-forwarded-host') || headerList.get('host') || '';
   const proto = headerList.get('x-forwarded-proto') || 'https';
@@ -103,6 +129,9 @@ export default async function SharedReportPage({ params }: SharePageProps) {
   const abstract = reportAbstract(report, isSimple);
   const headerList = await headers();
   const publicUrl = publicShareUrl(token, headerList);
+  const tone = verdictTone(report.verdict.label);
+  const claimSupport = claimSupportPercent(report.verdict.label, report.verdict.evidence_strength_score);
+  const claimSupportAngle = claimSupport * 1.8;
   return (
     <main>
       <header className="siteHeader printHidden"><a className="brand logoBrand eyeBrand" href="/" aria-label="Evidrai home"><img className="logoLight" src="/brand/evidrai-eye-light.png" alt="" /><img className="logoDark" src="/brand/evidrai-eye-dark.png" alt="" /></a><nav className="staticNav"><a href="/product">Product</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/">Verify another claim</a></nav></header>
@@ -114,9 +143,21 @@ export default async function SharedReportPage({ params }: SharePageProps) {
             <h1>{report.request.claim || 'Untitled claim'}</h1>
             <p className="resultSubcopy">{isSimple ? 'A simple public Evidrai verdict card. Run your own check to inspect the full evidence trail.' : 'Public read-only assessment. Evidence should be inspected, not just forwarded like internet confetti.'}</p>
           </div>
-          <div className="verdict verdictPanel">
-            <span>Verdict</span>
+          <div className={`verdict verdictPanel ${tone}`}>
+            <span>Claim support</span>
+            <div
+              className="claimSupportDial"
+              role="meter"
+              aria-label={`Claim support: ${report.verdict.label}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={claimSupport}
+              style={{ '--claim-support-angle': `${claimSupportAngle}deg` } as CSSProperties}
+            >
+              <div className="claimSupportNeedle" />
+            </div>
             <strong>{report.verdict.label}</strong>
+            <div className="claimSupportScale" aria-hidden="true"><span>Low</span><span>Mixed</span><span>High</span></div>
             <small>{report.verdict.confidence} confidence</small>
           </div>
         </div>
