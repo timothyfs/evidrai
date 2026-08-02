@@ -1591,49 +1591,6 @@ function InterfaceSwitcher({ mode, onChange }: { mode: InterfaceMode; onChange: 
   );
 }
 
-function SimpleAssessmentResult({ assessment, canShare }: { assessment: AssessmentResponse; canShare: boolean }) {
-  const tone = verdictTone(assessment.verdict.label);
-  const sources = assessment.sources || [];
-  const topClaims = assessment.claim_breakdown?.slice(0, 3) || [];
-  return (
-    <section className="simpleResult">
-      <div className={`simpleVerdict ${tone}`}>
-        <span>Result</span>
-        <strong>{assessment.verdict.label}</strong>
-        <small>{assessment.verdict.confidence || 'Unstated'} confidence · {sources.length} source{sources.length === 1 ? '' : 's'}</small>
-      </div>
-      <div className="simpleResultBody">
-        <h2>{assessment.request.claim || 'Evidence assessment'}</h2>
-        {assessment.verdict.summary && <p className="summary">{assessment.verdict.summary}</p>}
-        {assessment.verdict.key_caveat && <p className="caveat"><strong>Key caveat</strong>{assessment.verdict.key_caveat}</p>}
-      </div>
-      {topClaims.length > 0 && (
-        <details className="simpleDisclosure">
-          <summary>Key reasons</summary>
-          <div className="simpleReasonList">
-            {topClaims.map((item) => (
-              <article key={item.id}>
-                <strong>{item.assessment}</strong>
-                <span>{item.text}</span>
-                {item.rationale && <p>{item.rationale}</p>}
-              </article>
-            ))}
-          </div>
-        </details>
-      )}
-      <details className="simpleDisclosure">
-        <summary>Sources</summary>
-        <SourceLinkPreview assessment={assessment} />
-      </details>
-      <details className="simpleDisclosure">
-        <summary>Full evidence view</summary>
-        <AssessmentResult assessment={assessment} canShare={canShare} />
-      </details>
-      <ShareReportControls assessment={assessment} canShare={canShare} />
-    </section>
-  );
-}
-
 function SimpleWorkspace({
   simpleSourceMode,
   setSimpleSourceMode,
@@ -1794,7 +1751,7 @@ function SimpleWorkspace({
       {(loading || verifyingSpeech) && <LoadingState type={verifyingSpeech ? 'speech-verify' : loadingKind} />}
       {error && <p className="error errorState">{error}</p>}
 
-      {assessment && <SimpleAssessmentResult assessment={assessment} canShare={canShareReports} />}
+      {assessment && <AssessmentResult assessment={assessment} canShare={canShareReports} />}
       {speechExtraction && (
         <SpeechResult
           extraction={speechExtraction}

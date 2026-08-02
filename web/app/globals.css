@@ -2107,7 +2107,6 @@ html[data-theme="light"] .guideSteps span {
   line-height: 1.35;
 }
 .simpleInputPanel,
-.simpleResult,
 .simpleHistory {
   border: 1px solid var(--line);
   border-radius: 24px;
@@ -2125,85 +2124,14 @@ html[data-theme="light"] .guideSteps span {
 .simpleInputPanel .primaryAction {
   justify-self: stretch;
 }
-.simpleVerdict {
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  display: grid;
-  gap: 5px;
-  padding: 16px;
-}
-.simpleVerdict.good { box-shadow: inset 5px 0 0 var(--good); }
-.simpleVerdict.mixed { box-shadow: inset 5px 0 0 var(--mixed); }
-.simpleVerdict.weak { box-shadow: inset 5px 0 0 var(--weak); }
-.simpleVerdict.bad { box-shadow: inset 5px 0 0 var(--bad); }
-.simpleVerdict span,
-.simpleVerdict small {
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 850;
-}
-.simpleVerdict span {
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.simpleVerdict strong {
-  color: var(--ink);
-  font-size: clamp(1.55rem, 6vw, 2.4rem);
-  letter-spacing: -0.03em;
-}
-.simpleResultBody {
-  display: grid;
-  gap: 12px;
-}
-.simpleResultBody h2 {
-  font-size: clamp(1.25rem, 4vw, 1.8rem);
-  line-height: 1.15;
-}
-.simpleDisclosure {
-  border-top: 1px solid var(--line);
-  margin-top: 0;
-  padding-top: 12px;
-}
-.simpleDisclosure summary,
 .simpleHistory summary {
   align-items: center;
   display: flex;
   justify-content: space-between;
   list-style: none;
 }
-.simpleDisclosure summary::-webkit-details-marker,
 .simpleHistory summary::-webkit-details-marker {
   display: none;
-}
-.simpleDisclosure summary::after {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--muted);
-  content: "Open";
-  font-size: 0.76rem;
-  padding: 5px 8px;
-}
-.simpleDisclosure[open] summary::after {
-  content: "Close";
-}
-.simpleReasonList {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
-}
-.simpleReasonList article {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255,255,255,0.035);
-  display: grid;
-  gap: 6px;
-  padding: 12px;
-}
-.simpleReasonList span,
-.simpleReasonList p {
-  color: var(--muted);
-  line-height: 1.42;
-  margin: 0;
 }
 .simpleHistory {
   margin-top: 4px;
@@ -2243,9 +2171,7 @@ html[data-theme="light"] .guideSteps span {
 html[data-theme="light"] .interfaceSwitcher,
 html[data-theme="light"] .simpleSourceGrid button,
 html[data-theme="light"] .simpleInputPanel,
-html[data-theme="light"] .simpleResult,
 html[data-theme="light"] .simpleHistory,
-html[data-theme="light"] .simpleReasonList article,
 html[data-theme="light"] .simpleReportItem {
   background: rgba(255,255,255,0.72);
 }
@@ -2273,13 +2199,9 @@ html[data-theme="light"] .simpleReportItem {
     min-height: 78px;
   }
   .simpleInputPanel,
-  .simpleResult,
   .simpleHistory {
     border-radius: 20px;
     padding: 15px;
-  }
-  .simpleResult .assessmentCard {
-    padding: 14px;
   }
 }
 .trustLanguageStrip span {
