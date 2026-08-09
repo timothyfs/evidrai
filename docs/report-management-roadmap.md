@@ -1,6 +1,6 @@
 # Report management roadmap
 
-Status: logged from Tim feedback on 2026-05-26.
+Status: implemented in the Next.js/FastAPI app. Keep this page as the product contract for future refinement.
 
 The saved reports area should stay useful without cluttering the main evidence UI. Reports should be managed as a clean library with retention rules, shareable report views, and future marketing/customer-intelligence hooks.
 
@@ -85,6 +85,18 @@ Researcher / Journalist users should be able to mark reports with lightweight wo
 - needs follow-up
 
 Implementation note: keep `do not delete` / protected as a separate retention flag, not just a label, because it controls auto-cycling behaviour.
+
+## Implemented scope
+
+- Report/history section is collapsed by default.
+- Saved reports open in a dedicated authenticated report view/new tab.
+- Users can delete reports.
+- Users can mark reports as protected/do-not-delete.
+- Tier retention limits are enforced: Free 5, Pro 10, Researcher / Journalist 100.
+- Automatic retention skips protected reports.
+- Public share links still work for simple and full report shares.
+- Optional share-recipient email can be captured with a share event and is not exposed on public report pages.
+- Researcher / Journalist report labels are available in the report library.
 
 ## Suggested implementation sequence
 

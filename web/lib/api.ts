@@ -68,6 +68,9 @@ export type ReportShare = {
   access_level?: 'simple' | 'full';
   created_at?: string;
   revoked_at?: string;
+  recipient_email?: string;
+  recipient_source?: string;
+  recipient_captured_at?: string;
 };
 
 export type PublicReportResponse = {
@@ -481,10 +484,15 @@ export function deleteReport(id: string): Promise<{ ok: boolean; report: ReportS
   return request<{ ok: boolean; report: ReportSummary & { deleted?: boolean } }>(`/reports/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export function createReportShare(id: string, platform = 'copy'): Promise<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }> {
+export function createReportShare(id: string, input: string | { platform?: string; recipient_email?: string; recipient_source?: string } = 'copy'): Promise<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }> {
+  const payload = typeof input === 'string' ? { platform: input } : {
+    platform: input.platform || 'copy',
+    recipient_email: input.recipient_email || '',
+    recipient_source: input.recipient_source || 'manual_share',
+  };
   return request<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }>(`/api/reports/${encodeURIComponent(id)}/share`, {
     method: 'POST',
-    body: JSON.stringify({ platform }),
+    body: JSON.stringify(payload),
   }, { sameOrigin: true });
 }
 

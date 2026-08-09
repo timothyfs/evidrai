@@ -158,6 +158,8 @@ class FeedbackCreateRequest(BaseModel):
 
 class ReportShareCreateRequest(BaseModel):
     platform: str = "copy"
+    recipient_email: str = ""
+    recipient_source: str = "manual_share"
 
 
 class ReportMetadataUpdateRequest(BaseModel):
@@ -952,6 +954,9 @@ def _public_shared_payload(shared: Dict[str, Any]) -> Dict[str, Any]:
     access_level = share.get("access_level") or "full"
     public_assessment = assessment.model_copy(update={"owner_id": None}) if access_level == "full" else _simple_public_assessment(assessment)
     share.pop("owner_id", None)
+    share.pop("recipient_email", None)
+    share.pop("recipient_source", None)
+    share.pop("recipient_captured_at", None)
     return {"ok": True, "share": share, "access_level": access_level, "assessment": public_assessment}
 
 
@@ -992,7 +997,17 @@ def create_report_share_endpoint(report_id: str, request: ReportShareCreateReque
         if (not assessment_owner or assessment_owner != context.owner_id) and not _is_master_admin(context):
             raise HTTPException(status_code=403, detail={"code": "report_forbidden", "message": "This report belongs to another account."})
         access_level = "full" if profile.features.get("share_reports") or profile.tier in {"pro", "researcher"} else "simple"
-        share = create_report_share(report_id, owner_id=context.owner_id, access_level=access_level, assessment=assessment)
+        recipient_email = (request.recipient_email or "").strip().lower()
+        if recipient_email and ("@" not in recipient_email or "." not in recipient_email.rsplit("@", 1)[-1]):
+            raise HTTPException(status_code=400, detail={"code": "invalid_recipient_email", "message": "Enter a valid recipient email address or leave it blank."})
+        share = create_report_share(
+            report_id,
+            owner_id=context.owner_id,
+            access_level=access_level,
+            assessment=assessment,
+            recipient_email=recipient_email,
+            recipient_source=(request.recipient_source or request.platform or "manual_share").strip()[:80],
+        )
         return {"ok": True, "share": share, "token": share.get("token"), "assessment_id": report_id, "access_level": access_level}
     except HTTPException:
         raise

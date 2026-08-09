@@ -111,7 +111,7 @@ class ReportStore(Protocol):
     def iter_assessments(self, limit: int = 1000) -> List[AssessmentResponse]:
         ...
 
-    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None) -> Dict[str, Any]:
+    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None, recipient_email: str = "", recipient_source: str = "") -> Dict[str, Any]:
         ...
 
     def load_shared(self, token: str) -> Dict[str, Any]:
@@ -279,7 +279,7 @@ class LocalReportStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
 
-    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None) -> Dict[str, Any]:
+    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None, recipient_email: str = "", recipient_source: str = "") -> Dict[str, Any]:
         assessment = assessment or self.load(report_id)
         access_level = "full" if access_level == "full" else "simple"
         assessment_owner = _assessment_field(assessment, "owner_id") or ""
@@ -287,7 +287,20 @@ class LocalReportStore:
         if owner_id and assessment_owner != owner_id:
             raise ReportNotFoundError(report_id)
         token = _signed_share_token(report_id, access_level)
-        return {"token": token, "assessment_id": report_id, "owner_id": assessment_owner or owner_id, "access_level": access_level, "created_at": assessment_created_at, "revoked_at": ""}
+        captured_at = datetime.now(timezone.utc).isoformat() if recipient_email else ""
+        shares = self._read_shares()
+        shares[token] = {
+            "assessment_id": report_id,
+            "owner_id": assessment_owner or owner_id,
+            "access_level": access_level,
+            "created_at": assessment_created_at or captured_at,
+            "revoked_at": "",
+            "recipient_email": recipient_email,
+            "recipient_source": recipient_source,
+            "recipient_captured_at": captured_at,
+        }
+        self._write_shares(shares)
+        return {"token": token, **shares[token]}
 
     def load_shared(self, token: str) -> Dict[str, Any]:
         if token.startswith("s1."):
@@ -295,7 +308,8 @@ class LocalReportStore:
             assessment = self.load(record["assessment_id"])
             assessment_owner = _assessment_field(assessment, "owner_id") or ""
             assessment_created_at = _assessment_field(assessment, "created_at") or ""
-            return {"share": {"token": token, **record, "owner_id": assessment_owner, "created_at": assessment_created_at, "revoked_at": ""}, "assessment": assessment}
+            stored = self._read_shares().get(token, {})
+            return {"share": {"token": token, **record, "owner_id": assessment_owner, "created_at": assessment_created_at or stored.get("created_at") or "", "revoked_at": ""}, "assessment": assessment}
         safe = "".join(ch for ch in token if ch.isalnum() or ch in {"-", "_"})
         if not safe or safe != token:
             raise ReportNotFoundError(token)
@@ -578,7 +592,7 @@ class PostgresReportStore:
         except Exception as exc:
             raise ReportStoreError("Could not iterate reports.", developer_detail=str(exc))
 
-    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None) -> Dict[str, Any]:
+    def create_share(self, report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None, recipient_email: str = "", recipient_source: str = "") -> Dict[str, Any]:
         access_level = "full" if access_level == "full" else "simple"
         if assessment is not None:
             assessment_owner = _assessment_field(assessment, "owner_id") or ""
@@ -586,7 +600,8 @@ class PostgresReportStore:
             if owner_id and assessment_owner != owner_id:
                 raise ReportNotFoundError(report_id)
             token = _signed_share_token(report_id, access_level)
-            return {"token": token, "assessment_id": report_id, "owner_id": assessment_owner or owner_id, "access_level": access_level, "created_at": assessment_created_at, "revoked_at": ""}
+            self._record_share_event(token, report_id, assessment_owner or owner_id, access_level, recipient_email=recipient_email, recipient_source=recipient_source)
+            return {"token": token, "assessment_id": report_id, "owner_id": assessment_owner or owner_id, "access_level": access_level, "created_at": assessment_created_at, "revoked_at": "", "recipient_email": recipient_email}
         self._ensure_schema()
         try:
             with self._connect() as conn:
@@ -601,11 +616,37 @@ class PostgresReportStore:
             if hasattr(created_at, "isoformat"):
                 created_at = created_at.isoformat()
             token = _signed_share_token(report_id, access_level)
-            return {"token": token, "assessment_id": report_id, "owner_id": row.get("owner_id") or owner_id, "access_level": access_level, "created_at": created_at, "revoked_at": ""}
+            self._record_share_event(token, report_id, row.get("owner_id") or owner_id, access_level, recipient_email=recipient_email, recipient_source=recipient_source)
+            return {"token": token, "assessment_id": report_id, "owner_id": row.get("owner_id") or owner_id, "access_level": access_level, "created_at": created_at, "revoked_at": "", "recipient_email": recipient_email}
         except EvidraiError:
             raise
         except Exception as exc:
             raise ReportStoreError("Could not create report share.", developer_detail=str(exc))
+
+    def _record_share_event(self, token: str, report_id: str, owner_id: str, access_level: str, *, recipient_email: str = "", recipient_source: str = "") -> None:
+        self._ensure_schema()
+        try:
+            with self._connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO report_shares (
+                            token, assessment_id, owner_id, access_level, recipient_email, recipient_source, recipient_captured_at, updated_at
+                        ) VALUES (%s, %s, %s, %s, NULLIF(%s, ''), NULLIF(%s, ''), CASE WHEN NULLIF(%s, '') IS NULL THEN NULL ELSE now() END, now())
+                        ON CONFLICT (token) DO UPDATE SET
+                            owner_id = EXCLUDED.owner_id,
+                            access_level = EXCLUDED.access_level,
+                            recipient_email = COALESCE(EXCLUDED.recipient_email, report_shares.recipient_email),
+                            recipient_source = COALESCE(EXCLUDED.recipient_source, report_shares.recipient_source),
+                            recipient_captured_at = COALESCE(EXCLUDED.recipient_captured_at, report_shares.recipient_captured_at),
+                            revoked_at = NULL,
+                            updated_at = now()
+                        """,
+                        (token, report_id, owner_id, access_level, recipient_email, recipient_source, recipient_email),
+                    )
+                conn.commit()
+        except Exception as exc:
+            raise ReportStoreError("Could not record report share.", developer_detail=str(exc))
 
     def load_shared(self, token: str) -> Dict[str, Any]:
         self._ensure_schema()
@@ -704,8 +745,8 @@ def iter_assessments(limit: int = 1000, store: ReportStore | None = None) -> Lis
     return (store or get_report_store()).iter_assessments(limit=limit)
 
 
-def create_report_share(report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None, store: ReportStore | None = None) -> Dict[str, Any]:
-    return (store or get_report_store()).create_share(report_id, owner_id=owner_id, access_level=access_level, assessment=assessment)
+def create_report_share(report_id: str, owner_id: str = "", access_level: str = "full", assessment: AssessmentResponse | None = None, recipient_email: str = "", recipient_source: str = "", store: ReportStore | None = None) -> Dict[str, Any]:
+    return (store or get_report_store()).create_share(report_id, owner_id=owner_id, access_level=access_level, assessment=assessment, recipient_email=recipient_email, recipient_source=recipient_source)
 
 
 def load_shared_report(token: str, store: ReportStore | None = None) -> Dict[str, Any]:

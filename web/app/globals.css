@@ -227,6 +227,30 @@ button.secondary {
 .reportActions .secondary { padding: 7px 10px; font-size: 0.78rem; }
 .savedReportShare { display: grid; gap: 8px; margin-top: 8px; }
 .savedReportShare .shareLinkRow input { font-size: 0.78rem; min-height: 36px; }
+.shareRecipient {
+  color: var(--muted);
+  display: grid;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 850;
+  max-width: 420px;
+}
+.shareRecipient input {
+  font-size: 0.88rem;
+  min-height: 38px;
+}
+.shareRecipient span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+.shareRecipient.compact {
+  max-width: 320px;
+}
+.shareRecipient.compact input {
+  min-height: 34px;
+}
 .labelPill {
   border: 1px solid var(--line);
   border-radius: 999px;

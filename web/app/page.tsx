@@ -1529,12 +1529,13 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
   const [publicUrl, setPublicUrl] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState('');
 
   async function createShare(platform = 'copy') {
     setBusy(true);
     setMessage('');
     try {
-      const payload = await createReportShare(assessment.assessment_id, platform);
+      const payload = await createReportShare(assessment.assessment_id, { platform, recipient_email: recipientEmail, recipient_source: 'assessment_share_panel' });
       const url = `${window.location.origin}/share/${payload.token}`;
       setPublicUrl(url);
       let copied = false;
@@ -1563,6 +1564,11 @@ function ShareReportControls({ assessment, canShare }: { assessment: AssessmentR
         <h3>Share this assessment</h3>
         <p className="muted">Free users can share a simple verdict/summary card. Pro users share the full evidence report.</p>
       </div>
+      <label className="shareRecipient">
+        Optional recipient email
+        <input value={recipientEmail} onChange={(event) => setRecipientEmail(event.target.value)} placeholder="name@example.com" type="email" />
+        <span>Stored with the share event for follow-up. It is never shown on the public report.</span>
+      </label>
       <div className="shareActions">
         <button className="secondary" disabled={busy} onClick={() => createShare('copy')} type="button">{busy ? 'Creating…' : publicUrl ? 'Copy share text' : 'Create share link'}</button>
         {publicUrl && links.map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}
@@ -1958,6 +1964,7 @@ export default function Home() {
   const [reportsOpen, setReportsOpen] = useState(false);
   const [reportShareLinks, setReportShareLinks] = useState<Record<string, string>>({});
   const [reportShareMessages, setReportShareMessages] = useState<Record<string, string>>({});
+  const [reportShareRecipients, setReportShareRecipients] = useState<Record<string, string>>({});
   const [sharingReportId, setSharingReportId] = useState('');
   const [exportingReportId, setExportingReportId] = useState('');
   const [assessment, setAssessment] = useState<AssessmentResponse | null>(null);
@@ -1975,6 +1982,8 @@ export default function Home() {
   const canShareReports = Boolean(userFeatures.share_reports);
   const canExportReports = Boolean(userFeatures.exports);
   const canLabelReports = me?.user?.tier === 'researcher';
+  const savedReportLimit = Number(userLimits.saved_reports || 0);
+  const protectedReportCount = reports.filter((report) => report.protected).length;
   const botReady = signedIn || !TURNSTILE_SITE_KEY || Boolean(botToken);
   const ready = useMemo(() => signedIn && botReady && (claim.trim().length > 0 || sourceUrl.trim().length > 0), [signedIn, botReady, claim, sourceUrl]);
   const speechReady = useMemo(() => signedIn && botReady && canUseSpeech && (speechTranscript.trim().length > 0 || (tryYouTubeCaptions && speechSourceUrl.trim().length > 0 && isYouTubeUrl(speechSourceUrl))), [signedIn, botReady, canUseSpeech, speechTranscript, speechSourceUrl, tryYouTubeCaptions]);
@@ -2425,7 +2434,11 @@ export default function Home() {
     setSharingReportId(report.assessment_id);
     setReportShareMessages((current) => ({ ...current, [report.assessment_id]: '' }));
     try {
-      const payload = await createReportShare(report.assessment_id, platform);
+      const payload = await createReportShare(report.assessment_id, {
+        platform,
+        recipient_email: reportShareRecipients[report.assessment_id] || '',
+        recipient_source: 'saved_report_library',
+      });
       const url = `${window.location.origin}/share/${payload.token}`;
       setReportShareLinks((current) => ({ ...current, [report.assessment_id]: url }));
       let copied = false;
@@ -2661,11 +2674,11 @@ export default function Home() {
         <details className="card reports" open={reportsOpen} onToggle={(event) => setReportsOpen(event.currentTarget.open)}>
           <summary className="reportsSummary">
             <span>Your reports</span>
-            <small className="reportsDesktopCount">{reports.length} saved to your account</small>
-            <small className="reportsMobileCount">{reports.length} saved · separate history</small>
+            <small className="reportsDesktopCount">{reports.length}{savedReportLimit ? `/${savedReportLimit}` : ''} saved · {protectedReportCount} protected</small>
+            <small className="reportsMobileCount">{reports.length}{savedReportLimit ? `/${savedReportLimit}` : ''} saved · {protectedReportCount} protected</small>
           </summary>
           <div className="reportsBody">
-            <p className="muted">Reports are saved to your account and mirrored locally as a fallback.</p>
+            <p className="muted">Reports open in a clean dedicated view. Retention follows your tier limit; protected reports are skipped by automatic cycling.</p>
             <form className="loadForm" onSubmit={(event) => { event.preventDefault(); if (reportIdInput.trim()) loadReport(reportIdInput); }}>
               <label>
                 Load by report ID
@@ -2684,6 +2697,15 @@ export default function Home() {
                 {canLabelReports && <div className="reportLabels">
                   {REPORT_LABELS.map(([value, label]) => <button className={(report.labels || []).includes(value) ? 'labelPill active' : 'labelPill'} key={value} onClick={() => toggleReportLabel(report, value)} type="button">{label}</button>)}
                 </div>}
+                <label className="shareRecipient compact">
+                  Optional share recipient
+                  <input
+                    value={reportShareRecipients[report.assessment_id] || ''}
+                    onChange={(event) => setReportShareRecipients((current) => ({ ...current, [report.assessment_id]: event.target.value }))}
+                    placeholder="name@example.com"
+                    type="email"
+                  />
+                </label>
                 <div className="reportActions">
                   <button className="secondary" onClick={() => openReportInNewTab(report.assessment_id)} type="button">View</button>
                   <button className="secondary" onClick={() => loadReport(report.assessment_id)} type="button">Load here</button>

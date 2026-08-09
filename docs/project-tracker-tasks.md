@@ -142,7 +142,7 @@ Date: 2026-05-10
 - Description: Once the verification core is stable, evaluate packaging Evidrai as an API/backend service or browser extension.
 
 ### Report history, retention, and sharing management
-- Status: Backlog
+- Status: Done
 - Priority: High
 - Area: Reports / Product / Growth
 - Description: Keep the main evidence UI clean by collapsing reports by default, adding tier-based report limits, protected/do-not-delete reports, delete actions, dedicated report views/new-tab opening, and optional share-recipient email capture.

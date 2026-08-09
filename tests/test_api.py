@@ -937,17 +937,33 @@ def test_free_user_can_create_simple_public_report_share(monkeypatch, tmp_path):
     monkeypatch.setattr(api_main, "_run_claim_assessment", fake_run_claim_assessment)
 
     assessment = client.post("/assessments/fast", json={"claim": "Free share claim"}, headers={"X-Evidrai-User-Id": "alice"}).json()
-    share = client.post(f"/reports/{assessment['assessment_id']}/share", json={"platform": "copy"}, headers={"X-Evidrai-User-Id": "alice"})
+    share = client.post(
+        f"/reports/{assessment['assessment_id']}/share",
+        json={"platform": "copy", "recipient_email": "Editor@Example.com", "recipient_source": "unit-test"},
+        headers={"X-Evidrai-User-Id": "alice"},
+    )
 
     assert share.status_code == 200
     assert share.json()["access_level"] == "simple"
+    assert share.json()["share"]["recipient_email"] == "editor@example.com"
+    assert share.json()["share"]["recipient_source"] == "unit-test"
     token = share.json()["token"]
     public = client.get(f"/public/reports/{token}")
     assert public.status_code == 200
     payload = public.json()
     assert payload["access_level"] == "simple"
+    assert "recipient_email" not in payload["share"]
+    assert "recipient_source" not in payload["share"]
     assert payload["assessment"]["request"]["claim"] == "Free share claim"
     assert payload["assessment"]["sources"] == []
+
+    invalid = client.post(
+        f"/reports/{assessment['assessment_id']}/share",
+        json={"platform": "copy", "recipient_email": "not-an-email"},
+        headers={"X-Evidrai-User-Id": "alice"},
+    )
+    assert invalid.status_code == 400
+    assert invalid.json()["detail"]["code"] == "invalid_recipient_email"
 
 
 def test_report_delete_and_protect_metadata(monkeypatch, tmp_path):
