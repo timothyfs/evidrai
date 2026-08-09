@@ -161,6 +161,23 @@ export default async function SharedReportPage({ params }: SharePageProps) {
             <small>{report.verdict.confidence} confidence</small>
           </div>
         </div>
+        <div className={`mobileVerdictBar ${tone}`} aria-label="Sticky verdict summary">
+          <div
+            className="claimSupportDial mobileClaimSupportDial"
+            role="meter"
+            aria-label={`Claim support: ${report.verdict.label}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={claimSupport}
+            style={{ '--claim-support-angle': `${claimSupportAngle}deg` } as CSSProperties}
+          >
+            <div className="claimSupportNeedle" />
+          </div>
+          <div>
+            <strong>Claim support: {report.verdict.label}</strong>
+            <span>{report.verdict.confidence || 'Unstated'} confidence · {isSimple ? 'Simple share' : `${report.sources?.length || 0} sources`}</span>
+          </div>
+        </div>
         <div className="reportAbstract">
           <p className="eyebrow">Abstract</p>
           <p>{abstract}</p>

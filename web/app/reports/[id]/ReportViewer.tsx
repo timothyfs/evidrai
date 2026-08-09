@@ -165,6 +165,23 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
           <small>{report.verdict.confidence} confidence</small>
         </div>
       </div>
+      <div className={`mobileVerdictBar ${tone}`} aria-label="Sticky verdict summary">
+        <div
+          className="claimSupportDial mobileClaimSupportDial"
+          role="meter"
+          aria-label={`Claim support: ${report.verdict.label}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={claimSupport}
+          style={{ '--claim-support-angle': `${claimSupportAngle}deg` } as CSSProperties}
+        >
+          <div className="claimSupportNeedle" />
+        </div>
+        <div>
+          <strong>Claim support: {report.verdict.label}</strong>
+          <span>{report.verdict.confidence || 'Unstated'} confidence · {report.sources?.length || 0} sources</span>
+        </div>
+      </div>
       <div className="assessmentNarrative">
         {report.verdict.summary && <p className="summary">{report.verdict.summary}</p>}
         {report.verdict.key_caveat && <p className="caveat"><strong>Key caveat</strong>{report.verdict.key_caveat}</p>}
