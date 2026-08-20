@@ -45,6 +45,12 @@ const verdictClass: Record<string, string> = {
   'Not supported by credible evidence': 'bad',
   'False / contradicted': 'bad',
   'Misleading framing': 'mixed',
+  'Mostly supported': 'good',
+  'Mixed support': 'mixed',
+  'Mixed evidence': 'mixed',
+  'Promising but incomplete': 'weak',
+  'Weak overall support': 'bad',
+  'No claims verified': 'weak',
 };
 
 function verdictTone(label: string) {
@@ -777,6 +783,74 @@ function checkedClaimVerdict(claim: SpeechCheckedClaim) {
   return claim.verified_verdict || claim.verdict || claim.pendulum_band || 'Unverified';
 }
 
+function claimPriorityWeight(priority?: string) {
+  const value = (priority || '').toLowerCase();
+  if (value.includes('high') || value.includes('critical')) return 1.35;
+  if (value.includes('low')) return 0.8;
+  return 1;
+}
+
+function claimSupportBucket(label: string, support: number) {
+  const verdict = label.toLowerCase();
+  if (verdict.includes('not supported') || verdict.includes('false') || verdict.includes('contradicted')) return 'unsupported';
+  if (verdict.includes('partly') || verdict.includes('misleading') || (support >= 40 && support < 65)) return 'mixed';
+  if ((verdict.includes('supported') || verdict.includes('likely')) && support >= 65) return 'supported';
+  return 'unclear';
+}
+
+function summariseSpeechVerification(verification: SpeechVerificationResult) {
+  const counts = { supported: 0, mixed: 0, unsupported: 0, unclear: 0 };
+  let weightedSupport = 0;
+  let totalWeight = 0;
+  let highImpactUnsupported = false;
+
+  verification.claims_checked.forEach((item) => {
+    const label = checkedClaimVerdict(item);
+    const support = claimSupportPercent(label, item.assessment?.verdict.evidence_strength_score);
+    const bucket = claimSupportBucket(label, support);
+    const weight = claimPriorityWeight(item.speech_claim?.priority);
+    counts[bucket] += 1;
+    weightedSupport += support * weight;
+    totalWeight += weight;
+    if (bucket === 'unsupported' && weight > 1) highImpactUnsupported = true;
+  });
+
+  const total = verification.claims_checked.length;
+  const supportPercent = totalWeight ? Math.round(weightedSupport / totalWeight) : 42;
+  const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'unclear';
+  const spread = `${counts.supported} supported / ${counts.mixed} mixed / ${counts.unsupported} unsupported / ${counts.unclear} unclear`;
+
+  let label = 'Mixed evidence';
+  let summary = 'Content quality is mixed: some claims hold up, but several need caveats or closer review.';
+  if (total === 0) {
+    label = 'No claims verified';
+    summary = 'No verified claims are available yet.';
+  } else if (counts.unsupported > 0 && (dominant === 'unsupported' || highImpactUnsupported || counts.unsupported / total >= 0.3)) {
+    label = 'Weak overall support';
+    summary = 'Content quality is weak: important claims are unsupported or contradicted.';
+  } else if (dominant === 'supported' && counts.unsupported === 0 && supportPercent >= 68) {
+    label = 'Mostly supported';
+    summary = 'Content quality looks broadly credible, with no major unsupported claims in this check.';
+  } else if (dominant === 'mixed' || supportPercent < 65) {
+    label = 'Mixed support';
+    summary = 'Content quality is uneven: treat the overall message with caveats.';
+  } else if (counts.unclear > 0) {
+    label = 'Promising but incomplete';
+    summary = 'Content quality leans credible, but some claims need stronger evidence.';
+  }
+
+  return {
+    counts,
+    label,
+    spread,
+    summary,
+    supportPercent,
+    supportAngle: supportPercent * 1.8,
+    tone: verdictTone(label),
+    total,
+  };
+}
+
 function SpeechResult({
   extraction,
   selectedClaims,
@@ -795,6 +869,8 @@ function SpeechResult({
   function toggleClaim(id: string) {
     setSelectedClaims(selectedClaims.includes(id) ? selectedClaims.filter((item) => item !== id) : [...selectedClaims, id]);
   }
+
+  const verificationSummary = verification ? summariseSpeechVerification(verification) : null;
 
   return (
     <section className="card resultCard">
@@ -850,6 +926,39 @@ function SpeechResult({
       {verification && (
         <details open>
           <summary>2. Verified claims · evidence assessment</summary>
+          {verificationSummary && (
+            <section className={`speechQualitySummary ${verificationSummary.tone}`} aria-label="Overall content quality">
+              <div>
+                <p className="eyebrow">Overall content quality</p>
+                <h3>{verificationSummary.label}</h3>
+                <p>{verificationSummary.summary}</p>
+                <div className="speechQualityBreakdown" aria-label={`Claim mix: ${verificationSummary.spread}`}>
+                  <span className="good" style={{ width: `${verificationSummary.total ? (verificationSummary.counts.supported / verificationSummary.total) * 100 : 0}%` }} />
+                  <span className="mixed" style={{ width: `${verificationSummary.total ? (verificationSummary.counts.mixed / verificationSummary.total) * 100 : 0}%` }} />
+                  <span className="bad" style={{ width: `${verificationSummary.total ? (verificationSummary.counts.unsupported / verificationSummary.total) * 100 : 0}%` }} />
+                  <span className="weak" style={{ width: `${verificationSummary.total ? (verificationSummary.counts.unclear / verificationSummary.total) * 100 : 0}%` }} />
+                </div>
+                <small>{verificationSummary.spread}</small>
+              </div>
+              <div className={`verdict verdictPanel ${verificationSummary.tone}`}>
+                <span>Overall support</span>
+                <div
+                  className="claimSupportDial"
+                  role="meter"
+                  aria-label={`Overall claim support: ${verificationSummary.label}`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={verificationSummary.supportPercent}
+                  style={{ '--claim-support-angle': `${verificationSummary.supportAngle}deg` } as CSSProperties}
+                >
+                  <div className="claimSupportNeedle" />
+                </div>
+                <strong>{verificationSummary.supportPercent}%</strong>
+                <div className="claimSupportScale" aria-hidden="true"><span>Low</span><span>Mixed</span><span>High</span></div>
+                <small>{verificationSummary.total} checked claims</small>
+              </div>
+            </section>
+          )}
           <div className="checkedClaims">
             {verification.claims_checked.map((item, index) => {
               const label = checkedClaimVerdict(item);
