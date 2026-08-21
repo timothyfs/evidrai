@@ -27,6 +27,10 @@ function truncateText(value: string, max = 140) {
   return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
 }
 
+function slugify(value: string, fallback: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 72) || fallback;
+}
+
 function claimTitle(report: AssessmentResponse) {
   return truncateText(report.request.claim || 'Evidence report', 96);
 }
@@ -203,18 +207,33 @@ export default async function SharedReportPage({ params }: SharePageProps) {
             <a className="button secondary printHidden" href="/">Verify this yourself</a>
           </section>
         ) : (
-          <section className="resultSection evidenceSourcesSection">
-            <h2>Evidence sources</h2>
-            <div className="sourceGrid">
-              {(report.sources || []).map((source, index) => (
-                <article className="sourceCard" key={source.id || source.url || index}>
-                  <div className="sourceTopline"><strong>{source.title || source.domain || 'Untitled source'}</strong><span>{source.source_type}</span></div>
-                  <p>{source.summary || source.classification_reason || source.url}</p>
-                  {source.url && <a href={source.url} rel="noreferrer" target="_blank">Open source</a>}
-                </article>
-              ))}
-            </div>
-          </section>
+          <>
+            {Boolean(report.claim_breakdown?.length) && (
+              <section className="resultSection reportBreakdownSection">
+                <h2>Claim breakdown</h2>
+                <div className="reportBreakdownGrid">
+                  {report.claim_breakdown.map((item, index) => (
+                    <article className="reportBreakdownCard" id={slugify(item.id || item.text, `claim-${index + 1}`)} key={item.id || item.text}>
+                      <div><strong>{item.text}</strong><span>{item.assessment} · {item.confidence}</span></div>
+                      {item.rationale && <p>{item.rationale}</p>}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+            <section className="resultSection evidenceSourcesSection">
+              <h2>Evidence sources</h2>
+              <div className="sourceGrid">
+                {(report.sources || []).map((source, index) => (
+                  <article className="sourceCard" key={source.id || source.url || index}>
+                    <div className="sourceTopline"><strong>{source.title || source.domain || 'Untitled source'}</strong><span>{source.source_type}</span></div>
+                    <p>{source.summary || source.classification_reason || source.url}</p>
+                    {source.url && <a href={source.url} rel="noreferrer" target="_blank">Open source</a>}
+                  </article>
+                ))}
+              </div>
+            </section>
+          </>
         )}
         <p className="printFooter">Shared report URL: {publicUrl}</p>
       </section>

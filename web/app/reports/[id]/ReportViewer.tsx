@@ -7,6 +7,12 @@ import { createReportShare, getMe, getReport, setAccessToken } from '../../../li
 import { getCurrentSession } from '../../../lib/auth';
 import { downloadText, evidencePacketJson, fileSafe, journalistBriefMarkdown, reportMarkdown } from './export';
 
+type ShareTarget = {
+  title: string;
+  text: string;
+  url: string;
+};
+
 function formatDate(value?: string) {
   if (!value) return '';
   const date = new Date(value);
@@ -17,6 +23,45 @@ function formatDate(value?: string) {
 function truncateText(value: string, max = 180) {
   const text = value.replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
+}
+
+function slugify(value: string, fallback: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 72) || fallback;
+}
+
+function shareTitle(report: AssessmentResponse) {
+  return `Evidrai report: ${truncateText(report.request.claim || 'Evidence report', 96)} — ${report.verdict.label}`;
+}
+
+function reportShareText(report: AssessmentResponse) {
+  return [
+    `Evidrai report: ${truncateText(report.request.claim || 'Evidence report', 120)}`,
+    `Verdict: ${report.verdict.label} (${report.verdict.confidence} confidence)`,
+    report.verdict.summary ? truncateText(report.verdict.summary, 220) : '',
+    `Sources reviewed: ${report.sources?.length || 0}`,
+    'Share caveat: confidence is not certainty; inspect the evidence and caveats before reposting.',
+  ].filter(Boolean).join('\n\n');
+}
+
+function claimShareText(report: AssessmentResponse, claim: NonNullable<AssessmentResponse['claim_breakdown']>[number]) {
+  return [
+    `Evidrai claim check: ${truncateText(claim.text || 'Claim', 140)}`,
+    `Assessment: ${claim.assessment} (${claim.confidence})`,
+    claim.rationale ? truncateText(claim.rationale, 220) : '',
+    `From broader report: ${truncateText(report.request.claim || 'Evidence report', 120)}`,
+  ].filter(Boolean).join('\n\n');
+}
+
+function shareChannels(target: ShareTarget) {
+  const body = `${target.text}\n\n${target.url}`;
+  const socialText = `${target.title}\n\n${target.text}`;
+  return [
+    { key: 'email', label: 'Email', href: `mailto:?subject=${encodeURIComponent(target.title)}&body=${encodeURIComponent(body)}` },
+    { key: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/?text=${encodeURIComponent(`${socialText}\n${target.url}`)}` },
+    { key: 'linkedin', label: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(target.url)}` },
+    { key: 'x', label: 'X', href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(target.url)}&text=${encodeURIComponent(socialText)}` },
+    { key: 'facebook', label: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(target.url)}` },
+  ];
 }
 
 function scoreLabel(score?: number | null, max = 10) {
@@ -55,6 +100,7 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
   const [shareUrl, setShareUrl] = useState('');
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
   const [notice, setNotice] = useState('');
   const [me, setMe] = useState<MeResponse | null>(null);
 
@@ -82,18 +128,44 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
     return () => { active = false; };
   }, [reportId]);
 
-  async function shareReport() {
+  async function ensureShareUrl() {
+    if (shareUrl) return shareUrl;
     setError('');
     setNotice('');
+    const payload = await createReportShare(reportId, 'copy');
+    const url = `${window.location.origin}/share/${payload.token}`;
+    setShareUrl(url);
+    return url;
+  }
+
+  async function openReportShare() {
+    if (!report) return;
     try {
-      const payload = await createReportShare(reportId, 'copy');
-      const url = `${window.location.origin}/share/${payload.token}`;
-      setShareUrl(url);
-      await navigator.clipboard?.writeText(url);
-      setNotice('Public share link copied.');
+      const url = await ensureShareUrl();
+      setShareTarget({ title: shareTitle(report), text: reportShareText(report), url });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create share link');
     }
+  }
+
+  async function openClaimShare(claim: NonNullable<AssessmentResponse['claim_breakdown']>[number], index: number) {
+    if (!report) return;
+    try {
+      const url = `${await ensureShareUrl()}#${slugify(claim.id || claim.text, `claim-${index + 1}`)}`;
+      setShareTarget({
+        title: `Evidrai claim check: ${truncateText(claim.text || `Claim ${index + 1}`, 88)}`,
+        text: claimShareText(report, claim),
+        url,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create claim share');
+    }
+  }
+
+  async function copyShareText() {
+    if (!shareTarget) return;
+    await navigator.clipboard?.writeText(`${shareTarget.text}\n\n${shareTarget.url}`);
+    setNotice('Share text copied.');
   }
 
   async function copyExecutiveSummary() {
@@ -146,6 +218,9 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
           <p className="eyebrow">Saved Evidrai report</p>
           <h1>{report.request.claim || 'Untitled claim'}</h1>
           <p className="resultSubcopy">Dedicated read-only report view. Share it, print it, or return to the workspace without cluttering the active assessment screen.</p>
+          <div className="topReportActions printHidden">
+            <button className="button" onClick={openReportShare} type="button">Share full report</button>
+          </div>
         </div>
         <div className={`verdict verdictPanel ${tone}`}>
           <span>Claim support</span>
@@ -201,7 +276,7 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
           <button className="button secondary" disabled={!canExport} onClick={downloadMarkdown} type="button">Export full Markdown</button>
           <button className="button secondary" disabled={!canExport} onClick={downloadJson} type="button">Export evidence JSON</button>
           <button className="button secondary" onClick={copyExecutiveSummary} type="button">Copy summary</button>
-          <button className="button secondary" onClick={shareReport} type="button">Create public share link</button>
+          <button className="button secondary" onClick={openReportShare} type="button">Share full report</button>
           <a className="button secondary" href="/">Verify another claim</a>
         </div>
         {!canExport && <p className="muted">Exports are available on Pro and Researcher / Journalist plans.</p>}
@@ -212,10 +287,11 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
         <section className="resultSection reportBreakdownSection">
           <h2>Claim breakdown</h2>
           <div className="reportBreakdownGrid">
-            {report.claim_breakdown.map((item) => (
-              <article className="reportBreakdownCard" key={item.id || item.text}>
+            {report.claim_breakdown.map((item, index) => (
+              <article className="reportBreakdownCard" id={slugify(item.id || item.text, `claim-${index + 1}`)} key={item.id || item.text}>
                 <div><strong>{item.text}</strong><span>{item.assessment} · {item.confidence}</span></div>
                 {item.rationale && <p>{item.rationale}</p>}
+                <button className="secondary compactShareButton printHidden" onClick={() => openClaimShare(item, index)} type="button">Share this claim</button>
               </article>
             ))}
           </div>
@@ -235,6 +311,25 @@ export default function ReportViewer({ reportId }: { reportId: string }) {
           ))}
         </div>
       </section>
+      {shareTarget && (
+        <div className="shareDialogBackdrop printHidden" role="presentation" onClick={() => setShareTarget(null)}>
+          <section className="shareDialog" role="dialog" aria-modal="true" aria-label="Share report" onClick={(event) => event.stopPropagation()}>
+            <div className="shareDialogHeader">
+              <div>
+                <p className="eyebrow">Share</p>
+                <h2>{shareTarget.title}</h2>
+              </div>
+              <button className="secondary" onClick={() => setShareTarget(null)} type="button">Close</button>
+            </div>
+            <div className="shareActions">
+              {shareChannels(shareTarget).map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}
+              <button className="button secondary" onClick={copyShareText} type="button">Copy text</button>
+            </div>
+            <div className="shareTextPreview compact"><label>Suggested share text<textarea readOnly value={shareTarget.text} onFocus={(event) => event.currentTarget.select()} /></label></div>
+            <div className="shareLinkRow"><input readOnly value={shareTarget.url} onFocus={(event) => event.currentTarget.select()} /><a className="button secondary" href={shareTarget.url} target="_blank" rel="noreferrer">Open</a></div>
+          </section>
+        </div>
+      )}
       <p className="printFooter">Generated by Evidrai. Assessment ID: {report.assessment_id}</p>
     </section>
   );

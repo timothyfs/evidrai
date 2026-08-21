@@ -970,6 +970,7 @@ function SpeechResult({
                   </div>
                   <div>
                     <strong>{item.speech_claim?.normalized_claim || item.speech_claim?.quote || `Claim ${index + 1}`}</strong>
+                    {item.assessment && <SpeechClaimShareControls assessment={item.assessment} index={index} />}
                     {item.assessment ? (
                       <div className="embeddedAssessment">
                         <AssessmentResult assessment={item.assessment} />
@@ -994,6 +995,37 @@ function SpeechResult({
         </details>
       )}
     </section>
+  );
+}
+
+function SpeechClaimShareControls({ assessment, index }: { assessment: AssessmentResponse; index: number }) {
+  const [publicUrl, setPublicUrl] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function createShare() {
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = await createReportShare(assessment.assessment_id, { platform: 'copy', recipient_source: 'speech_claim_share' });
+      const url = `${window.location.origin}/share/${payload.token}`;
+      setPublicUrl(url);
+      await navigator.clipboard?.writeText(shareText(url, assessment));
+      setMessage('Claim share text copied.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not create claim share');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const links = publicUrl ? shareUrls(publicUrl, assessment) : [];
+  return (
+    <div className="speechClaimShare printHidden">
+      <button className="secondary compactShareButton" disabled={busy} onClick={createShare} type="button">{busy ? 'Creating…' : publicUrl ? 'Copy claim share' : `Share claim ${index + 1}`}</button>
+      {publicUrl && links.map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}
+      {message && <small className={message.toLowerCase().includes('could not') ? 'error' : 'muted'}>{message}</small>}
+    </div>
   );
 }
 

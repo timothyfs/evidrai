@@ -2921,6 +2921,66 @@ html[data-theme="light"] .methodologyGuardrails {
 .shareActions { display: flex; flex-wrap: wrap; gap: 10px; }
 .shareActions .button, .shareActions button { width: auto; }
 .sharePanel input { font-size: .9rem; }
+.topReportActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.compactShareButton {
+  justify-self: start;
+  margin-top: 2px;
+  padding: 8px 11px;
+}
+.speechClaimShare {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.speechClaimShare .button,
+.speechClaimShare button {
+  width: auto;
+}
+.speechClaimShare small {
+  flex-basis: 100%;
+}
+.shareDialogBackdrop {
+  align-items: center;
+  background: rgba(4, 8, 15, 0.68);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 80;
+}
+.shareDialog {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.32);
+  display: grid;
+  gap: 14px;
+  max-height: min(760px, calc(100vh - 40px));
+  max-width: 680px;
+  overflow: auto;
+  padding: 18px;
+  width: min(100%, 680px);
+}
+.shareDialogHeader {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.shareDialogHeader h2 {
+  font-size: 1.2rem;
+  letter-spacing: 0;
+  line-height: 1.25;
+  margin: 2px 0 0;
+}
 .shareTextPreview label {
   color: var(--muted);
   display: grid;
