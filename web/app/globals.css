@@ -401,6 +401,31 @@ summary { cursor: pointer; font-weight: 900; }
 .speechQualityBreakdown .mixed { background: var(--mixed); }
 .speechQualityBreakdown .bad { background: var(--bad); }
 .speechQualityBreakdown .weak { background: var(--weak); }
+.speechReportSharePanel {
+  background: color-mix(in srgb, var(--accent) 10%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 18px;
+  display: grid;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 16px;
+}
+.speechReportSharePanel h3 {
+  font-size: 1.08rem;
+  letter-spacing: 0;
+  margin: 2px 0 4px;
+}
+.speechReportSharePanel p {
+  margin: 0;
+}
+.speechReportShareActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.speechReportShareActions .button {
+  width: auto;
+}
 .sourceGrid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .embeddedAssessment {
@@ -2052,6 +2077,20 @@ html[data-theme="light"] .guideSteps span {
   }
   .speechQualitySummary .verdictPanel {
     max-width: 320px;
+    width: 100%;
+  }
+  .speechReportShareActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .speechReportShareActions .button:first-child {
+    grid-column: 1 / -1;
+  }
+  .speechReportShareActions .button {
+    justify-content: center;
+    min-width: 0;
+    padding-left: 10px;
+    padding-right: 10px;
     width: 100%;
   }
   .assessmentHeader .verdictPanel { display: none; }

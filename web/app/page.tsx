@@ -959,6 +959,7 @@ function SpeechResult({
               </div>
             </section>
           )}
+          <SpeechReportShareControls extraction={extraction} verification={verification} verificationSummary={verificationSummary} />
           <div className="checkedClaims">
             {verification.claims_checked.map((item, index) => {
               const label = checkedClaimVerdict(item);
@@ -994,6 +995,91 @@ function SpeechResult({
           </div>
         </details>
       )}
+    </section>
+  );
+}
+
+function speechReportShareSubject(extraction: SpeechExtractionResult, verificationSummary: ReturnType<typeof summariseSpeechVerification> | null) {
+  const title = truncateShareText(extraction.title || 'YouTube evidence audit', 88);
+  return `Evidrai YouTube audit: ${title} — ${verificationSummary?.label || 'claims checked'}`;
+}
+
+function speechReportShareText(extraction: SpeechExtractionResult, verification: SpeechVerificationResult, verificationSummary: ReturnType<typeof summariseSpeechVerification> | null, publicUrl = '') {
+  const claimLines = verification.claims_checked.slice(0, 8).map((item, index) => {
+    const claim = item.speech_claim?.normalized_claim || item.speech_claim?.quote || `Claim ${index + 1}`;
+    return `${index + 1}. ${checkedClaimVerdict(item)} — ${truncateShareText(claim, 150)}`;
+  });
+  return [
+    `Evidrai YouTube audit: ${extraction.title || 'Video / transcript report'}`,
+    verificationSummary ? `${verificationSummary.label}: ${verificationSummary.summary}` : '',
+    verificationSummary ? `Claim mix: ${verificationSummary.spread}` : `Claims checked: ${verification.claims_checked_count}`,
+    claimLines.length ? `Checked claims:\n${claimLines.join('\n')}` : '',
+    'Share caveat: confidence is not certainty; inspect the evidence and caveats before reposting.',
+    publicUrl ? `Representative evidence link: ${publicUrl}` : '',
+  ].filter(Boolean).join('\n\n');
+}
+
+function speechReportShareUrls(title: string, text: string, publicUrl: string) {
+  const textWithUrl = publicUrl ? `${text}\n\n${publicUrl}` : text;
+  return [
+    { key: 'email', label: 'Email', href: `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(textWithUrl)}` },
+    { key: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/?text=${encodeURIComponent(textWithUrl)}` },
+    ...(publicUrl ? [
+      { key: 'linkedin', label: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(publicUrl)}` },
+      { key: 'x', label: 'X', href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(`${title}\n\n${text}`)}` },
+      { key: 'facebook', label: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}` },
+    ] : []),
+  ];
+}
+
+function SpeechReportShareControls({
+  extraction,
+  verification,
+  verificationSummary,
+}: {
+  extraction: SpeechExtractionResult;
+  verification: SpeechVerificationResult;
+  verificationSummary: ReturnType<typeof summariseSpeechVerification> | null;
+}) {
+  const [publicUrl, setPublicUrl] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const firstShareableAssessment = verification.claims_checked.find((item) => item.assessment)?.assessment;
+  const title = speechReportShareSubject(extraction, verificationSummary);
+  const text = speechReportShareText(extraction, verification, verificationSummary, publicUrl);
+  const links = speechReportShareUrls(title, text, publicUrl);
+
+  async function createCompleteShare() {
+    setBusy(true);
+    setMessage('');
+    try {
+      let url = publicUrl;
+      if (!url && firstShareableAssessment) {
+        const payload = await createReportShare(firstShareableAssessment.assessment_id, { platform: 'copy', recipient_source: 'speech_complete_share' });
+        url = `${window.location.origin}/share/${payload.token}`;
+        setPublicUrl(url);
+      }
+      await navigator.clipboard?.writeText(speechReportShareText(extraction, verification, verificationSummary, url));
+      setMessage(url ? 'Complete audit share text copied. Channel links are ready.' : 'Complete audit text copied.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not prepare complete audit share');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="speechReportSharePanel printHidden" aria-label="Share complete YouTube audit">
+      <div>
+        <p className="eyebrow">Complete report share</p>
+        <h3>Share the full YouTube audit</h3>
+        <p className="muted">Shares the overall summary and checked-claim list. The public link opens the first claim evidence report until combined audit shares are added server-side.</p>
+      </div>
+      <div className="speechReportShareActions">
+        <button className="button" disabled={busy} onClick={createCompleteShare} type="button">{busy ? 'Preparing…' : 'Share complete audit'}</button>
+        {links.map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}
+      </div>
+      {message && <p className={message.toLowerCase().includes('could not') ? 'error' : 'success'}>{message}</p>}
     </section>
   );
 }
