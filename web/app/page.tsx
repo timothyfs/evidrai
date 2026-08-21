@@ -1044,6 +1044,7 @@ function SpeechReportShareControls({
   const [publicUrl, setPublicUrl] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
   const firstShareableAssessment = verification.claims_checked.find((item) => item.assessment)?.assessment;
   const title = speechReportShareSubject(extraction, verificationSummary);
   const text = speechReportShareText(extraction, verification, verificationSummary, publicUrl);
@@ -1053,18 +1054,37 @@ function SpeechReportShareControls({
     setBusy(true);
     setMessage('');
     try {
-      let url = publicUrl;
-      if (!url && firstShareableAssessment) {
-        const payload = await createReportShare(firstShareableAssessment.assessment_id, { platform: 'copy', recipient_source: 'speech_complete_share' });
-        url = `${window.location.origin}/share/${payload.token}`;
-        setPublicUrl(url);
+      const shareTextValue = speechReportShareText(extraction, verification, verificationSummary, publicUrl);
+      if (navigator.share) {
+        await navigator.share({ title, text: shareTextValue, url: publicUrl || undefined });
+        setMessage('Complete audit shared.');
+      } else {
+        await navigator.clipboard?.writeText(publicUrl ? `${shareTextValue}\n\n${publicUrl}` : shareTextValue);
+        setMessage('Complete audit text copied.');
       }
-      await navigator.clipboard?.writeText(speechReportShareText(extraction, verification, verificationSummary, url));
-      setMessage(url ? 'Complete audit share text copied. Channel links are ready.' : 'Complete audit text copied.');
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Could not prepare complete audit share');
+      const cancelled = err instanceof Error && /abort|cancel/i.test(err.name || err.message);
+      if (!cancelled) setMessage(err instanceof Error ? err.message : 'Could not share complete audit');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function createPublicLink() {
+    if (!firstShareableAssessment) {
+      setMessage('No saved claim report is available for a public link yet.');
+      return;
+    }
+    setLinkBusy(true);
+    setMessage('');
+    try {
+      const payload = await createReportShare(firstShareableAssessment.assessment_id, { platform: 'copy', recipient_source: 'speech_complete_share' });
+      setPublicUrl(`${window.location.origin}/share/${payload.token}`);
+      setMessage('Public claim evidence link added to the share text.');
+    } catch {
+      setMessage('Audit text is still shareable. Public link creation is temporarily unavailable.');
+    } finally {
+      setLinkBusy(false);
     }
   }
 
@@ -1073,13 +1093,15 @@ function SpeechReportShareControls({
       <div>
         <p className="eyebrow">Complete report share</p>
         <h3>Share the full YouTube audit</h3>
-        <p className="muted">Shares the overall summary and checked-claim list. The public link opens the first claim evidence report until combined audit shares are added server-side.</p>
+        <p className="muted">Shares the overall summary and checked-claim list. Public evidence links are optional while combined audit shares are added server-side.</p>
       </div>
       <div className="speechReportShareActions">
         <button className="button" disabled={busy} onClick={createCompleteShare} type="button">{busy ? 'Preparing…' : 'Share complete audit'}</button>
         {links.map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}
+        <button className="button secondary" disabled={linkBusy || !firstShareableAssessment} onClick={createPublicLink} type="button">{linkBusy ? 'Adding link…' : publicUrl ? 'Refresh public link' : 'Add public link'}</button>
       </div>
-      {message && <p className={message.toLowerCase().includes('could not') ? 'error' : 'success'}>{message}</p>}
+      {publicUrl && <div className="shareLinkRow"><input readOnly value={publicUrl} onFocus={(event) => event.currentTarget.select()} /><a className="button secondary" href={publicUrl} target="_blank" rel="noreferrer">Open</a></div>}
+      {message && <p className={message.toLowerCase().includes('could not') || message.toLowerCase().includes('unavailable') ? 'error' : 'success'}>{message}</p>}
     </section>
   );
 }
