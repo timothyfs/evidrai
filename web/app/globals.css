@@ -3039,10 +3039,33 @@ html[data-theme="light"] .methodologyGuardrails {
 .shareTextPreview.compact textarea { min-height: 92px; }
 .publicReport { max-width: 1040px; margin: 28px auto; }
 .publicReport h1 { margin: 0; font-size: clamp(2rem, 5vw, 4rem); letter-spacing: -0.05em; }
+.shareSignupCta {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 12%, rgba(255,255,255,0.035));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 22px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 22px;
+  padding: 20px;
+}
+.shareSignupCta h2,
+.shareSignupCta p { margin: 0; }
+.shareSignupCta p:not(.eyebrow) {
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 8px;
+}
+.shareSignupCta .button { white-space: nowrap; }
 
 .shareLinkRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .shareLinkRow .button { white-space: nowrap; }
-@media (max-width: 640px) { .shareLinkRow { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .shareLinkRow,
+  .shareSignupCta { grid-template-columns: 1fr; }
+  .shareSignupCta .button { width: 100%; white-space: normal; }
+}
 
 .reportAbstract {
   background: color-mix(in srgb, var(--accent) 9%, transparent);

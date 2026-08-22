@@ -100,6 +100,10 @@ function publicShareUrl(token: string, headerList: Headers) {
   return process.env.NEXT_PUBLIC_WEB_BASE_URL ? `${process.env.NEXT_PUBLIC_WEB_BASE_URL.replace(/\/$/, '')}/share/${token}` : host ? `${proto}://${host}/share/${token}` : `/share/${token}`;
 }
 
+function publicShareImageUrl(token: string, headerList: Headers) {
+  return `${publicShareUrl(token, headerList).replace(/\/$/, '')}/opengraph-image`;
+}
+
 type SharePageProps = { params: Promise<{ token: string }> };
 
 export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {
@@ -116,11 +120,19 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
   const description = reportAbstract(payload.assessment, isSimple);
   const headerList = await headers();
   const url = publicShareUrl(token, headerList);
+  const imageUrl = publicShareImageUrl(token, headerList);
   return {
     title,
     description,
-    openGraph: { title, description, url, type: 'article', siteName: 'Evidrai' },
-    twitter: { card: 'summary_large_image', title, description },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: 'article',
+      siteName: 'Evidrai',
+      images: [{ url: imageUrl, width: 1200, height: 630, alt: `${payload.assessment.verdict.label} Evidrai verification result` }],
+    },
+    twitter: { card: 'summary_large_image', title, description, images: [imageUrl] },
   };
 }
 
@@ -207,6 +219,14 @@ export default async function SharedReportPage({ params }: SharePageProps) {
             {shareLinks(publicUrl, title, abstract).map(([label, href]) => <a className="button secondary" href={href} key={label} rel="noreferrer" target="_blank">{label}</a>)}
           </div>
           <p className="muted">PDF export uses your browser print dialog. Choose “Save as PDF”. For Instagram, copy this page URL and paste it into a story sticker, caption, bio, or DM.</p>
+        </section>
+        <section className="shareSignupCta resultSection printHidden">
+          <div>
+            <p className="eyebrow">Trust verification</p>
+            <h2>Check the next claim with Evidrai.</h2>
+            <p>Run your own verification, inspect the evidence trail, and share a branded result that carries the verdict with the caveats.</p>
+          </div>
+          <a className="button" href="/#sign-in">Sign up for trust verification</a>
         </section>
         {isSimple ? (
           <section className="resultSection evidenceSourcesSection">
