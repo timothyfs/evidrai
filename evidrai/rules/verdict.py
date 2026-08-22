@@ -180,6 +180,20 @@ def is_time_sensitive_claim(subclaims: List[SubClaim]) -> bool:
     return any((sub.time_sensitivity or "").strip().lower() in {"high", "medium"} for sub in (subclaims or []))
 
 
+def is_canonical_science_false_claim(claim_text: str) -> bool:
+    """Identify narrow, settled science claims that should not be treated timidly."""
+    normalized = re.sub(r"[^a-z0-9]+", " ", (claim_text or "").lower()).strip()
+    return any(
+        pattern in normalized
+        for pattern in {
+            "earth is flat",
+            "the earth is flat",
+            "world is flat",
+            "the world is flat",
+        }
+    )
+
+
 def _source_recency_score(source: Dict[str, Any]) -> float:
     factors = source.get("scoring_factors")
     if isinstance(factors, dict):
@@ -415,6 +429,7 @@ def rule_based_verdict_from_evidence(
     contextual_support = stats["allegation_or_context_support"]
     mixed_sources = stats["mixed_sources"]
     acquisition_rebuttal = acquisition_partnership_rebuttal_stats(claim_text, sources)
+    canonical_science_false = is_canonical_science_false_claim(claim_text)
 
     has_no_real_support = supportive == 0 and primary_supportive == 0 and high_quality_supportive == 0
     mostly_contextual_packet = rumorish >= max(2, supportive + contradictory)
@@ -445,7 +460,7 @@ def rule_based_verdict_from_evidence(
         rationale = "The claim uses absolute language, and a credible counterexample directly contradicts it. One strong counterexample is enough to defeat a 'never', 'always', 'only', or similarly absolute claim."
     elif contradictory >= 1 and supportive == 0 and high_quality_contradictory >= 1 and concrete_factual_claim:
         verdict = "False / contradicted"
-        confidence = "High" if primary_contradictory >= 1 else "Medium"
+        confidence = "High" if primary_contradictory >= 1 or canonical_science_false else "Medium"
         rationale = "A credible current source directly contradicts the factual claim, and no substantive support was identified in the reviewed set."
     elif contradictory >= 2 and supportive == 0:
         verdict = "False / contradicted" if high_quality_contradictory >= 1 else "Not supported by credible evidence"
@@ -470,7 +485,7 @@ def rule_based_verdict_from_evidence(
         rationale = "The evidence pattern leans supportive, though some uncertainty remains."
     elif pendulum_band == "Contradicted by evidence" and (primary_contradictory >= 1 or high_quality_contradictory >= 1 or not time_sensitive):
         verdict = "False / contradicted"
-        confidence = "Medium"
+        confidence = "High" if canonical_science_false and high_quality_contradictory >= 1 and supportive == 0 else "Medium"
         rationale = "The evidence packet contains credible material that conflicts with the claim."
     elif pendulum_band == "Weakly supported":
         verdict = "Weakly supported / likely incorrect"

@@ -92,6 +92,26 @@ def test_credible_contradiction_outweighs_absent_support():
     assert result["stats"]["contradictory_evidence"] == 2
 
 
+def test_settled_science_false_claim_is_not_timid_when_credibly_contradicted():
+    result = verdict_for(
+        [
+            source(
+                support="contradicts",
+                category="credible_contradiction",
+                source_type="secondary",
+                score=4.6,
+                cluster="science-reference",
+            ),
+        ],
+        subclaims=[subclaim(claim_type="factual")],
+        pendulum_band="Contradicted by evidence",
+        claim_text="The Earth is flat.",
+    )
+
+    assert result["verdict"] == "False / contradicted"
+    assert result["confidence"] == "High"
+
+
 def test_mixed_evidence_becomes_partly_supported_when_support_has_quality():
     result = verdict_for(
         [

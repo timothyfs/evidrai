@@ -39,6 +39,7 @@ function claimSupportPercent(verdict: string, score?: number | null) {
   };
   const label = (verdict || '').toLowerCase();
   if (label.includes('not supported') || label.includes('false') || label.includes('contradicted')) return withinBucket(8, 28, 12, true);
+  if (label.includes('unverified') || label.includes('reported but unconfirmed')) return withinBucket(10, 32, 18);
   if (label.includes('partly') || label.includes('misleading') || label.includes('mixed')) return withinBucket(44, 62, 52);
   if (label.includes('weakly') || label.includes('weak overall') || label.includes('promising but incomplete')) return withinBucket(24, 42, 30);
   if (label.includes('likely')) return withinBucket(66, 86, 72);
