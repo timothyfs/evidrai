@@ -176,7 +176,26 @@ def is_soft_or_hard_to_verify_claim(subclaims: List[SubClaim]) -> bool:
     return all((sub.claim_type or "other").lower() in soft_types for sub in (subclaims or []))
 
 
-def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
+def is_time_sensitive_claim(subclaims: List[SubClaim]) -> bool:
+    return any((sub.time_sensitivity or "").strip().lower() in {"high", "medium"} for sub in (subclaims or []))
+
+
+def _source_recency_score(source: Dict[str, Any]) -> float:
+    factors = source.get("scoring_factors")
+    if isinstance(factors, dict):
+        value = factors.get("recency")
+        if value is not None:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                pass
+    try:
+        return float(source.get("recency_score") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def compute_evidence_stats(sources: List[Dict[str, Any]], *, time_sensitive: bool = False) -> Dict[str, Any]:
     stats = {
         "supportive_evidence": 0,
         "contradictory_evidence": 0,
@@ -190,6 +209,8 @@ def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
         "contradictory_reporting": 0,
         "high_quality_supportive": 0,
         "high_quality_contradictory": 0,
+        "stale_supportive_evidence": 0,
+        "stale_contradictory_evidence": 0,
         "unique_clusters": set(),
     }
     for s in sources or []:
@@ -201,11 +222,18 @@ def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         source_type = (s.get("source_type") or "").lower()
         is_primaryish = source_type in {"primary", "scientific", "official", "government", "legal", "court", "parliament", "document", "record"}
-        is_high_quality = is_primaryish or source_type == "secondary" or float(s.get("weighted_score") or 0) >= 4.25
+        recency = _source_recency_score(s)
+        stale_for_time_sensitive_claim = time_sensitive and not is_primaryish and recency < 3.0
+        is_high_quality = is_primaryish or (
+            not stale_for_time_sensitive_claim
+            and (source_type in {"news", "secondary"} or float(s.get("weighted_score") or 0) >= 4.25)
+        )
 
         if category in {"direct_evidence", "credible_reporting", "expert_analysis"}:
             if support == "supports":
                 stats["supportive_evidence"] += 1
+                if stale_for_time_sensitive_claim:
+                    stats["stale_supportive_evidence"] += 1
                 if category == "credible_reporting":
                     stats["supportive_reporting"] += 1
                 if is_primaryish or category == "direct_evidence":
@@ -214,6 +242,8 @@ def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
                     stats["high_quality_supportive"] += 1
             elif support == "contradicts":
                 stats["contradictory_evidence"] += 1
+                if stale_for_time_sensitive_claim:
+                    stats["stale_contradictory_evidence"] += 1
                 if category == "credible_reporting":
                     stats["contradictory_reporting"] += 1
                 if is_primaryish or category == "direct_evidence":
@@ -224,6 +254,8 @@ def compute_evidence_stats(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
                 stats["mixed_sources"] += 1
         elif category == "credible_contradiction":
             stats["contradictory_evidence"] += 1
+            if stale_for_time_sensitive_claim:
+                stats["stale_contradictory_evidence"] += 1
             if is_primaryish:
                 stats["primary_contradictory"] += 1
             if is_high_quality:
@@ -365,7 +397,8 @@ def rule_based_verdict_from_evidence(
     sources: List[Dict[str, Any]],
     pendulum_band: str,
 ) -> Dict[str, Any]:
-    stats = compute_evidence_stats(sources)
+    time_sensitive = is_time_sensitive_claim(subclaims)
+    stats = compute_evidence_stats(sources, time_sensitive=time_sensitive)
     flags = collect_risk_flags(subclaims)
     soft_claim = is_soft_or_hard_to_verify_claim(subclaims)
     serious_allegation = any((sub.claim_type or "").lower() in SERIOUS_ALLEGATION_TYPES for sub in (subclaims or []))
@@ -435,7 +468,7 @@ def rule_based_verdict_from_evidence(
         verdict = "Likely supported"
         confidence = "Medium"
         rationale = "The evidence pattern leans supportive, though some uncertainty remains."
-    elif pendulum_band == "Contradicted by evidence":
+    elif pendulum_band == "Contradicted by evidence" and (primary_contradictory >= 1 or high_quality_contradictory >= 1 or not time_sensitive):
         verdict = "False / contradicted"
         confidence = "Medium"
         rationale = "The evidence packet contains credible material that conflicts with the claim."
@@ -552,6 +585,8 @@ def align_reasoning_with_rules(reasoning: Dict[str, Any], rule_view: Dict[str, A
         evidence_assessment["evidence_gaps"].append("Part of the claim is interpretive, rhetorical, predictive, or otherwise difficult to verify directly.")
     if rule_view.get("absolute_claim"):
         evidence_assessment["evidence_gaps"].append("Absolute claims require counterexample checking; one credible exception can materially change the verdict.")
+    if stats.get("stale_contradictory_evidence", 0) > 0 and stats.get("high_quality_contradictory", 0) == 0:
+        evidence_assessment["evidence_gaps"].append("Contradicting evidence is dated for a time-sensitive claim; newer primary, official, or current reporting should carry more weight.")
     rebuttal = rule_view.get("acquisition_partnership_rebuttal") or {}
     if rebuttal.get("triggered"):
         evidence_assessment["evidence_gaps"].append("Reviewed sources describe partnership or joint-solution activity, not acquisition evidence for the claim as stated.")

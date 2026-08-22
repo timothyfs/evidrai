@@ -17,6 +17,7 @@ def source(
     category="direct_evidence",
     source_type="primary",
     score=4.6,
+    recency=4.0,
     cluster="cluster",
 ):
     return {
@@ -26,6 +27,7 @@ def source(
         "claim_support": support,
         "evidence_category": category,
         "weighted_score": score,
+        "recency_score": recency,
         "narrative_cluster": cluster,
     }
 
@@ -262,6 +264,29 @@ def test_contradicted_claim_uses_clear_unsupported_framing():
     assert aligned["verified_verdict"] == "False / contradicted"
     assert aligned["consensus_strength"] == "Claim unsupported; credible contradiction found"
     assert aligned["consensus_summary"].startswith("Claim unsupported; credible contradiction found.")
+
+
+def test_time_sensitive_claim_does_not_overweight_stale_secondary_contradiction():
+    result = verdict_for(
+        [
+            source(
+                support="contradicts",
+                category="credible_contradiction",
+                source_type="news",
+                score=4.5,
+                recency=1.0,
+                cluster="old-pbs-context",
+            ),
+        ],
+        subclaims=[subclaim(claim_type="factual")],
+        pendulum_band="Contradicted by evidence",
+        claim_text="A recent software release supports this capability",
+    )
+
+    assert result["stats"]["contradictory_evidence"] == 1
+    assert result["stats"]["stale_contradictory_evidence"] == 1
+    assert result["stats"]["high_quality_contradictory"] == 0
+    assert result["verdict"] != "False / contradicted"
 
 
 def test_acquisition_claim_with_only_partnership_evidence_is_not_plain_unverified():
