@@ -337,6 +337,16 @@ export function setAccessToken(token: string) {
   accessToken = token;
 }
 
+async function refreshAccessToken() {
+  try {
+    const session = await getCurrentSession();
+    accessToken = session?.access_token || '';
+  } catch {
+    accessToken = '';
+  }
+  return accessToken;
+}
+
 export function setAccountProfile(profile: AccountProfile) {
   if (typeof window !== 'undefined') window.localStorage.setItem(ACCOUNT_KEY, JSON.stringify(profile));
 }
@@ -361,6 +371,7 @@ export function getAccountProfile(): AccountProfile {
 
 async function request<T>(path: string, init?: RequestInit, options?: { sameOrigin?: boolean }): Promise<T> {
   const account = getAccountProfile();
+  const token = await refreshAccessToken();
   let response: Response;
   try {
     response = await fetch(`${options?.sameOrigin ? '' : API_BASE_URL}${path}`, {
@@ -369,7 +380,7 @@ async function request<T>(path: string, init?: RequestInit, options?: { sameOrig
       headers: {
         'Content-Type': 'application/json',
         'X-Evidrai-User-Id': account.owner_id,
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init?.headers || {}),
       },
     });
