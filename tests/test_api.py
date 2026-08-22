@@ -723,8 +723,9 @@ def test_speech_verify_requires_selected_claims(monkeypatch):
     assert "selected claim" in response.json()["detail"]
 
 
-def test_speech_verify_defaults_to_fast_without_tavily(monkeypatch):
+def test_speech_verify_defaults_to_fast_without_tavily(monkeypatch, tmp_path):
     grant_tier(monkeypatch, "pro")
+    monkeypatch.setenv("EVIDRAI_REPORT_STORE", str(tmp_path / "reports"))
     monkeypatch.setattr(api_main, "turnstile_configured", lambda: True)
 
     class FakeLLM:
@@ -741,13 +742,33 @@ def test_speech_verify_defaults_to_fast_without_tavily(monkeypatch):
             "speech_claim": claim,
             "audit_index": index,
             "verification_mode": mode,
-            "verdict": "Unverified",
+            "verified_verdict": "Supported",
+            "verified_confidence": "High",
+            "confidence_score": 82,
+            "summary": "The claim is supported.",
+            "sources": [
+                {
+                    "title": "Primary source",
+                    "url": "https://example.com/source",
+                    "domain": "example.com",
+                    "source_type": "primary",
+                    "claim_support": "supports",
+                    "evidence_category": "direct",
+                    "source_role": "evidence",
+                    "weighted_score": 8.2,
+                    "summary": "Source summary.",
+                }
+            ],
         },
     )
 
     response = client.post(
         "/speech/verify",
-        json={"claims": [{"id": "claim_1", "quote": "Quote", "normalized_claim": "Normalized claim"}], "verification_mode": "fast"},
+        json={
+            "claims": [{"id": "claim_1", "quote": "Quote", "normalized_claim": "Normalized claim", "priority": "high"}],
+            "source_url": "https://youtube.com/watch?v=abc123",
+            "verification_mode": "fast",
+        },
     )
 
     assert response.status_code == 200
@@ -755,6 +776,11 @@ def test_speech_verify_defaults_to_fast_without_tavily(monkeypatch):
     assert payload["schema_version"] == "speech_verification.v1"
     assert payload["claims_checked_count"] == 1
     assert payload["claims_checked"][0]["verification_mode"] == "fast"
+    assert payload["assessment_id"]
+    assert payload["assessment"]["assessment_id"] == payload["assessment_id"]
+    assert payload["assessment"]["mode"] == "speech-summary-fast"
+    assert payload["assessment"]["request"]["claim"] == "YouTube / speech audit summary"
+    assert payload["assessment_id"] != payload["claims_checked"][0]["assessment_id"]
 
 
 def test_speech_audit_defaults_to_fast_without_tavily(monkeypatch):

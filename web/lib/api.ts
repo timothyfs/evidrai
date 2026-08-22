@@ -301,6 +301,8 @@ export type SpeechVerificationResult = {
   source_url: string;
   claims_checked: SpeechCheckedClaim[];
   claims_checked_count: number;
+  assessment_id?: string;
+  assessment?: AssessmentResponse | null;
   verification_mode: 'fast' | 'deep';
 };
 

@@ -290,13 +290,21 @@ function evidenceStrengthLabel(score?: number | null, verdict?: string) {
 }
 
 function claimSupportPercent(verdict: string, score?: number | null) {
-  if (typeof score === 'number' && Number.isFinite(score)) return Math.max(0, Math.min(100, Math.round(score * 10)));
+  const boundedScore = typeof score === 'number' && Number.isFinite(score)
+    ? Math.max(0, Math.min(10, Math.abs(score)))
+    : null;
+  const withinBucket = (min: number, max: number, fallback: number, inverted = false) => {
+    if (boundedScore === null) return fallback;
+    const ratio = boundedScore / 10;
+    const value = inverted ? max - ratio * (max - min) : min + ratio * (max - min);
+    return Math.round(Math.max(min, Math.min(max, value)));
+  };
   const label = (verdict || '').toLowerCase();
-  if (label.includes('supported') && !label.includes('weakly') && !label.includes('partly')) return 84;
-  if (label.includes('likely')) return 72;
-  if (label.includes('partly') || label.includes('misleading')) return 52;
-  if (label.includes('weakly')) return 30;
-  if (label.includes('not supported') || label.includes('false') || label.includes('contradicted')) return 12;
+  if (label.includes('not supported') || label.includes('false') || label.includes('contradicted')) return withinBucket(8, 28, 12, true);
+  if (label.includes('partly') || label.includes('misleading') || label.includes('mixed')) return withinBucket(44, 62, 52);
+  if (label.includes('weakly') || label.includes('weak overall') || label.includes('promising but incomplete')) return withinBucket(24, 42, 30);
+  if (label.includes('likely')) return withinBucket(66, 86, 72);
+  if (label.includes('supported')) return withinBucket(72, 94, 84);
   return 42;
 }
 
@@ -1015,7 +1023,7 @@ function speechReportShareText(extraction: SpeechExtractionResult, verification:
     verificationSummary ? `Claim mix: ${verificationSummary.spread}` : `Claims checked: ${verification.claims_checked_count}`,
     claimLines.length ? `Checked claims:\n${claimLines.join('\n')}` : '',
     'Share caveat: confidence is not certainty; inspect the evidence and caveats before reposting.',
-    publicUrl ? `Representative evidence link: ${publicUrl}` : '',
+    publicUrl ? `Public audit summary link: ${publicUrl}` : '',
   ].filter(Boolean).join('\n\n');
 }
 
@@ -1045,7 +1053,7 @@ function SpeechReportShareControls({
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [linkBusy, setLinkBusy] = useState(false);
-  const firstShareableAssessment = verification.claims_checked.find((item) => item.assessment)?.assessment;
+  const summaryAssessment = verification.assessment || null;
   const title = speechReportShareSubject(extraction, verificationSummary);
   const text = speechReportShareText(extraction, verification, verificationSummary, publicUrl);
   const links = speechReportShareUrls(title, text, publicUrl);
@@ -1071,16 +1079,16 @@ function SpeechReportShareControls({
   }
 
   async function createPublicLink() {
-    if (!firstShareableAssessment) {
-      setMessage('No saved claim report is available for a public link yet.');
+    if (!summaryAssessment) {
+      setMessage('No saved summary report is available for a public link yet.');
       return;
     }
     setLinkBusy(true);
     setMessage('');
     try {
-      const payload = await createReportShare(firstShareableAssessment.assessment_id, { platform: 'copy', recipient_source: 'speech_complete_share' });
+      const payload = await createReportShare(summaryAssessment.assessment_id, { platform: 'copy', recipient_source: 'speech_complete_share' });
       setPublicUrl(`${window.location.origin}/share/${payload.token}`);
-      setMessage('Public claim evidence link added to the share text.');
+      setMessage('Public YouTube audit summary link added to the share text.');
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Audit text is still shareable. Public link creation is temporarily unavailable.');
     } finally {
@@ -1093,12 +1101,12 @@ function SpeechReportShareControls({
       <div>
         <p className="eyebrow">Complete report share</p>
         <h3>Share the full YouTube audit</h3>
-        <p className="muted">Shares the overall summary and checked-claim list. Public evidence links are optional while combined audit shares are added server-side.</p>
+        <p className="muted">Shares the overall summary and checked-claim list, with a public link to the combined audit report.</p>
       </div>
       <div className="speechReportShareActions">
         <button className="button" disabled={busy} onClick={createCompleteShare} type="button">{busy ? 'Preparing…' : 'Share complete audit'}</button>
         {links.map((link) => <a className="button secondary" href={link.href} key={link.key} rel="noreferrer" target="_blank">{link.label}</a>)}
-        <button className="button secondary" disabled={linkBusy || !firstShareableAssessment} onClick={createPublicLink} type="button">{linkBusy ? 'Adding link…' : publicUrl ? 'Refresh public link' : 'Add public link'}</button>
+        <button className="button secondary" disabled={linkBusy || !summaryAssessment} onClick={createPublicLink} type="button">{linkBusy ? 'Adding link…' : publicUrl ? 'Refresh public link' : 'Add public link'}</button>
       </div>
       {publicUrl && <div className="shareLinkRow"><input readOnly value={publicUrl} onFocus={(event) => event.currentTarget.select()} /><a className="button secondary" href={publicUrl} target="_blank" rel="noreferrer">Open</a></div>}
       {message && <p className={message.toLowerCase().includes('could not') || message.toLowerCase().includes('unavailable') ? 'error' : 'success'}>{message}</p>}

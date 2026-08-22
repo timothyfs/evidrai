@@ -85,13 +85,21 @@ function verdictTone(label: string) {
 }
 
 function claimSupportPercent(verdict: string, score?: number | null) {
-  if (typeof score === 'number' && Number.isFinite(score)) return Math.max(0, Math.min(100, Math.round(score * 10)));
+  const boundedScore = typeof score === 'number' && Number.isFinite(score)
+    ? Math.max(0, Math.min(10, Math.abs(score)))
+    : null;
+  const withinBucket = (min: number, max: number, fallback: number, inverted = false) => {
+    if (boundedScore === null) return fallback;
+    const ratio = boundedScore / 10;
+    const value = inverted ? max - ratio * (max - min) : min + ratio * (max - min);
+    return Math.round(Math.max(min, Math.min(max, value)));
+  };
   const label = (verdict || '').toLowerCase();
-  if (label.includes('supported') && !label.includes('weakly') && !label.includes('partly')) return 84;
-  if (label.includes('likely')) return 72;
-  if (label.includes('partly') || label.includes('misleading')) return 52;
-  if (label.includes('weakly')) return 30;
-  if (label.includes('not supported') || label.includes('false') || label.includes('contradicted')) return 12;
+  if (label.includes('not supported') || label.includes('false') || label.includes('contradicted')) return withinBucket(8, 28, 12, true);
+  if (label.includes('partly') || label.includes('misleading') || label.includes('mixed')) return withinBucket(44, 62, 52);
+  if (label.includes('weakly') || label.includes('weak overall') || label.includes('promising but incomplete')) return withinBucket(24, 42, 30);
+  if (label.includes('likely')) return withinBucket(66, 86, 72);
+  if (label.includes('supported')) return withinBucket(72, 94, 84);
   return 42;
 }
 

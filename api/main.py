@@ -891,6 +891,171 @@ def _attach_saved_speech_assessments(checked_claims: list[Dict[str, Any]], *, so
     return enriched
 
 
+def _speech_claim_verdict(result: Dict[str, Any]) -> str:
+    return str(result.get("verified_verdict") or result.get("verdict") or result.get("pendulum_band") or "Unverified")
+
+
+def _speech_claim_support_percent(verdict: str, score: Any = None) -> int:
+    try:
+        if score is not None:
+            return max(0, min(100, int(round(float(score) * 10))))
+    except (TypeError, ValueError):
+        pass
+    label = verdict.lower()
+    if "supported" in label and "weakly" not in label and "partly" not in label:
+        return 84
+    if "likely" in label:
+        return 72
+    if "partly" in label or "misleading" in label:
+        return 52
+    if "weakly" in label:
+        return 30
+    if "not supported" in label or "false" in label or "contradicted" in label:
+        return 12
+    return 42
+
+
+def _speech_claim_bucket(verdict: str, support: int) -> str:
+    label = verdict.lower()
+    if "not supported" in label or "false" in label or "contradicted" in label:
+        return "unsupported"
+    if "partly" in label or "misleading" in label or 40 <= support < 65:
+        return "mixed"
+    if ("supported" in label or "likely" in label) and support >= 65:
+        return "supported"
+    return "unclear"
+
+
+def _speech_priority_weight(priority: str = "") -> float:
+    value = priority.lower()
+    if "high" in value or "critical" in value:
+        return 1.35
+    if "low" in value:
+        return 0.8
+    return 1.0
+
+
+def _save_speech_summary_assessment(
+    checked_claims: list[Dict[str, Any]],
+    *,
+    source_url: str,
+    mode: str,
+    owner_id: str = "",
+    profile: Any | None = None,
+) -> AssessmentResponse | None:
+    if not checked_claims:
+        return None
+
+    counts = {"supported": 0, "mixed": 0, "unsupported": 0, "unclear": 0}
+    weighted_support = 0.0
+    total_weight = 0.0
+    high_impact_unsupported = False
+    sources: list[Dict[str, Any]] = []
+    seen_source_keys: set[str] = set()
+    subclaims: list[Dict[str, Any]] = []
+
+    for index, item in enumerate(checked_claims, start=1):
+        speech_claim = item.get("speech_claim") or {}
+        assessment_payload = item.get("assessment") or {}
+        verdict = _speech_claim_verdict(item)
+        evidence_score = ((assessment_payload.get("verdict") or {}).get("evidence_strength_score") if isinstance(assessment_payload, dict) else None)
+        support = _speech_claim_support_percent(verdict, evidence_score)
+        bucket = _speech_claim_bucket(verdict, support)
+        weight = _speech_priority_weight(str(speech_claim.get("priority") or ""))
+        counts[bucket] += 1
+        weighted_support += support * weight
+        total_weight += weight
+        if bucket == "unsupported" and weight > 1:
+            high_impact_unsupported = True
+
+        claim_text = str(speech_claim.get("normalized_claim") or speech_claim.get("quote") or f"Claim {index}")
+        subclaims.append(
+            {
+                "id": str(speech_claim.get("id") or f"speech_claim_{index}"),
+                "text": claim_text,
+                "claim_type": str(speech_claim.get("claim_type") or "speech_claim"),
+            }
+        )
+
+        for source in item.get("sources") or (assessment_payload.get("sources") if isinstance(assessment_payload, dict) else []) or []:
+            if not isinstance(source, dict):
+                continue
+            key = str(source.get("url") or source.get("title") or source.get("id") or "")
+            if not key or key in seen_source_keys:
+                continue
+            seen_source_keys.add(key)
+            sources.append(source)
+
+    total = len(checked_claims)
+    support_percent = int(round(weighted_support / total_weight)) if total_weight else 42
+    dominant = max(counts.items(), key=lambda item: item[1])[0]
+    label = "Mixed support"
+    summary = "Content quality is uneven: treat the overall message with caveats."
+    confidence = "Medium"
+    if counts["unsupported"] > 0 and (dominant == "unsupported" or high_impact_unsupported or counts["unsupported"] / total >= 0.3):
+        label = "Weakly supported"
+        summary = "Content quality is weak: important claims are unsupported or contradicted."
+        confidence = "Medium"
+    elif dominant == "supported" and counts["unsupported"] == 0 and support_percent >= 68:
+        label = "Likely supported"
+        summary = "Content quality looks broadly credible, with no major unsupported claims in this check."
+        confidence = "High"
+    elif counts["unclear"] > 0 and support_percent >= 65:
+        label = "Likely supported"
+        summary = "Content quality leans credible, but some claims need stronger evidence."
+        confidence = "Medium"
+
+    spread = f"{counts['supported']} supported / {counts['mixed']} mixed / {counts['unsupported']} unsupported / {counts['unclear']} unclear"
+    title = "YouTube / speech audit summary"
+    result = {
+        "verified_verdict": label,
+        "verified_confidence": confidence,
+        "confidence_score": support_percent,
+        "summary": summary,
+        "consensus_summary": f"{summary} Claim mix: {spread}",
+        "sources": sources[:20],
+        "claim_analysis": {"subclaims": subclaims},
+        "evidence_assessment": {
+            "evidence_gaps": ["This is a combined speech/video audit summary. Open the checked claims for individual source trails."],
+            "actual_evidence": [],
+            "rumor_drivers": [],
+        },
+        "reasoning_summary": {
+            "summary": [summary],
+            "caveats": ["Confidence is not certainty; inspect the evidence and caveats before reposting."],
+        },
+        "speech_audit_summary": {
+            "counts": counts,
+            "claim_mix": spread,
+            "claims_checked_count": total,
+            "checked_claim_assessment_ids": [item.get("assessment_id") for item in checked_claims if item.get("assessment_id")],
+        },
+        "output_style": "speech_summary",
+    }
+    assessment = serialize_assessment_response(
+        result,
+        claim=title,
+        source_url=source_url,
+        category="speech-video",
+        mode=f"speech-summary-{mode}",
+        build=get_app_build(),
+        include_debug=False,
+        owner_id=owner_id,
+    )
+    assessment.request.settings.update(
+        {
+            "result_mode": "speech_summary",
+            "source_url": source_url,
+            "claims_checked_count": total,
+            "claim_mix": spread,
+            "build": get_app_build(),
+        }
+    )
+    saved = save_report(assessment)
+    _apply_report_retention(owner_id, profile=profile)
+    return saved
+
+
 @app.post("/sources/extract", response_model=ExtractedSource)
 def extract_source(request: SourceExtractRequest) -> ExtractedSource:
     source_url = (request.source_url or "").strip()
@@ -1703,11 +1868,14 @@ def speech_verify(request: SpeechVerifyRequest, http_request: Request) -> ApiEnv
         for idx, claim in enumerate(request.claims, start=1)
     ]
     checked_claims = _attach_saved_speech_assessments(checked_claims, source_url=source_url, mode=mode, owner_id=context.owner_id, profile=profile)
+    summary_assessment = _save_speech_summary_assessment(checked_claims, source_url=source_url, mode=mode, owner_id=context.owner_id, profile=profile)
     result = {
         "schema_version": "speech_verification.v1",
         "source_url": source_url,
         "claims_checked": checked_claims,
         "claims_checked_count": len(checked_claims),
+        "assessment_id": summary_assessment.assessment_id if summary_assessment else "",
+        "assessment": summary_assessment.model_dump(mode="json") if summary_assessment else None,
         "verification_mode": mode,
         "settings": {
             "result_mode": "speech_verify",
@@ -1746,6 +1914,9 @@ def speech_audit(request: SpeechAuditRequest, http_request: Request) -> ApiEnvel
         profile=profile,
     )
     result["claims_checked_count"] = len(result["claims_checked"])
+    summary_assessment = _save_speech_summary_assessment(result["claims_checked"], source_url=source_url, mode=mode, owner_id=context.owner_id, profile=profile)
+    result["assessment_id"] = summary_assessment.assessment_id if summary_assessment else ""
+    result["assessment"] = summary_assessment.model_dump(mode="json") if summary_assessment else None
     result["settings"] = {
         "result_mode": "speech_audit",
         "source_url": source_url,
