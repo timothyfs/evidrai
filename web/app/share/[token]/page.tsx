@@ -39,8 +39,20 @@ function reportSubject(report: AssessmentResponse) {
   return `Evidrai report: ${claimTitle(report)} — ${report.verdict.label}`;
 }
 
+function isDefinitiveContradiction(verdict?: string | null, confidence?: string | null) {
+  const label = (verdict || '').toLowerCase();
+  return (confidence || '').toLowerCase() === 'high' && (label.includes('false') || label.includes('contradicted'));
+}
+
+function confidenceDisplay(verdict?: string | null, confidence?: string | null) {
+  return isDefinitiveContradiction(verdict, confidence) ? 'High-confidence contradiction' : `${confidence || 'Unstated'} confidence`;
+}
+
 function reportAbstract(report: AssessmentResponse, isSimple = false) {
-  const parts = [`Evidrai assessed this claim as ${report.verdict.label.toLowerCase()} with ${report.verdict.confidence.toLowerCase()} confidence.`];
+  const decisiveContradiction = isDefinitiveContradiction(report.verdict.label, report.verdict.confidence);
+  const parts = [decisiveContradiction
+    ? 'Evidrai assessed this claim as definitively contradicted by the reviewed evidence.'
+    : `Evidrai assessed this claim as ${report.verdict.label.toLowerCase()} with ${report.verdict.confidence.toLowerCase()} confidence.`];
   if (report.verdict.summary) parts.push(truncateText(report.verdict.summary, 220));
   if (report.verdict.key_caveat) parts.push(`Key caveat: ${truncateText(report.verdict.key_caveat, 180)}`);
   if (!isSimple) parts.push(`The report reviewed ${report.sources?.length || 0} source${(report.sources?.length || 0) === 1 ? '' : 's'}.`);
@@ -182,7 +194,7 @@ export default async function SharedReportPage({ params }: SharePageProps) {
             </div>
             <strong>{report.verdict.label}</strong>
             <div className="claimSupportScale" aria-hidden="true"><span>Low</span><span>Mixed</span><span>High</span></div>
-            <small>{report.verdict.confidence} confidence</small>
+            <small>{confidenceDisplay(report.verdict.label, report.verdict.confidence)}</small>
           </div>
         </div>
         <div className={`mobileVerdictBar ${tone}`} aria-label="Sticky verdict summary">
@@ -199,7 +211,7 @@ export default async function SharedReportPage({ params }: SharePageProps) {
           </div>
           <div>
             <strong>Claim support: {report.verdict.label}</strong>
-            <span>{report.verdict.confidence || 'Unstated'} confidence · {isSimple ? 'Simple share' : `${report.sources?.length || 0} sources`}</span>
+            <span>{confidenceDisplay(report.verdict.label, report.verdict.confidence)} · {isSimple ? 'Simple share' : `${report.sources?.length || 0} sources`}</span>
           </div>
         </div>
         <div className="reportAbstract">
@@ -222,11 +234,16 @@ export default async function SharedReportPage({ params }: SharePageProps) {
         </section>
         <section className="shareSignupCta resultSection printHidden">
           <div>
-            <p className="eyebrow">Trust verification</p>
-            <h2>Check the next claim with Evidrai.</h2>
-            <p>Run your own verification, inspect the evidence trail, and share a branded result that carries the verdict with the caveats.</p>
+            <p className="eyebrow">Verify before you share</p>
+            <h2>Turn trust into a visible signal.</h2>
+            <p>Run your own Evidrai check, inspect the source trail, then share a branded result that carries the verdict, confidence, and caveats with it.</p>
+            <div className="shareSignupProof" aria-label="Evidrai trust verification features">
+              <span>Evidence trail</span>
+              <span>Confidence signal</span>
+              <span>Share-ready verdict</span>
+            </div>
           </div>
-          <a className="button" href="/#sign-in">Sign up for trust verification</a>
+          <a className="button" href="/#sign-in">Start verifying claims</a>
         </section>
         {isSimple ? (
           <section className="resultSection evidenceSourcesSection">

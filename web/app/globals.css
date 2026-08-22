@@ -979,9 +979,9 @@ button.secondary:hover:not(:disabled), .button.secondary:hover { border-color: r
   background:
     radial-gradient(circle at 50% 100%, var(--card) 0 44%, transparent 45%),
     conic-gradient(from 270deg at 50% 100%,
-      #c45d5d 0deg 54deg,
-      #d99a3e 72deg 108deg,
-      #4f9f78 126deg 180deg,
+      #c83f3f 0deg 60deg,
+      #d89424 60deg 120deg,
+      #35a96f 120deg 180deg,
       transparent 180deg 360deg);
   border-radius: 999px 999px 0 0;
   margin-top: 16px;
@@ -3041,30 +3041,67 @@ html[data-theme="light"] .methodologyGuardrails {
 .publicReport h1 { margin: 0; font-size: clamp(2rem, 5vw, 4rem); letter-spacing: -0.05em; }
 .shareSignupCta {
   align-items: center;
-  background: color-mix(in srgb, var(--accent) 12%, rgba(255,255,255,0.035));
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  background:
+    linear-gradient(135deg, rgba(16,47,49,0.96), rgba(17,57,58,0.9)),
+    color-mix(in srgb, var(--accent) 12%, rgba(255,255,255,0.035));
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 22px;
+  box-shadow: 0 24px 70px rgba(9, 28, 29, 0.22);
+  color: #fffaf1;
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(0, 1fr) auto;
   margin-top: 22px;
-  padding: 20px;
+  overflow: hidden;
+  padding: 24px;
+  position: relative;
+}
+.shareSignupCta::before {
+  background: linear-gradient(90deg, #ff5d55, #ffc247 46%, #63d995);
+  content: "";
+  height: 6px;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
 }
 .shareSignupCta h2,
 .shareSignupCta p { margin: 0; }
+.shareSignupCta .eyebrow { color: #f3a536; }
+.shareSignupCta h2 { color: #ffffff; }
 .shareSignupCta p:not(.eyebrow) {
-  color: var(--muted);
+  color: rgba(255,255,255,0.74);
   line-height: 1.5;
   margin-top: 8px;
 }
-.shareSignupCta .button { white-space: nowrap; }
+.shareSignupCta .button {
+  background: #f3a536;
+  color: #102222;
+  justify-self: end;
+  white-space: nowrap;
+}
+.shareSignupProof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.shareSignupProof span {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 999px;
+  color: rgba(255,255,255,0.86);
+  font-size: 0.78rem;
+  font-weight: 850;
+  padding: 7px 10px;
+}
 
 .shareLinkRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .shareLinkRow .button { white-space: nowrap; }
 @media (max-width: 640px) {
   .shareLinkRow,
   .shareSignupCta { grid-template-columns: 1fr; }
-  .shareSignupCta .button { width: 100%; white-space: normal; }
+  .shareSignupCta .button { justify-self: stretch; width: 100%; white-space: normal; }
 }
 
 .reportAbstract {

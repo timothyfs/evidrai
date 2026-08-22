@@ -289,6 +289,15 @@ function evidenceStrengthLabel(score?: number | null, verdict?: string) {
   return 'Weak evidence base';
 }
 
+function isDefinitiveContradiction(verdict?: string | null, confidence?: string | null) {
+  const label = (verdict || '').toLowerCase();
+  return (confidence || '').toLowerCase() === 'high' && (label.includes('false') || label.includes('contradicted'));
+}
+
+function confidenceDisplay(verdict?: string | null, confidence?: string | null) {
+  return isDefinitiveContradiction(verdict, confidence) ? 'High-confidence contradiction' : `${confidence || 'Unstated'} confidence`;
+}
+
 function claimSupportPercent(verdict: string, score?: number | null) {
   const boundedScore = typeof score === 'number' && Number.isFinite(score)
     ? Math.max(0, Math.min(10, Math.abs(score)))
@@ -2093,7 +2102,7 @@ function AssessmentResult({ assessment, canShare = false }: { assessment: Assess
           </div>
           <strong>{assessment.verdict.label}</strong>
           <div className="claimSupportScale" aria-hidden="true"><span>Low</span><span>Mixed</span><span>High</span></div>
-          <small>{assessment.verdict.confidence} confidence{evidenceStrength ? ` · ${evidenceStrength}` : ''}</small>
+          <small>{confidenceDisplay(assessment.verdict.label, assessment.verdict.confidence)}{evidenceStrength ? ` · ${evidenceStrength}` : ''}</small>
         </div>
       </div>
 
@@ -2111,7 +2120,7 @@ function AssessmentResult({ assessment, canShare = false }: { assessment: Assess
         </div>
         <div>
           <strong>Claim support: {assessment.verdict.label}</strong>
-          <span>{assessment.verdict.confidence || 'Unstated'} confidence · {assessment.sources?.length || 0} sources</span>
+          <span>{confidenceDisplay(assessment.verdict.label, assessment.verdict.confidence)} · {assessment.sources?.length || 0} sources</span>
         </div>
       </div>
 
