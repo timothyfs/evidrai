@@ -1204,32 +1204,45 @@ function ProgressiveTrustJourney() {
 }
 
 function LoadingState({ type }: { type: 'claim' | 'speech' | 'report' | 'speech-verify' }) {
-  const [activeStep, setActiveStep] = useState(0);
   const copy = {
     claim: {
       title: 'Checking the claim',
       steps: [
         'Isolating the factual claim',
-        'Searching for relevant evidence',
+        'Planning source searches',
+        'Retrieving current evidence',
+        'Checking source quality and age',
         'Comparing support and contradiction',
         'Scoring confidence and caveats',
-        'Preparing verdict and share text',
+        'Writing the verdict',
+        'Preparing the evidence trail',
       ],
     },
-    speech: { title: 'Extracting checkable claims', steps: ['Reading transcript', 'Separating claims from rhetoric', 'Ranking by checkability', 'Preparing selection list'] },
+    speech: { title: 'Extracting checkable claims', steps: ['Reading transcript', 'Separating claims from rhetoric', 'Filtering repeated points', 'Ranking by checkability', 'Preparing selection list'] },
     report: { title: 'Loading report', steps: ['Retrieving assessment', 'Restoring evidence trail', 'Preparing verdict and caveats'] },
-    'speech-verify': { title: 'Verifying selected claims', steps: ['Checking selected claims', 'Grouping sources by role', 'Preparing claim verdicts and caveats'] },
+    'speech-verify': { title: 'Verifying selected claims', steps: ['Queueing selected claims', 'Checking each claim', 'Retrieving evidence', 'Grouping sources by role', 'Scoring confidence and caveats', 'Preparing claim verdicts'] },
   }[type];
+  const timing = {
+    claim: { estimateMs: 90000, cap: 90 },
+    speech: { estimateMs: 42000, cap: 92 },
+    report: { estimateMs: 12000, cap: 94 },
+    'speech-verify': { estimateMs: 120000, cap: 90 },
+  }[type];
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
-    setActiveStep(0);
+    const startedAt = Date.now();
+    setElapsedMs(0);
     const timer = window.setInterval(() => {
-      setActiveStep((current) => Math.min(current + 1, copy.steps.length - 1));
-    }, type === 'claim' ? 2200 : 1800);
+      setElapsedMs(Date.now() - startedAt);
+    }, 750);
     return () => window.clearInterval(timer);
-  }, [copy.steps.length, type]);
+  }, [type]);
 
-  const progress = Math.min(94, Math.round(((activeStep + 1) / copy.steps.length) * 100));
+  const elapsedRatio = Math.min(elapsedMs / timing.estimateMs, 1);
+  const easedRatio = 1 - Math.pow(1 - elapsedRatio, 2.4);
+  const progress = Math.min(timing.cap, Math.max(4, Math.round(4 + easedRatio * (timing.cap - 4))));
+  const activeStep = Math.min(copy.steps.length - 1, Math.floor((progress / (timing.cap + 1)) * copy.steps.length));
 
   return (
     <section className="loadingState" aria-live="polite">
