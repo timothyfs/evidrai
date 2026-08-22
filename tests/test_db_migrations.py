@@ -49,6 +49,15 @@ def test_load_migrations_finds_initial_schema_file():
     assert "CREATE TABLE IF NOT EXISTS feedback" in migrations[0].sql
 
 
+def test_report_share_recipient_backstop_migration_is_present():
+    migrations = {migration.version: migration for migration in load_migrations()}
+
+    assert "016" in migrations
+    assert "ADD COLUMN IF NOT EXISTS recipient_email" in migrations["016"].sql
+    assert "ADD COLUMN IF NOT EXISTS recipient_source" in migrations["016"].sql
+    assert "ADD COLUMN IF NOT EXISTS recipient_captured_at" in migrations["016"].sql
+
+
 def test_split_sql_statements_handles_migration_file():
     sql = """
     CREATE TABLE example (id text);
