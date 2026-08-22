@@ -1081,8 +1081,8 @@ function SpeechReportShareControls({
       const payload = await createReportShare(firstShareableAssessment.assessment_id, { platform: 'copy', recipient_source: 'speech_complete_share' });
       setPublicUrl(`${window.location.origin}/share/${payload.token}`);
       setMessage('Public claim evidence link added to the share text.');
-    } catch {
-      setMessage('Audit text is still shareable. Public link creation is temporarily unavailable.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Audit text is still shareable. Public link creation is temporarily unavailable.');
     } finally {
       setLinkBusy(false);
     }

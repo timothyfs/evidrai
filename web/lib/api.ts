@@ -1,3 +1,5 @@
+import { getCurrentSession } from './auth';
+
 export type AssessmentSource = {
   id: string;
   title: string;
@@ -490,10 +492,13 @@ export function createReportShare(id: string, input: string | { platform?: strin
     recipient_email: input.recipient_email || '',
     recipient_source: input.recipient_source || 'manual_share',
   };
-  return request<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }>(`/api/reports/${encodeURIComponent(id)}/share`, {
+  return getCurrentSession().then((session) => {
+    setAccessToken(session?.access_token || accessToken);
+    return request<{ ok: boolean; token: string; assessment_id: string; access_level: 'simple' | 'full'; share: ReportShare }>(`/api/reports/${encodeURIComponent(id)}/share`, {
     method: 'POST',
     body: JSON.stringify(payload),
-  }, { sameOrigin: true });
+    }, { sameOrigin: true });
+  });
 }
 
 export async function getPublicSharedReport(token: string): Promise<PublicReportResponse> {
