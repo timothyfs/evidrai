@@ -1196,15 +1196,83 @@ Deep mode without Tavily:
 }
 ```
 
-## 15. Operational examples
+## 15. Enterprise Gateway Mode
 
-### 15.1 Local run
+Enterprise Gateway Mode wraps the existing assessment engine with a customer-policy decision for AI output and proposed downstream actions.
+
+### 15.1 Verify gateway decision
+
+```http
+POST /v1/gateway/verify
+```
+
+Required API scope:
+
+```text
+gateway:write
+```
+
+Request:
+
+```json
+{
+  "workflow_id": "finance-briefing-prod",
+  "request_id": "external-request-123",
+  "ai_output": "The Governor of the Bank of England warned that an AI hallucination could cause a global financial crash.",
+  "proposed_action": {
+    "type": "publish_briefing",
+    "description": "Publish executive financial briefing"
+  },
+  "domain": "finance",
+  "consequence_level": "high",
+  "policy_id": "finance_default_v1",
+  "cited_sources": [],
+  "metadata": {},
+  "include_assessment": false
+}
+```
+
+Response:
+
+```json
+{
+  "schema_version": "gateway_decision.v1",
+  "gateway_id": "gw_uuid",
+  "created_at": "2026-09-03T12:00:00+00:00",
+  "decision": "review",
+  "decision_reason": "One or more material claims require review before the proposed action proceeds.",
+  "recommended_next_step": "route_to_human_review",
+  "policy_id": "finance_default_v1",
+  "policy_version": 1,
+  "workflow_id": "finance-briefing-prod",
+  "request_id": "external-request-123",
+  "assessment_id": "uuid",
+  "triggered_rules": [],
+  "claims": [],
+  "blocking_claims": [],
+  "review_claims": ["sc_1"],
+  "allowed_actions": [],
+  "assessment": null
+}
+```
+
+Notes:
+
+- The gateway uses Deep verification for the MVP.
+- The existing `AssessmentResponse` remains the linked evidence record.
+- `decision` is workflow-facing and separate from the evidential verdict.
+- Unknown policy IDs fall back to a built-in policy and trigger `policy_fallback_applied`.
+- Audit records are written to `.evidrai_gateway/gateway_audit.jsonl` by default.
+
+## 16. Operational examples
+
+### 16.1 Local run
 
 ```bash
 uvicorn api.main:app --reload
 ```
 
-### 15.2 Fast assessment curl
+### 16.2 Fast assessment curl
 
 ```bash
 curl -sS http://127.0.0.1:8000/assessments/fast \
@@ -1213,7 +1281,7 @@ curl -sS http://127.0.0.1:8000/assessments/fast \
   -d '{"claim":"France is a member of the EU.","category":"auto-detect"}'
 ```
 
-### 15.3 Deep assessment curl
+### 16.3 Deep assessment curl
 
 ```bash
 curl -sS http://127.0.0.1:8000/assessments/deep \
@@ -1222,7 +1290,16 @@ curl -sS http://127.0.0.1:8000/assessments/deep \
   -d '{"claim":"France is a member of the EU.","category":"auto-detect"}'
 ```
 
-### 15.4 Speech extraction curl
+### 16.4 Gateway verify curl
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/gateway/verify \
+  -H 'Content-Type: application/json' \
+  -H 'X-Evidrai-Api-Key: <evidrai-api-key>' \
+  -d '{"workflow_id":"finance-briefing-prod","request_id":"external-request-123","ai_output":"The Governor of the Bank of England warned that an AI hallucination could cause a global financial crash.","proposed_action":{"type":"publish_briefing","description":"Publish executive financial briefing"},"domain":"finance","consequence_level":"high","policy_id":"finance_default_v1"}'
+```
+
+### 16.5 Speech extraction curl
 
 ```bash
 curl -sS http://127.0.0.1:8000/speech/extract \
@@ -1231,7 +1308,7 @@ curl -sS http://127.0.0.1:8000/speech/extract \
   -d '{"transcript":"","source_url":"https://youtu.be/cR5Dmj6GK88?is=byMagKFTQJoUPeOM","max_claims":3,"try_youtube_captions":true}'
 ```
 
-## 16. Current implemented endpoints checklist
+## 17. Current implemented endpoints checklist
 
 ```text
 GET    /
@@ -1252,6 +1329,7 @@ POST   /transcripts/diagnose
 POST   /claims/check
 POST   /assessments/fast
 POST   /assessments/deep
+POST   /v1/gateway/verify
 GET    /reports
 GET    /reports/{report_id}
 POST   /assessments/{assessment_id}/feedback
@@ -1262,7 +1340,7 @@ POST   /speech/verify
 POST   /speech/audit
 ```
 
-## 17. Known non-endpoints / future API work
+## 18. Known non-endpoints / future API work
 
 These are not implemented as stable endpoints yet:
 

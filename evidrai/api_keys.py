@@ -17,6 +17,7 @@ from evidrai.errors import EvidraiError
 
 
 DEFAULT_API_SCOPES = ("assessments:write", "reports:read", "speech:write")
+ALLOWED_API_SCOPES = (*DEFAULT_API_SCOPES, "gateway:write")
 
 
 class ApiKeyError(EvidraiError):
@@ -77,7 +78,7 @@ def _dt_value(value: Any) -> str:
 
 def _normalise_scopes(scopes: list[str] | None) -> list[str]:
     requested = [str(scope or "").strip() for scope in (scopes or list(DEFAULT_API_SCOPES))]
-    allowed = set(DEFAULT_API_SCOPES)
+    allowed = set(ALLOWED_API_SCOPES)
     return sorted({scope for scope in requested if scope in allowed})
 
 

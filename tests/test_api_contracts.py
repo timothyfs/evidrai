@@ -145,6 +145,7 @@ def test_openapi_contains_public_integration_routes():
         "/assessments/deep",
         "/assessment-jobs/{mode}",
         "/assessment-jobs/{job_id}",
+        "/v1/gateway/verify",
         "/speech/extract",
         "/speech/verify",
         "/reports",

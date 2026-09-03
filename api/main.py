@@ -38,6 +38,8 @@ from evidrai.entitlements import (
 )
 from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, list_recent_feedback_records, load_feedback_by_id, save_feedback
+from evidrai.gateway import build_gateway_decision
+from evidrai.gateway_models import GatewayDecisionResponse, GatewayVerifyRequest
 from evidrai.trust import backfill_trust_from_reports, trust_analytics_summary
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
 from evidrai.pipeline.verification import (
@@ -1787,6 +1789,40 @@ def create_deep_assessment(request: AssessmentCreateRequest, http_request: Reque
     _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
     return _assessment_response_from_request(request, "deep", owner_id=context.owner_id, profile=profile)
+
+
+@app.post("/v1/gateway/verify", response_model=GatewayDecisionResponse)
+def verify_gateway_request(request: GatewayVerifyRequest, http_request: Request) -> GatewayDecisionResponse:
+    context, profile = _profile_from_request(http_request)
+    _require_api_scope(context, "gateway:write")
+    require_feature(profile, "api_access", authenticated=context.authenticated)
+    _require_current_consent(context, profile)
+    _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
+
+    result = _run_claim_assessment(
+        claim=request.ai_output,
+        source_url="",
+        category=request.domain or "auto-detect",
+        mode="deep",
+    )
+    assessment = serialize_assessment_response(
+        result,
+        claim=request.ai_output,
+        source_url="",
+        category=request.domain or "auto-detect",
+        mode="gateway-deep",
+        build=get_app_build(),
+        include_debug=request.include_debug,
+        owner_id=context.owner_id,
+    )
+    saved = save_report(assessment)
+    _apply_report_retention(context.owner_id, profile=profile)
+    return build_gateway_decision(
+        request=request,
+        assessment=saved,
+        owner_id=context.owner_id,
+        build=get_app_build(),
+    )
 
 
 @app.post("/assessment-jobs/{mode}", response_model=AssessmentJobCreateResponse)
