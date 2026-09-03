@@ -1212,6 +1212,13 @@ Required API scope:
 gateway:write
 ```
 
+Authentication is strict. Unlike other endpoints, session (web) or anonymous
+auth can never reach the gateway via tier features. The gateway requires an API
+key that carries the `gateway:write` scope:
+
+- No API key (session or anonymous): `401 gateway_api_key_required`
+- API key without the scope: `403 insufficient_api_scope`
+
 Request:
 
 ```json

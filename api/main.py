@@ -670,6 +670,34 @@ def _require_api_scope(context: AuthContext, scope: str) -> None:
         )
 
 
+def _require_gateway_credentials(context: AuthContext) -> None:
+    """Strict gate for Gateway Mode.
+
+    Unlike other endpoints, session or anonymous auth must never reach the
+    gateway via tier features. Gateway Mode is an explicit enterprise control
+    point: it requires an API key that carries the gateway:write scope. This is
+    deliberately stricter than _require_api_scope, which is a no-op for
+    non-API-key auth.
+    """
+    if context.auth_method != "api_key":
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "gateway_api_key_required",
+                "message": "Gateway Mode requires an API key with the gateway:write scope.",
+            },
+        )
+    if "gateway:write" not in set(context.scopes):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "insufficient_api_scope",
+                "message": "This API key does not include the required scope: gateway:write.",
+                "required_scope": "gateway:write",
+            },
+        )
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -1794,7 +1822,7 @@ def create_deep_assessment(request: AssessmentCreateRequest, http_request: Reque
 @app.post("/v1/gateway/verify", response_model=GatewayDecisionResponse)
 def verify_gateway_request(request: GatewayVerifyRequest, http_request: Request) -> GatewayDecisionResponse:
     context, profile = _profile_from_request(http_request)
-    _require_api_scope(context, "gateway:write")
+    _require_gateway_credentials(context)
     require_feature(profile, "api_access", authenticated=context.authenticated)
     _require_current_consent(context, profile)
     _require_bot_check(http_request, request.bot_token, authenticated=context.authenticated)
