@@ -55,7 +55,7 @@ export default async function PlansPage() {
   }
   return (
     <main>
-      <header className="siteHeader"><a className="brand logoBrand eyeBrand" href="/" aria-label="Evidrai home"><img className="logoLight" src="/brand/evidrai-eye-light.png" alt="" /><img className="logoDark" src="/brand/evidrai-eye-dark.png" alt="" /></a><nav className="staticNav"><a href="/product">Product</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/team">Team</a><a href="/contact">Contact</a><a href="/">Verify</a></nav></header>
+      <header className="siteHeader"><a className="brand logoBrand eyeBrand" href="/" aria-label="Evidrai home"><img className="logoLight" src="/brand/evidrai-eye-light.png" alt="" /><img className="logoDark" src="/brand/evidrai-eye-dark.png" alt="" /></a><nav className="staticNav"><a href="/product">Product</a><a href="/enterprise">Enterprise</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/team">Team</a><a href="/contact">Contact</a><a href="/">Verify</a></nav></header>
       <section className="card marketingPage">
         <p className="eyebrow">Plans</p>
         <h1>Choose the workflow capacity you need.</h1>
@@ -100,6 +100,23 @@ export default async function PlansPage() {
             })}
           </div>
         ) : <p className="muted">Plan details are temporarily unavailable.</p>}
+      </section>
+
+      <section className="card marketingPage enterpriseCallout">
+        <div className="enterprisePlanRow">
+          <div>
+            <p className="eyebrow">Evidrai Enterprise</p>
+            <h2>For organisations using AI in consequential workflows.</h2>
+            <p>Enterprise adds Gateway Mode: a verification control point that sits between your AI system and the actions it triggers. Every AI output gets a pass, review, or block decision — backed by evidence, governed by your policy, and written to a tamper-evident audit log.</p>
+            <p>Includes <code>gateway:write</code> API scope, domain-specific policies, consequence-level controls, and dedicated onboarding.</p>
+          </div>
+          <div className="enterprisePlanCTA">
+            <p className="eyebrow">Private early access</p>
+            <p>We are working with a small set of organisations in finance, legal, and enterprise AI. If this fits your workflow, reach out.</p>
+            <a className="button" href="/enterprise">Learn more</a>
+            <a className="button secondary" href="/contact">Get in touch</a>
+          </div>
+        </div>
       </section>
     </main>
   );

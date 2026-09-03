@@ -4109,3 +4109,31 @@ html[data-theme="light"] .sourceTypeGuide div { background: rgba(255,255,255,0.7
   line-height: 1.4;
 }
 html[data-theme="light"] .adminToolLinks a { background: rgba(255,255,255,0.72); }
+
+/* Enterprise page */
+.enterpriseCallout {
+  border-top: 1px solid var(--line);
+  margin-top: 0;
+}
+.enterprisePlanRow {
+  align-items: start;
+  display: grid;
+  gap: 32px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
+}
+.enterprisePlanCTA {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+}
+.enterprisePlanCTA p { color: var(--muted); line-height: 1.5; margin: 0; }
+.centredSection { text-align: center; }
+.centredSection .pageActions { justify-content: center; }
+html[data-theme="light"] .enterprisePlanCTA { background: rgba(255,255,255,0.72); }
+@media (max-width: 720px) {
+  .enterprisePlanRow { grid-template-columns: 1fr; }
+}

@@ -11,6 +11,10 @@ const workflows = [
     title: 'Saved evidence reports',
     text: 'Assessments are saved to your account so you can revisit evidence, feedback, verdicts, and source scoring later.',
   },
+  {
+    title: 'Enterprise Gateway Mode',
+    text: 'A verification control point for AI-generated outputs in consequential workflows. Each output gets a pass, review, or block decision — evidence-backed, policy-driven, and auditable.',
+  },
 ];
 
 const principles = [
@@ -28,18 +32,19 @@ const liveNow = [
   'Saved reports and feedback capture',
   'Evidence scorecards and source grouping',
   'Polished report export and share links',
+  'Enterprise Gateway Mode (early access)',
 ];
 
 const comingNext = [
   'Researcher evidence ledger',
   'Durable source snapshots',
-  'External API access with keys and limits',
+  'Standard API access with keys and usage limits',
 ];
 
 export default async function ProductPage() {
   return (
     <main>
-      <header className="siteHeader"><a className="brand logoBrand eyeBrand" href="/" aria-label="Evidrai home"><img className="logoLight" src="/brand/evidrai-eye-light.png" alt="" /><img className="logoDark" src="/brand/evidrai-eye-dark.png" alt="" /></a><nav className="staticNav"><a href="/product">Product</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/team">Team</a><a href="/contact">Contact</a><a href="/">Verify</a></nav></header>
+      <header className="siteHeader"><a className="brand logoBrand eyeBrand" href="/" aria-label="Evidrai home"><img className="logoLight" src="/brand/evidrai-eye-light.png" alt="" /><img className="logoDark" src="/brand/evidrai-eye-dark.png" alt="" /></a><nav className="staticNav"><a href="/product" aria-current="page">Product</a><a href="/enterprise">Enterprise</a><a href="/plans">Plans</a><a href="/about">About</a><a href="/team">Team</a><a href="/contact">Contact</a><a href="/">Verify</a></nav></header>
       <section className="card marketingPage pageHero">
         <p className="eyebrow">Product</p>
         <h1>Evidence checks for claims, speeches, articles, and public narratives.</h1>
@@ -47,7 +52,7 @@ export default async function ProductPage() {
         <div className="pageActions"><a className="button" href="/">Open Verify</a><a className="button secondary" href="/plans">View early-access plans</a></div>
       </section>
 
-      <section className="marketingGrid threeColumns">
+      <section className="marketingGrid twoColumns">
         {workflows.map((item) => (
           <article className="infoCard" key={item.title}>
             <h2>{item.title}</h2>
@@ -64,6 +69,21 @@ export default async function ProductPage() {
         </div>
         <div className="principleList">
           {principles.map((item) => <span key={item}>{item}</span>)}
+        </div>
+      </section>
+
+      <section className="card marketingPage splitSection enterpriseCallout">
+        <div>
+          <p className="eyebrow">Evidrai Enterprise</p>
+          <h2>A verification layer for AI workflows that carry real consequences.</h2>
+          <p>Enterprise Gateway Mode puts Evidrai between your AI system and the actions it would trigger. Every decision is policy-driven, evidence-backed, and written to an audit log. Pass, review, or block — inline, in one API call.</p>
+          <div className="pageActions"><a className="button" href="/enterprise">Learn about Enterprise</a></div>
+        </div>
+        <div className="principleList">
+          <span>Pass — evidence supports the output</span>
+          <span>Review — route to human verification</span>
+          <span>Block — evidence contradicts or is absent</span>
+          <span>Full audit record on every decision</span>
         </div>
       </section>
 
