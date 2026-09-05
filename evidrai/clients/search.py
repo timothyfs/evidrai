@@ -17,6 +17,9 @@ class TavilySearchClient:
             ),
             env_names=("TAVILY_API_KEY",),
         )
+        # Optional telemetry sink; set by callers that want per-assessment
+        # retrieval-call accounting. None means telemetry is not recorded.
+        self.telemetry: Any = None
 
     @property
     def configured(self) -> bool:
@@ -25,6 +28,11 @@ class TavilySearchClient:
     def search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         if not self.configured:
             return []
+        if self.telemetry is not None:
+            try:
+                self.telemetry.record_search(1)
+            except Exception:
+                pass
         last_exc: Optional[Exception] = None
         for attempt in range(max(1, SCORING_CONFIG.search_max_retries)):
             try:

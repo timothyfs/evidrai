@@ -102,6 +102,18 @@ class AssessmentEvidenceSource(BaseModel):
     classification_reason: str = ""
 
 
+class AssessmentTelemetry(BaseModel):
+    """Per-assessment cost/usage signals. Estimated, not billed."""
+    model: str = ""
+    llm_calls: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    search_calls: int = 0
+    elapsed_ms: Optional[int] = None
+    estimated_cost_usd: float = 0.0
+
+
 class AssessmentResponse(BaseModel):
     schema_version: str = "assessment_response.v1"
     assessment_id: str = Field(default_factory=lambda: str(uuid4()))
@@ -115,6 +127,7 @@ class AssessmentResponse(BaseModel):
     evidence_map: EvidenceMap = Field(default_factory=EvidenceMap)
     sources: List[AssessmentEvidenceSource] = Field(default_factory=list)
     reasoning: Dict[str, Any] = Field(default_factory=dict)
+    telemetry: Optional[AssessmentTelemetry] = None
     debug: Optional[Dict[str, Any]] = None
 
 
@@ -273,6 +286,9 @@ def serialize_assessment_response(
     raw_subclaims = claim_analysis.get("subclaims") or []
     if not raw_subclaims and result.get("subclaims"):
         raw_subclaims = [{"id": f"sc_{i+1}", "text": text} for i, text in enumerate(result.get("subclaims") or [])]
+    raw_telemetry = result.get("telemetry") if isinstance(result.get("telemetry"), dict) else None
+    telemetry = AssessmentTelemetry(**raw_telemetry) if raw_telemetry else None
+
     claim_breakdown = [
         ClaimBreakdownItem(
             id=str(item.get("id") or f"sc_{i+1}"),
@@ -332,6 +348,7 @@ def serialize_assessment_response(
         claim_breakdown=claim_breakdown,
         evidence_map=evidence_map,
         sources=source_models,
+        telemetry=telemetry,
         reasoning={
             "consensus_strength": result.get("consensus_strength"),
             "consensus_summary": consensus_summary,

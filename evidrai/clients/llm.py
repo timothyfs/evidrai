@@ -50,6 +50,9 @@ class OpenAICompatibleClient:
             default="gpt-4o-mini",
         ) or ""
         self.fallback_models = [model.strip() for model in str(fallback_models).split(",") if model.strip() and model.strip() != self.model]
+        # Optional telemetry sink; set by callers that want per-assessment
+        # usage/cost accounting. None means telemetry is simply not recorded.
+        self.telemetry: Any = None
 
     @property
     def configured(self) -> bool:
@@ -88,6 +91,11 @@ class OpenAICompatibleClient:
                         raise LLMRequestError("LLM request was rejected.", developer_detail=http_error_detail(response), status_code=503)
                     response.raise_for_status()
                     data = response.json()
+                    if self.telemetry is not None:
+                        try:
+                            self.telemetry.record_llm(model, data.get("usage"))
+                        except Exception:
+                            pass
                     content = data["choices"][0]["message"]["content"]
                     parsed = load_json(content)
                     if not isinstance(parsed, dict):
