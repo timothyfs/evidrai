@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import smtplib
+import time
 from email.message import EmailMessage
 from email.utils import formataddr
 from html import escape
@@ -40,6 +41,7 @@ from evidrai.errors import EvidraiError, safe_error_payload
 from evidrai.feedback import build_feedback_record, list_feedback_for_assessment, list_recent_feedback_records, load_feedback_by_id, save_feedback
 from evidrai.gateway import build_gateway_decision
 from evidrai.gateway_models import GatewayDecisionResponse, GatewayVerifyRequest
+from evidrai.telemetry import TelemetryCollector
 from evidrai.trust import backfill_trust_from_reports, trust_analytics_summary
 from evidrai.ingestion.url import ExtractedSource, fetch_source_url
 from evidrai.pipeline.verification import (
@@ -604,20 +606,31 @@ def _run_claim_assessment(
     category: str,
     mode: str,
     output_style: str = "standard",
+    supplied_sources: Optional[list] = None,
 ) -> Dict[str, Any]:
     llm, search = _clients()
     if not llm.configured:
         raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "OPENAI_API_KEY is not configured"})
 
+    telemetry = TelemetryCollector()
+    llm.telemetry = telemetry
+    search.telemetry = telemetry
+
     if not claim and source_url:
         claim = _source_claim_from_url(source_url)
     analysis_input = build_analysis_input(claim, source_url)
+    started = time.perf_counter()
     if mode == "deep":
         if not search.configured:
             raise HTTPException(status_code=503, detail={"code": "configuration_error", "message": "TAVILY_API_KEY is required for deep mode"})
-        return run_claim_pipeline(analysis_input, llm, search)
-    fast_output_style = output_style if output_style == "absurdity_humour" else "standard"
-    return run_quick_pass(analysis_input, category, llm, search, output_style=fast_output_style)
+        result = run_claim_pipeline(analysis_input, llm, search, supplied_sources or None)
+    else:
+        fast_output_style = output_style if output_style == "absurdity_humour" else "standard"
+        result = run_quick_pass(analysis_input, category, llm, search, output_style=fast_output_style)
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    if isinstance(result, dict):
+        result["telemetry"] = telemetry.snapshot(elapsed_ms=elapsed_ms)
+    return result
 
 
 def _auth_context_from_request(request: Request) -> AuthContext:
@@ -1832,6 +1845,7 @@ def verify_gateway_request(request: GatewayVerifyRequest, http_request: Request)
         source_url="",
         category=request.domain or "auto-detect",
         mode="deep",
+        supplied_sources=request.cited_sources or None,
     )
     assessment = serialize_assessment_response(
         result,

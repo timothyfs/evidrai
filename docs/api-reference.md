@@ -710,9 +710,26 @@ Representative shape:
     "rule_engine": {},
     "amplification_warning": null
   },
+  "telemetry": {
+    "model": "gpt-4o-mini",
+    "llm_calls": 7,
+    "prompt_tokens": 8421,
+    "completion_tokens": 1032,
+    "total_tokens": 9453,
+    "search_calls": 12,
+    "elapsed_ms": 18342,
+    "estimated_cost_usd": 0.0019
+  },
   "debug": null
 }
 ```
+
+`telemetry` is optional per-assessment cost/usage instrumentation. It records the
+model, LLM call count, token usage, retrieval-call count, wall-clock time, and a
+rough `estimated_cost_usd`. The cost figure is a planning estimate, not a billed
+amount; per-1K-token and per-search prices are configurable via the
+`EVIDRAI_LLM_INPUT_COST_PER_1K`, `EVIDRAI_LLM_OUTPUT_COST_PER_1K`, and
+`EVIDRAI_SEARCH_COST_PER_CALL` environment variables.
 
 ## 10. Reports endpoints
 
@@ -1270,6 +1287,13 @@ Notes:
 - `decision` is workflow-facing and separate from the evidential verdict.
 - Unknown policy IDs fall back to a built-in policy and trigger `policy_fallback_applied`.
 - Audit records are written to `.evidrai_gateway/gateway_audit.jsonl` by default.
+- `cited_sources` supplied by the caller are folded into the evidence set and
+  scored by the same engine as web results (authority, directness, independence,
+  support/contradiction). Supplying a source does not force a verdict; it is
+  assessed like any other evidence. Deduped by URL against retrieved sources.
+- The persisted assessment for each gateway decision includes the `telemetry`
+  block (tokens, search calls, time, estimated cost), enabling cost-per-decision
+  attribution.
 
 ## 16. Operational examples
 

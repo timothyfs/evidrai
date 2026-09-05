@@ -849,13 +849,46 @@ def provisional_verdict(sources: List[EvidenceSource]) -> str:
     return "unverifiable"
 
 
-def run_claim_pipeline_typed(user_input: str, llm: OpenAICompatibleClient, search: TavilySearchClient) -> VerificationResult:
+def merge_supplied_sources(sources: List[EvidenceSource], supplied_sources: List[Dict[str, Any]] | None, claim_text: str) -> List[EvidenceSource]:
+    """Fold caller-supplied evidence into the retrieved set.
+
+    Supplied sources are scored by the same engine as web results, so a caller
+    cannot force a verdict simply by asserting a source: authority, directness,
+    independence, and support/contradiction are still assessed independently.
+    Deduped by URL; retrieved sources win when URLs collide.
+    """
+    if not supplied_sources:
+        return sources
+    existing_urls = {source.url for source in sources if source.url}
+    merged = list(sources)
+    for raw in supplied_sources:
+        if not isinstance(raw, dict):
+            continue
+        url = (raw.get("url") or "").strip()
+        if url and url in existing_urls:
+            continue
+        item = {
+            "title": raw.get("title") or raw.get("name") or "Supplied source",
+            "url": url,
+            "snippet": (raw.get("snippet") or raw.get("summary") or raw.get("text") or "")[:500],
+            "content": raw.get("content") or raw.get("text") or raw.get("snippet") or "",
+            "published_date": raw.get("published_date"),
+        }
+        source = score_source(item, claim_text)
+        if url:
+            existing_urls.add(url)
+        merged.append(source)
+    return merged
+
+
+def run_claim_pipeline_typed(user_input: str, llm: OpenAICompatibleClient, search: TavilySearchClient, supplied_sources: List[Dict[str, Any]] | None = None) -> VerificationResult:
     claim_payload = llm.complete_json(build_claim_analysis_messages(user_input))
     claim_analysis = parse_claim_analysis(claim_payload, user_input)
     claim_text = claim_analysis.normalized_claim or user_input
     claim_semantics = analyze_claim_semantics(claim_text)
     queries = merge_semantic_queries(build_search_queries(claim_analysis.subclaims), claim_semantics)
     sources = retrieve_sources(search, queries, claim_text)
+    sources = merge_supplied_sources(sources, supplied_sources, claim_text)
     sources = summarize_sources(llm, claim_analysis.subclaims[0], sources)
     retrieval = RetrievalResult(queries=queries, sources=sources)
     confidence = compute_confidence(sources)
@@ -965,9 +998,9 @@ def run_claim_pipeline_typed(user_input: str, llm: OpenAICompatibleClient, searc
     )
 
 
-def run_claim_pipeline(user_input: str, llm: OpenAICompatibleClient, search: TavilySearchClient) -> Dict[str, Any]:
+def run_claim_pipeline(user_input: str, llm: OpenAICompatibleClient, search: TavilySearchClient, supplied_sources: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
     """Run deep verification and return a UI-compatible serialized result."""
-    return run_claim_pipeline_typed(user_input, llm, search).to_dict()
+    return run_claim_pipeline_typed(user_input, llm, search, supplied_sources).to_dict()
 
 
 def select_audit_claims(claims: List[Dict[str, Any]], max_claims: int) -> List[Dict[str, Any]]:

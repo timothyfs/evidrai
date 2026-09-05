@@ -1160,7 +1160,7 @@ def test_url_only_assessment_extracts_candidate_claim(monkeypatch):
 
     captured = {}
 
-    def fake_pipeline(analysis_input, llm, search):
+    def fake_pipeline(analysis_input, llm, search, supplied_sources=None):
         captured["analysis_input"] = analysis_input
         return {"verified_verdict": "Unverified", "verified_confidence": "Low"}
 

@@ -136,7 +136,7 @@ def _researcher_profile(owner_id: str = "contract-user") -> UserProfile:
     )
 
 
-def _fake_assessment(*, claim, source_url, category, mode, output_style="standard"):
+def _fake_assessment(*, claim, source_url, category, mode, output_style="standard", supplied_sources=None):
     return {
         "verdict": "Supported",
         "confidence": "High",
@@ -253,4 +253,38 @@ def test_gateway_rejects_api_key_missing_scope(tmp_path, monkeypatch):
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "insufficient_api_scope"
     assert response.json()["detail"]["required_scope"] == "gateway:write"
+
+
+def test_gateway_forwards_cited_sources_to_assessment(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVIDRAI_GATEWAY_AUDIT_STORE", str(tmp_path / "gateway_audit.jsonl"))
+    monkeypatch.setattr(api_main, "authenticate_api_key", lambda key: ApiKeyRecord(key_id="key_3", owner_id="contract-user", scopes=["gateway:write"]))
+    monkeypatch.setattr(api_main, "get_or_create_profile", lambda owner_id, email="": _researcher_profile(owner_id))
+    monkeypatch.setattr(api_main, "save_report", lambda assessment: assessment)
+
+    captured = {}
+
+    def _capture(*, claim, source_url, category, mode, output_style="standard", supplied_sources=None):
+        captured["supplied_sources"] = supplied_sources
+        return _fake_assessment(claim=claim, source_url=source_url, category=category, mode=mode)
+
+    monkeypatch.setattr(api_main, "_run_claim_assessment", _capture)
+
+    cited = [{"title": "Customer filing", "url": "https://intranet.example/filing", "content": "Internal evidence."}]
+    response = client.post(
+        "/v1/gateway/verify",
+        json={
+            "workflow_id": "finance-briefing",
+            "request_id": "req_1",
+            "ai_output": "Paris is the capital of France.",
+            "proposed_action": {"type": "publish_briefing", "description": "Publish a briefing."},
+            "domain": "finance",
+            "consequence_level": "high",
+            "policy_id": "finance_default_v1",
+            "cited_sources": cited,
+        },
+        headers={"X-Evidrai-Api-Key": "evd_live_contract_secret"},
+    )
+
+    assert response.status_code == 200
+    assert captured["supplied_sources"] == cited
 
