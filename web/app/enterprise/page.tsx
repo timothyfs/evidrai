@@ -76,6 +76,7 @@ export default function EnterprisePage() {
         <p className="lead">Evidrai Enterprise adds a structured gateway between AI-generated outputs and the actions they trigger. Every decision is policy-driven, evidence-backed, and fully auditable.</p>
         <div className="pageActions">
           <a className="button" href="/contact">Request access</a>
+          <a className="button secondary" href="/developers">Developer docs</a>
           <a className="button secondary" href="/product">Explore the product</a>
         </div>
       </section>
@@ -83,16 +84,59 @@ export default function EnterprisePage() {
       <section className="card marketingPage">
         <p className="eyebrow">Where Evidrai sits</p>
         <h2>A verification layer between AI output and the action it triggers.</h2>
-        <div className="archFlow" aria-label="Evidrai architecture flow">
-          <div className="archNode"><strong>AI / Agent / Application</strong><span>Produces an output or proposes an action</span></div>
-          <div className="archArrow" aria-hidden="true">→</div>
-          <div className="archNode accent"><strong>Evidrai</strong><span>Claim decomposition and evidence analysis</span></div>
-          <div className="archArrow" aria-hidden="true">→</div>
-          <div className="archNode"><strong>Inspectable structured assessment</strong><span>Verdict, sources, caveats, reasoning</span></div>
-          <div className="archArrow" aria-hidden="true">→</div>
-          <div className="archNode"><strong>Application / policy / human</strong><span>Pass, review, or block the action</span></div>
-        </div>
-        <p className="muted archNote">Evidrai evaluates the evidence. Your application, policy, or a human decides what to do with that assessment.</p>
+        <figure className="archDiagram">
+          <svg className="archSvg" viewBox="0 0 980 340" role="img" aria-labelledby="archTitle archDesc" preserveAspectRatio="xMidYMid meet">
+            <title id="archTitle">Evidrai verification architecture</title>
+            <desc id="archDesc">An AI system or agent produces output; Evidrai analyses the evidence and returns a structured assessment; your policy or a human decides to pass, review, or block the action.</desc>
+            <defs>
+              <marker id="archArrowHead" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+                <path d="M0,0 L9,4.5 L0,9 Z" className="archArrowFill" />
+              </marker>
+            </defs>
+
+            {/* Row 1: input */}
+            <rect className="archBox" x="360" y="20" width="260" height="66" rx="14" />
+            <text className="archBoxTitle" x="490" y="47" textAnchor="middle">AI / Agent / Application</text>
+            <text className="archBoxSub" x="490" y="68" textAnchor="middle">Produces an output or proposes an action</text>
+            <line className="archLine" x1="490" y1="86" x2="490" y2="120" markerEnd="url(#archArrowHead)" />
+
+            {/* Row 2: Evidrai engine */}
+            <rect className="archBox archAccent" x="150" y="124" width="680" height="120" rx="16" />
+            <text className="archEngineLabel" x="180" y="150">EVIDRAI EVIDENCE ENGINE</text>
+            <g>
+              <rect className="archInner" x="172" y="164" width="150" height="60" rx="10" />
+              <text className="archInnerText" x="247" y="190" textAnchor="middle">Claim</text>
+              <text className="archInnerText" x="247" y="208" textAnchor="middle">decomposition</text>
+
+              <rect className="archInner" x="338" y="164" width="150" height="60" rx="10" />
+              <text className="archInnerText" x="413" y="190" textAnchor="middle">Evidence retrieval</text>
+              <text className="archInnerText" x="413" y="208" textAnchor="middle">&amp; source scoring</text>
+
+              <rect className="archInner" x="504" y="164" width="150" height="60" rx="10" />
+              <text className="archInnerText" x="579" y="190" textAnchor="middle">Corroboration</text>
+              <text className="archInnerText" x="579" y="208" textAnchor="middle">&amp; contradiction</text>
+
+              <rect className="archInner" x="670" y="164" width="140" height="60" rx="10" />
+              <text className="archInnerText" x="740" y="190" textAnchor="middle">Confidence</text>
+              <text className="archInnerText" x="740" y="208" textAnchor="middle">&amp; caveats</text>
+            </g>
+            <line className="archLine" x1="490" y1="244" x2="490" y2="278" markerEnd="url(#archArrowHead)" />
+
+            {/* Row 3: assessment */}
+            <rect className="archBox" x="300" y="282" width="380" height="40" rx="12" />
+            <text className="archBoxTitle" x="490" y="307" textAnchor="middle">Inspectable structured assessment (verdict · sources · reasoning)</text>
+
+            {/* Row 3 -> decisions: fan out */}
+            <line className="archLine" x1="360" y1="322" x2="150" y2="322" />
+            <line className="archLine" x1="620" y1="322" x2="830" y2="322" />
+          </svg>
+          <div className="archDecisions" aria-hidden="false">
+            <span className="archPill pass">PASS — proceed</span>
+            <span className="archPill review">REVIEW — route to human</span>
+            <span className="archPill block">BLOCK — stop the action</span>
+          </div>
+          <figcaption className="muted archNote">Evidrai evaluates the evidence. Your application, policy, or a human decides what to do with that assessment — every decision written to an audit record.</figcaption>
+        </figure>
       </section>
 
       <section className="card marketingPage splitSection">

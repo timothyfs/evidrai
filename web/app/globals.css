@@ -4207,3 +4207,23 @@ html[data-theme="light"] .codeBlock { background: rgba(15,23,42,0.06); }
 @media (max-width: 720px) {
   .enterpriseStrip { flex-direction: column; align-items: flex-start; }
 }
+
+/* Enterprise architecture SVG diagram */
+.archDiagram { display: grid; gap: 14px; margin: 8px 0 0; }
+.archSvg { width: 100%; height: auto; display: block; }
+.archBox { fill: rgba(255,255,255,0.035); stroke: var(--line); stroke-width: 1.5; }
+.archBox.archAccent { fill: color-mix(in srgb, var(--accent) 8%, transparent); stroke: color-mix(in srgb, var(--accent) 55%, var(--line)); stroke-width: 2; }
+.archInner { fill: rgba(255,255,255,0.05); stroke: var(--line); stroke-width: 1; }
+.archBoxTitle { fill: var(--text, currentColor); font-size: 15px; font-weight: 650; }
+.archBoxSub { fill: var(--muted); font-size: 12.5px; }
+.archInnerText { fill: var(--text, currentColor); font-size: 12.5px; font-weight: 550; }
+.archEngineLabel { fill: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
+.archLine { stroke: color-mix(in srgb, var(--accent) 45%, var(--muted)); stroke-width: 2; fill: none; }
+.archArrowFill { fill: color-mix(in srgb, var(--accent) 45%, var(--muted)); }
+.archDecisions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.archPill { border-radius: 999px; font-size: 0.82rem; font-weight: 650; padding: 7px 16px; border: 1px solid var(--line); }
+.archPill.pass { background: rgba(52,199,120,0.14); color: #34c778; border-color: rgba(52,199,120,0.4); }
+.archPill.review { background: rgba(240,180,40,0.14); color: #e0a72b; border-color: rgba(240,180,40,0.4); }
+.archPill.block { background: rgba(240,80,80,0.14); color: #f05050; border-color: rgba(240,80,80,0.4); }
+html[data-theme="light"] .archBox { fill: rgba(15,23,42,0.02); }
+html[data-theme="light"] .archInner { fill: rgba(15,23,42,0.04); }
