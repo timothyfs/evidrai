@@ -1715,6 +1715,7 @@ function SiteHeader({ account, me, adminSession, signedIn, theme, quickClaim, on
         <nav>
           <a href="/">Verify</a>
           <a href="/product">Product</a>
+          <a href="/enterprise">Enterprise</a>
           <a href="/plans">Plans</a>
           <a href="/about">About</a>
           <a href="/team">Team</a>
@@ -1732,6 +1733,7 @@ function SiteHeader({ account, me, adminSession, signedIn, theme, quickClaim, on
         <nav className="desktopNav" aria-label="Primary navigation">
           <a href="/">Verify</a>
           <a href="/product">Product</a>
+          <a href="/enterprise">Enterprise</a>
           <a href="/plans">Plans</a>
           <a href="/about">About</a>
           <a href="/team">Team</a>
@@ -2774,6 +2776,20 @@ export default function Home() {
         </div>
         {!signedIn && <HeroPreview />}
       </section>
+
+      {!signedIn && (
+        <section className="enterpriseStrip" aria-label="Evidrai for AI systems">
+          <div>
+            <p className="eyebrow">Evidrai for AI systems</p>
+            <h2>Bring the evidence engine into your AI workflows.</h2>
+            <p className="muted">The same verification that powers Verify runs programmatically — between an AI system and the action it triggers. Evidence-checked, policy-driven, auditable.</p>
+          </div>
+          <div className="enterpriseStripActions">
+            <a className="button" href="/enterprise">Evidrai Enterprise</a>
+            <a className="button secondary" href="/developers">Developer docs</a>
+          </div>
+        </section>
+      )}
 
       {authDiagnostics && (
         <section className="card">

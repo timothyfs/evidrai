@@ -80,6 +80,21 @@ export default function EnterprisePage() {
         </div>
       </section>
 
+      <section className="card marketingPage">
+        <p className="eyebrow">Where Evidrai sits</p>
+        <h2>A verification layer between AI output and the action it triggers.</h2>
+        <div className="archFlow" aria-label="Evidrai architecture flow">
+          <div className="archNode"><strong>AI / Agent / Application</strong><span>Produces an output or proposes an action</span></div>
+          <div className="archArrow" aria-hidden="true">→</div>
+          <div className="archNode accent"><strong>Evidrai</strong><span>Claim decomposition and evidence analysis</span></div>
+          <div className="archArrow" aria-hidden="true">→</div>
+          <div className="archNode"><strong>Inspectable structured assessment</strong><span>Verdict, sources, caveats, reasoning</span></div>
+          <div className="archArrow" aria-hidden="true">→</div>
+          <div className="archNode"><strong>Application / policy / human</strong><span>Pass, review, or block the action</span></div>
+        </div>
+        <p className="muted archNote">Evidrai evaluates the evidence. Your application, policy, or a human decides what to do with that assessment.</p>
+      </section>
+
       <section className="card marketingPage splitSection">
         <div>
           <p className="eyebrow">The problem</p>
@@ -136,6 +151,7 @@ export default function EnterprisePage() {
           <h2>One endpoint. Synchronous. Structured.</h2>
           <p>POST to <code>/v1/gateway/verify</code> with your AI output, proposed action, domain, and consequence level. Get back a decision, triggered rules, and a full evidence summary — inline, in one response.</p>
           <p>Gateway access is provisioned separately from standard API keys. Audit records are written automatically on every call.</p>
+          <div className="pageActions"><a className="button secondary" href="/developers">Read the developer docs</a></div>
         </div>
         <div className="principleList">
           <span>gateway:write scope required</span>

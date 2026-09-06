@@ -4137,3 +4137,73 @@ html[data-theme="light"] .enterprisePlanCTA { background: rgba(255,255,255,0.72)
 @media (max-width: 720px) {
   .enterprisePlanRow { grid-template-columns: 1fr; }
 }
+
+/* Enterprise architecture diagram */
+.archFlow {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+.archNode {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.04);
+  display: grid;
+  gap: 6px;
+  flex: 1 1 180px;
+  padding: 16px;
+}
+.archNode strong { font-size: 1rem; }
+.archNode span { color: var(--muted); font-size: 0.86rem; line-height: 1.4; }
+.archNode.accent { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.archArrow { align-self: center; color: var(--muted); font-size: 1.4rem; }
+.archNote { margin-top: 14px; }
+html[data-theme="light"] .archNode { background: rgba(255,255,255,0.72); }
+@media (max-width: 720px) {
+  .archFlow { flex-direction: column; }
+  .archArrow { transform: rotate(90deg); align-self: center; }
+}
+
+/* Developer docs */
+.apiEndpointList { display: grid; gap: 12px; margin-top: 8px; }
+.apiEndpoint { border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,0.03); padding: 16px; }
+.apiEndpoint p { color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
+.apiEndpointHead { align-items: center; display: flex; gap: 10px; }
+.apiEndpointHead code { font-size: 0.95rem; }
+.apiMethod { border-radius: 8px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; }
+.apiMethod.post { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+.apiMethod.get { background: rgba(120,180,255,0.18); color: #7cb0ff; }
+.codeBlock {
+  background: rgba(0,0,0,0.28);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  padding: 14px;
+  white-space: pre;
+}
+html[data-theme="light"] .apiEndpoint { background: rgba(255,255,255,0.72); }
+html[data-theme="light"] .codeBlock { background: rgba(15,23,42,0.06); }
+
+/* Homepage enterprise strip */
+.enterpriseStrip {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: space-between;
+  margin: 18px 0;
+  padding: 24px 28px;
+}
+.enterpriseStrip h2 { font-size: 1.35rem; margin: 4px 0 8px; }
+.enterpriseStrip p { margin: 0; max-width: 560px; }
+.enterpriseStripActions { display: flex; flex-wrap: wrap; gap: 10px; }
+@media (max-width: 720px) {
+  .enterpriseStrip { flex-direction: column; align-items: flex-start; }
+}
