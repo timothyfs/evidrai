@@ -152,5 +152,46 @@ def test_openapi_contains_public_integration_routes():
         "/reports/{report_id}",
         "/admin/api-keys",
         "/admin/api-keys/{key_id}",
+        "/account/api-keys",
+        "/account/api-keys/{key_id}",
     ]:
         assert route in paths
+
+
+def test_account_api_key_contract_returns_record_and_secret(monkeypatch):
+    from evidrai.api_keys import CreatedApiKey
+
+    monkeypatch.setattr(
+        api_main,
+        "_profile_from_request",
+        lambda request: (
+            api_main.AuthContext(owner_id="contract-user", auth_method="supabase_jwt", email="contract@example.com"),
+            _researcher_profile(),
+        ),
+    )
+    monkeypatch.setattr(api_main, "get_or_create_profile", lambda owner_id, email="": _researcher_profile(owner_id))
+    monkeypatch.setattr(
+        api_main,
+        "create_api_key",
+        lambda owner_id, name="", scopes=None: CreatedApiKey(
+            record=ApiKeyRecord(key_id="key_1", owner_id=owner_id, name=name, key_prefix="evd_live_abcd", scopes=scopes or ["assessments:write"]),
+            plaintext_key="evd_live_contract_secret",
+        ),
+    )
+
+    response = client.post("/account/api-keys", json={"name": "Contract key"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert set(payload["key"].keys()) == {
+        "key_id",
+        "owner_id",
+        "name",
+        "key_prefix",
+        "scopes",
+        "created_at",
+        "last_used_at",
+        "revoked_at",
+    }
+    assert payload["api_key"] == "evd_live_contract_secret"

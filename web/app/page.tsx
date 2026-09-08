@@ -9,11 +9,13 @@ import {
   FeedbackRating,
   MeResponse,
   AdminSessionResponse,
+  ApiKeyRecord,
   ReportSummary,
   SpeechCheckedClaim,
   SpeechClaim,
   SpeechExtractionResult,
   SpeechVerificationResult,
+  createApiKey,
   createAssessmentJob,
   createReportShare,
   deleteReport,
@@ -26,6 +28,8 @@ import {
   getAnonymousAccountProfile,
   getReport,
   getAssessmentJob,
+  listApiKeys,
+  revokeApiKey,
   setAccessToken,
   setAccountProfile,
   submitFeedback,
@@ -1679,11 +1683,143 @@ function ConsentUpdateGate({
   );
 }
 
+function ApiKeysPanel({ canUseApi }: { canUseApi: boolean }) {
+  const [keys, setKeys] = useState<ApiKeyRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [newKeyName, setNewKeyName] = useState('');
+  const [revealedKey, setRevealedKey] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  async function loadKeys() {
+    setLoading(true);
+    setError('');
+    try {
+      const payload = await listApiKeys();
+      setKeys(payload.keys || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load API keys');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (canUseApi) loadKeys();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseApi]);
+
+  async function generateKey() {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    setRevealedKey('');
+    setCopied(false);
+    try {
+      const created = await createApiKey(newKeyName.trim());
+      setRevealedKey(created.api_key);
+      setNewKeyName('');
+      setMessage('API key created. Copy it now — it will not be shown again.');
+      await loadKeys();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create API key');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function hideKey() {
+    // Drop the plaintext from state permanently for this session. No re-show.
+    setRevealedKey('');
+    setCopied(false);
+  }
+
+  async function copyKey() {
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(revealedKey);
+      }
+      setCopied(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not copy the key. Select and copy it manually.');
+    }
+  }
+
+  async function revoke(keyId: string) {
+    setBusy(true);
+    setMessage('');
+    setError('');
+    try {
+      await revokeApiKey(keyId);
+      setMessage('API key revoked.');
+      await loadKeys();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke API key');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!canUseApi) {
+    return (
+      <section className="apiKeysPanel">
+        <p className="eyebrow">API keys</p>
+        <p className="muted">API access is available on Researcher and Enterprise plans.</p>
+        <a className="button secondary" href="/plans">View plans</a>
+      </section>
+    );
+  }
+
+  return (
+    <section className="apiKeysPanel">
+      <p className="eyebrow">API keys</p>
+      <p className="muted">Generate a personal API key to call the Evidrai API from your own tools.</p>
+      <div className="apiKeyCreateRow">
+        <input value={newKeyName} onChange={(event) => setNewKeyName(event.target.value)} placeholder="Key name (optional)" maxLength={120} aria-label="API key name" />
+        <button className="secondary" disabled={busy} onClick={generateKey} type="button">{busy ? 'Working…' : 'Generate new API key'}</button>
+      </div>
+      {revealedKey && (
+        <div className="apiKeyReveal">
+          <p className="warning">Copy this key now. For your security it will not be shown again.</p>
+          <div className="apiKeyRevealRow">
+            <code>{revealedKey}</code>
+            <button className="secondary" onClick={copyKey} type="button">{copied ? 'Copied' : 'Copy'}</button>
+            <button className="secondary" onClick={hideKey} type="button">{copied ? 'Done' : 'Hide'}</button>
+          </div>
+        </div>
+      )}
+      {loading ? (
+        <p className="muted">Loading keys…</p>
+      ) : keys.length ? (
+        <ul className="apiKeyList">
+          {keys.map((key) => (
+            <li key={key.key_id} className="apiKeyItem">
+              <div>
+                <strong>{key.name || 'Untitled key'}</strong>
+                <code>{key.key_prefix}…</code>
+                <span className="muted">Created {formatDate(key.created_at) || '—'}{key.last_used_at ? ` · Last used ${formatDate(key.last_used_at)}` : ' · Never used'}</span>
+              </div>
+              <button className="secondary" disabled={busy} onClick={() => revoke(key.key_id)} type="button">Revoke</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">No API keys yet.</p>
+      )}
+      {message && <p className="muted">{message}</p>}
+      {error && <p className="error">{error}</p>}
+    </section>
+  );
+}
+
 function AccountMenu({ account, me, adminSession, theme, onToggleTheme, onSignOut, authBusy }: { account: AccountProfile; me: MeResponse | null; adminSession: AdminSessionResponse | null; theme: ThemeMode; onToggleTheme: () => void; onSignOut: () => void; authBusy: boolean }) {
   const label = account.label || 'Signed in';
   const displayName = label.includes('@') ? label.split('@')[0] : label;
   const planLabel = me?.user?.tier_label || (account.owner_id.startsWith('anon_') ? account.plan : 'Checking…');
   const isAdmin = Boolean(me?.is_admin || adminSession?.is_admin);
+  const canUseApi = Boolean(me?.user?.features?.api_access);
   return (
     <details className="accountMenu">
       <summary>
@@ -1696,6 +1832,7 @@ function AccountMenu({ account, me, adminSession, theme, onToggleTheme, onSignOu
         <p><span>User ID</span><code>{account.owner_id}</code></p>
         {isAdmin && <p><span>Admin</span><strong>Enabled</strong></p>}
         {isAdmin && <a className="button secondary" href="/admin">Admin UI</a>}
+        <ApiKeysPanel canUseApi={canUseApi} />
         <button className="secondary" onClick={onToggleTheme} type="button">{theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}</button>
         <button className="secondary" disabled={authBusy} onClick={onSignOut} type="button">Sign out</button>
       </div>

@@ -223,6 +223,11 @@ class AdminCreateApiKeyRequest(BaseModel):
     scopes: list[str] = Field(default_factory=list)
 
 
+class CreateApiKeyRequest(BaseModel):
+    name: str = Field(default="", max_length=120)
+    scopes: list[str] = Field(default_factory=list)
+
+
 class ConsentUpdateRequest(BaseModel):
     terms_accepted: bool = False
     marketing_opt_in: bool = False
@@ -1329,6 +1334,43 @@ def admin_create_api_key(request: AdminCreateApiKeyRequest, http_request: Reques
 def admin_revoke_api_key(key_id: str, http_request: Request, owner_id: str = "") -> Dict[str, Any]:
     _require_admin(http_request)
     revoked = revoke_api_key(key_id, owner_id=owner_id)
+    return {"ok": True, "revoked": revoked, "key_id": key_id}
+
+
+# Scopes a user may mint for themselves via the self-serve account UI.
+# gateway:write is deliberately excluded: Gateway Mode is an enterprise control
+# point provisioned by an admin, never self-served.
+SELF_SERVE_API_SCOPES = {"assessments:write", "reports:read", "speech:write"}
+
+
+@app.post("/account/api-keys", response_model=Dict[str, Any])
+def account_create_api_key(request: CreateApiKeyRequest, http_request: Request) -> Dict[str, Any]:
+    context = _require_authenticated(http_request)
+    profile = get_or_create_profile(context.owner_id, email=context.email)
+    require_feature(profile, "api_access", authenticated=True)
+    requested = [scope for scope in (request.scopes or []) if scope in SELF_SERVE_API_SCOPES] or [
+        "assessments:write",
+        "reports:read",
+    ]
+    created = create_api_key(context.owner_id, name=request.name, scopes=requested)
+    return {"ok": True, "key": created.record.to_dict(), "api_key": created.plaintext_key}
+
+
+@app.get("/account/api-keys", response_model=Dict[str, Any])
+def account_list_api_keys(http_request: Request) -> Dict[str, Any]:
+    context = _require_authenticated(http_request)
+    profile = get_or_create_profile(context.owner_id, email=context.email)
+    require_feature(profile, "api_access", authenticated=True)
+    return {
+        "ok": True,
+        "keys": [record.to_dict() for record in list_api_keys(context.owner_id, include_revoked=False)],
+    }
+
+
+@app.delete("/account/api-keys/{key_id}", response_model=Dict[str, Any])
+def account_revoke_api_key(key_id: str, http_request: Request) -> Dict[str, Any]:
+    context = _require_authenticated(http_request)
+    revoked = revoke_api_key(key_id, owner_id=context.owner_id)
     return {"ok": True, "revoked": revoked, "key_id": key_id}
 
 

@@ -313,6 +313,132 @@ def test_admin_api_key_creation_requires_api_access_tier(monkeypatch):
     assert response.json()["detail"]["code"] == "feature_not_available"
 
 
+def _mock_account_profile(monkeypatch, tier, owner_id="user-1", email="api@example.com"):
+    monkeypatch.setattr(
+        api_main,
+        "_profile_from_request",
+        lambda request: (
+            api_main.AuthContext(owner_id=owner_id, auth_method="supabase_jwt", email=email),
+            UserProfile(owner_id=owner_id, email=email, tier=tier),
+        ),
+    )
+    monkeypatch.setattr(
+        api_main,
+        "get_or_create_profile",
+        lambda owner_id, email="": UserProfile(owner_id=owner_id, email=email or "api@example.com", tier=tier),
+    )
+
+
+def test_account_api_key_creation_requires_authentication(monkeypatch):
+    monkeypatch.setattr(
+        api_main,
+        "_profile_from_request",
+        lambda request: (
+            api_main.AuthContext(owner_id="anon-1", auth_method="anonymous", email=""),
+            UserProfile(owner_id="anon-1", tier="free"),
+        ),
+    )
+
+    response = client.post("/account/api-keys", json={"name": "My integration"})
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "auth_required"
+
+
+def test_account_api_key_creation_requires_api_access_tier(monkeypatch):
+    _mock_account_profile(monkeypatch, tier="pro")
+
+    response = client.post("/account/api-keys", json={"name": "My integration"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "feature_not_available"
+
+
+def test_account_api_key_creation_returns_secret_once_for_researcher(monkeypatch):
+    _mock_account_profile(monkeypatch, tier="researcher")
+
+    def fake_create_api_key(owner_id, name="", scopes=None):
+        return CreatedApiKey(
+            record=ApiKeyRecord(key_id="key_1", owner_id=owner_id, name=name, key_prefix="evd_live_abcd", scopes=scopes or ["assessments:write"]),
+            plaintext_key="evd_live_self_serve_secret",
+        )
+
+    monkeypatch.setattr(api_main, "create_api_key", fake_create_api_key)
+
+    response = client.post("/account/api-keys", json={"name": "My integration", "scopes": ["assessments:write", "reports:read"]})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["key"]["key_id"] == "key_1"
+    assert payload["api_key"] == "evd_live_self_serve_secret"
+
+
+def test_account_api_key_creation_filters_out_gateway_scope(monkeypatch):
+    _mock_account_profile(monkeypatch, tier="researcher")
+    captured = {}
+
+    def fake_create_api_key(owner_id, name="", scopes=None):
+        captured["scopes"] = scopes
+        return CreatedApiKey(
+            record=ApiKeyRecord(key_id="key_1", owner_id=owner_id, name=name, key_prefix="evd_live_abcd", scopes=scopes or []),
+            plaintext_key="evd_live_self_serve_secret",
+        )
+
+    monkeypatch.setattr(api_main, "create_api_key", fake_create_api_key)
+
+    response = client.post("/account/api-keys", json={"name": "My integration", "scopes": ["gateway:write"]})
+
+    assert response.status_code == 200
+    # gateway:write must never be self-served; falls back to the safe default set.
+    assert "gateway:write" not in captured["scopes"]
+    assert captured["scopes"] == ["assessments:write", "reports:read"]
+
+
+def test_account_api_key_list_excludes_secret_and_shows_prefix(monkeypatch):
+    _mock_account_profile(monkeypatch, tier="researcher")
+    monkeypatch.setattr(
+        api_main,
+        "list_api_keys",
+        lambda owner_id, include_revoked=False: [
+            ApiKeyRecord(key_id="key_1", owner_id=owner_id, name="Integration", key_prefix="evd_live_abcd", scopes=["reports:read"], created_at="2026-06-01T00:00:00+00:00"),
+        ],
+    )
+
+    response = client.get("/account/api-keys")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["keys"]) == 1
+    key = payload["keys"][0]
+    assert key["key_prefix"] == "evd_live_abcd"
+    assert "plaintext_key" not in key
+    assert "api_key" not in key
+    assert "key_hash" not in key
+
+
+def test_account_api_key_revoke_is_scoped_to_current_owner(monkeypatch):
+    _mock_account_profile(monkeypatch, tier="researcher", owner_id="owner-a")
+    captured = {}
+
+    def fake_revoke_api_key(key_id, owner_id=""):
+        captured["key_id"] = key_id
+        captured["owner_id"] = owner_id
+        # Simulate the store: revocation only succeeds when the owner matches.
+        return owner_id == "owner-a"
+
+    monkeypatch.setattr(api_main, "revoke_api_key", fake_revoke_api_key)
+
+    # A user attempting to revoke a key id that belongs to another owner still only
+    # ever passes THEIR OWN owner_id, so the store's owner scoping prevents it.
+    response = client.delete("/account/api-keys/key_belonging_to_owner_b")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert captured["owner_id"] == "owner-a"
+    assert payload["revoked"] is True
+    assert payload["key_id"] == "key_belonging_to_owner_b"
+
+
 def test_api_key_can_call_assessment_endpoint(monkeypatch):
     monkeypatch.setattr(api_main, "authenticate_api_key", lambda key: ApiKeyRecord(key_id="key_1", owner_id="api-user", scopes=["assessments:write"]))
     monkeypatch.setattr(

@@ -854,3 +854,36 @@ export async function runSpeechAudit(input: {
   });
   return payload.result;
 }
+
+export type ApiKeyRecord = {
+  key_id: string;
+  owner_id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string[];
+  created_at: string;
+  last_used_at: string;
+  revoked_at: string;
+};
+
+export type CreatedApiKey = {
+  key: ApiKeyRecord;
+  api_key: string;
+};
+
+export function listApiKeys(): Promise<{ ok: boolean; keys: ApiKeyRecord[] }> {
+  return request<{ ok: boolean; keys: ApiKeyRecord[] }>('/account/api-keys');
+}
+
+export function createApiKey(name = '', scopes: string[] = []): Promise<CreatedApiKey> {
+  return request<CreatedApiKey>('/account/api-keys', {
+    method: 'POST',
+    body: JSON.stringify({ name, scopes }),
+  });
+}
+
+export function revokeApiKey(keyId: string): Promise<{ ok: boolean; revoked: boolean; key_id: string }> {
+  return request<{ ok: boolean; revoked: boolean; key_id: string }>(`/account/api-keys/${encodeURIComponent(keyId)}`, {
+    method: 'DELETE',
+  });
+}
