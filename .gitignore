@@ -24,3 +24,6 @@ web/out/
 
 # Local/private test coordination notes
 /docs/nicholas-user-test.md
+
+# TypeScript incremental build info
+web/*.tsbuildinfo
