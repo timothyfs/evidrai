@@ -39,7 +39,13 @@ export async function getCurrentSession() {
 export function onAuthStateChange(callback: (session: Session | null) => void) {
   const supabase = getSupabaseClient();
   if (!supabase) return () => undefined;
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => callback(session));
+  // Supabase holds an internal auth lock for the duration of this callback.
+  // Any auth call made from within it (e.g. getSession() via our API helpers)
+  // waits on that same lock and deadlocks. Defer the callback by a tick so the
+  // lock is released before consumers touch the session again.
+  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    setTimeout(() => callback(session), 0);
+  });
   return () => data.subscription.unsubscribe();
 }
 
