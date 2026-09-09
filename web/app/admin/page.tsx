@@ -106,6 +106,7 @@ export default function AdminPage() {
   const [details, setDetails] = useState<Record<string, ReturnType<typeof blankDetails>>>({});
   const [tempPasswords, setTempPasswords] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [message, setMessage] = useState('');
   const profileLoadRef = useRef<{ token: string; promise: Promise<void> } | null>(null);
   const loadedProfileTokenRef = useRef('');
@@ -211,6 +212,33 @@ export default function AdminPage() {
     }
   }
 
+  // Resolve the admin/profile status for a session, retrying on transient
+  // failures (e.g. Render free-tier cold starts) so a single failed fetch does
+  // not strand a genuinely-authorised admin on the sign-in gate.
+  async function resolveAdminStatus(session: Awaited<ReturnType<typeof getCurrentSession>>) {
+    if (!session) {
+      setChecking(false);
+      return;
+    }
+    const token = session.access_token || '';
+    const maxAttempts = 4;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await refreshAdminSession(token, attempt > 1);
+        void refreshMe(token, attempt > 1).catch(() => undefined);
+        setChecking(false);
+        return;
+      } catch (err) {
+        if (attempt === maxAttempts) {
+          setChecking(false);
+          setMessage(err instanceof Error ? err.message : 'Could not verify admin access. Please retry.');
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
+    }
+  }
+
   useEffect(() => {
     const fallback = getAnonymousAccountProfile();
     setAccount(fallback);
@@ -220,28 +248,23 @@ export default function AdminPage() {
         const profile = profileFromSession(session, fallback);
         setAccount(profile);
         setAccountProfile(profile);
-        if (session) {
-          const token = session.access_token || '';
-          await refreshAdminSession(token);
-          void refreshMe(token).catch((err) => setMessage(err.message));
-        }
+        await resolveAdminStatus(session);
       })
-      .catch((err) => setMessage(err.message));
+      .catch((err) => { setChecking(false); setMessage(err.message); });
     const unsubscribe = onAuthStateChange(async (session) => {
       setAccessToken(session?.access_token || '');
       const profile = profileFromSession(session, fallback);
       setAccount(profile);
       setAccountProfile(profile);
       if (session) {
-        const token = session.access_token || '';
-        await refreshAdminSession(token);
-        void refreshMe(token).catch((err) => setMessage(err.message));
+        await resolveAdminStatus(session);
       }
       else {
         loadedProfileTokenRef.current = '';
         loadedAdminSessionTokenRef.current = '';
         setAdminSession(null);
         setMe(null);
+        setChecking(false);
       }
     });
     return unsubscribe;
@@ -529,15 +552,20 @@ export default function AdminPage() {
         </div>
         <div className="statusPanel">
           <span>Account: {account?.label || 'checking...'}</span>
-          <span>Product plan: {me?.user?.tier_label || 'not signed in'}</span>
-          <span>Admin access: {isAdmin ? 'enabled' : 'not enabled'}</span>
+          <span>Product plan: {me?.user?.tier_label || (checking ? 'checking…' : 'not signed in')}</span>
+          <span>Admin access: {isAdmin ? 'enabled' : (checking ? 'checking…' : 'not enabled')}</span>
           {isAdmin && <a href="/admin/scoring-policy">Scoring policy</a>}
           {isAdmin && <a href="/admin/trust/analytics">Trust analytics</a>}
           <a href="/">Back to product</a>
         </div>
       </section>
 
-      {!isAdmin ? (
+      {checking && !isAdmin ? (
+        <section className="card loginGate">
+          <h2>Checking admin access…</h2>
+          <p className="muted">Verifying your session with the server. This can take a few seconds if the service was idle.</p>
+        </section>
+      ) : !isAdmin ? (
         <section className="card loginGate">
           <h2>Admin access required</h2>
           <p className="muted">Sign in with a server-authorised admin account. Product tiers do not grant admin access.</p>

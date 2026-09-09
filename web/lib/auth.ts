@@ -48,7 +48,9 @@ export async function signInWithGoogle() {
   if (!supabase) throw new Error('Supabase Auth is not configured.');
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin },
+    // Return to the page the user signed in from (e.g. /admin), not just the origin,
+    // so an admin sign-in lands back on the admin route instead of the product home.
+    options: { redirectTo: `${window.location.origin}${window.location.pathname}` },
   });
   if (error) throw error;
 }
